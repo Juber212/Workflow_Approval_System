@@ -1,6 +1,22 @@
 <template>
   <div class="admin-page">
-    <el-tabs :model-value="activeTab" @update:model-value="handleTabChange">
+    <!-- 面包屑导航 -->
+    <div class="page-breadcrumb">
+      <router-link to="/dashboard">Dashboard</router-link>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">系统管理</span>
+    </div>
+
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div class="page-header__info">
+        <h1 class="page-header__title">系统管理</h1>
+        <p class="page-header__subtitle">用户、组织、角色及系统配置维护（仅系统管理员可见）</p>
+      </div>
+    </div>
+
+    <!-- Tab 切换 -->
+    <el-tabs :model-value="activeTab" @update:model-value="handleTabChange" class="admin-tabs">
       <el-tab-pane label="用户管理" name="users" />
       <el-tab-pane label="组织管理" name="organizations" />
       <el-tab-pane label="角色管理" name="roles" />
@@ -51,6 +67,11 @@ function handleTabChange(tab: string) {
 
 <style lang="scss" scoped>
 .admin-page {
-  // 保持与整体设计一致
+  max-width: var(--content-max-width, 1200px);
+  margin: 0 auto;
+
+  .admin-tabs {
+    margin-bottom: 20px;
+  }
 }
 </style>

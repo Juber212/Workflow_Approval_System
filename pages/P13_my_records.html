@@ -1,0 +1,140 @@
+<!-- P13 我的流程记录 | 功能：用户参与过的流程（负责人/审批人/发起人） | 关键交互：表格（实例名/模板/我的角色/参与节点/完成时间/流程状态/查看详情到 P17） | 跳转：P17 | 角色：所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>我的流程记录 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">我的流程记录</h1>
+        <div class="page-subtitle">我以负责人 / 审批人 / 发起人身份参与过的流程</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>实例名称</th>
+              <th>模板</th>
+              <th>我的角色</th>
+              <th>参与节点</th>
+              <th>完成时间</th>
+              <th>流程状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>XT2026-010 架构评审</td>
+              <td>架构模板</td>
+              <td><span class="tag tag-primary">发起人</span></td>
+              <td>需求分析 / 方案设计</td>
+              <td class="num">2026-07-01 18:00</td>
+              <td><span class="status status-completed">已完成</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-003 接口开发</td>
+              <td>接口开发模板</td>
+              <td><span class="tag tag-warning">审批人</span></td>
+              <td>技术评审</td>
+              <td class="num">2026-07-05 11:20</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-001 产品设计</td>
+              <td>产品设计模板</td>
+              <td><span class="tag tag-success">负责人</span></td>
+              <td>方案设计</td>
+              <td class="num">2026-07-08 09:30</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-005 上线发布</td>
+              <td>上线发布模板</td>
+              <td><span class="tag tag-primary">发起人</span></td>
+              <td>部门审批</td>
+              <td class="num">2026-07-09 14:20</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-011 年度规划</td>
+              <td>规划模板</td>
+              <td><span class="tag tag-primary">发起人</span></td>
+              <td>全部节点</td>
+              <td class="num">2026-05-10 16:20</td>
+              <td><span class="status status-completed">已完成</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-007 财务预算</td>
+              <td>财务预算模板</td>
+              <td><span class="tag tag-warning">审批人</span></td>
+              <td>合规审批</td>
+              <td class="num">2026-07-07 10:55</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-012 旧项目清理</td>
+              <td>清理模板</td>
+              <td><span class="tag tag-primary">发起人</span></td>
+              <td>全部节点</td>
+              <td class="num">2026-03-15 11:05</td>
+              <td><span class="status status-terminated">已终止</span></td>
+              <td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+</script>
+</body>
+</html>

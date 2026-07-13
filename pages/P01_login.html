@@ -1,0 +1,137 @@
+<!-- P01 登录页 | 功能：用户名/密码登录，返回 JWT | 关键交互：登录中按钮 loading 禁重复、失败红字"用户名或密码错误"(不清空)、账号禁用提示区、演示账号提示 | 跳转关系：登录成功&#8594;P02 Dashboard | 角色可见性：所有角色 A/M/U 通用，无顶栏 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>登录 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+  body { background: var(--color-bg-page); min-height: 100vh; }
+  .login-wrap {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #EFF4FF 0%, #F5F6F8 60%);
+  }
+  .login-card {
+    width: 400px;
+    background: #fff;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-dialog);
+    padding: 40px 36px;
+  }
+  .login-brand {
+    display: flex; align-items: center; gap: 12px;
+    justify-content: center; margin-bottom: 8px;
+  }
+  .login-logo {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    background: var(--color-primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700;
+  }
+  .login-title { font-size: 20px; font-weight: 600; text-align: center; margin: 0; }
+  .login-sub { text-align: center; color: var(--color-text-secondary); font-size: 13px; margin: 6px 0 28px; }
+  .login-form { display: flex; flex-direction: column; gap: 18px; }
+  .login-error {
+    display: none;
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+    border-radius: var(--radius-md);
+    padding: 10px 14px; font-size: 13px;
+  }
+  .login-error.show { display: block; }
+  .login-ban {
+    display: none;
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--radius-md);
+    padding: 10px 14px; font-size: 13px; margin-top: 16px;
+  }
+  .login-ban.show { display: block; }
+  .login-demo {
+    margin-top: 20px;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+    border-radius: var(--radius-md);
+    padding: 12px 14px; font-size: 12px; line-height: 20px;
+  }
+  .login-demo b { font-weight: 600; }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.5);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="login-logo">流</span>
+      <span class="login-title">企业流程审批系统</span>
+    </div>
+    <p class="login-sub">Enterprise Workflow Approval System</p>
+
+    <div class="login-error" id="loginError">用户名或密码错误</div>
+
+    <form class="login-form" id="loginForm" onsubmit="return doLogin(event)">
+      <div class="form-group">
+        <label class="form-label form-required">用户名</label>
+        <input class="form-control" id="username" type="text" placeholder="请输入用户名" autocomplete="username" value="张三">
+      </div>
+      <div class="form-group">
+        <label class="form-label form-required">密码</label>
+        <input class="form-control" id="password" type="password" placeholder="请输入密码" autocomplete="current-password" value="123456">
+      </div>
+      <button class="btn btn-primary btn-lg" id="loginBtn" type="submit" style="width:100%">登录</button>
+    </form>
+
+    <div class="login-ban" id="loginBan">? 账号已被禁用，请联系系统管理员。</div>
+
+    <div class="login-demo">
+      <b>演示账号</b><br>
+      所长（管理员）：张三 / 123456　&#8594;　通用所，可见「个人中心」<br>
+      系统管理员：admin / admin123　&#8594;　可见「系统管理」<br>
+      普通用户：李四 / 123456
+    </div>
+  </div>
+</div>
+
+<script>
+function doLogin(e){
+  e.preventDefault();
+  var err = document.getElementById('loginError');
+  var ban = document.getElementById('loginBan');
+  var btn = document.getElementById('loginBtn');
+  var u = document.getElementById('username').value.trim();
+  var p = document.getElementById('password').value;
+  err.classList.remove('show');
+  ban.classList.remove('show');
+  // 模拟 loading
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 登录中…';
+  setTimeout(function(){
+    btn.disabled = false;
+    btn.innerHTML = '登录';
+    if(u === 'admin'){ window.location.href = 'P02_dashboard.html'; return; }
+    // 演示：任意非空且密码长度>=6即模拟失败，便于展示错误态
+    if(u && p.length >= 6){
+      window.location.href = 'P02_dashboard.html';
+    } else {
+      err.classList.add('show');
+      document.getElementById('password').classList.add('is-error');
+    }
+  }, 900);
+  return false;
+}
+// 演示用：双击错误提示可临时切换为"账号禁用"态
+document.getElementById('loginError').addEventListener('dblclick', function(){
+  this.classList.remove('show');
+  document.getElementById('loginBan').classList.add('show');
+});
+</script>
+</body>
+</html>

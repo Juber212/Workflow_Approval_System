@@ -1,0 +1,258 @@
+<!-- P18 系统管理页 | 功能说明：基础数据维护（仅系统管理员），含用户管理/组织管理/角色管理/系统配置 4 个 Tab | 关键交互：用户管理(搜索+新增D10+编辑D11+禁用/启用D12+重置密码D13)、组织管理(新增/编辑D14，V1无删除)、角色管理(只读)、系统配置(保存表单) | 跳转关系：D10/D11/D12/D13/D14 弹窗 / P02·P03·P17(导航) | 角色可见性：系统管理员视角(王五)，显示 Dashboard/流程管理/系统管理，隐藏个人中心；M/U 不可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>系统管理 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+
+.tabs{display:flex;gap:var(--space-xl);border-bottom:1px solid var(--color-border);margin-bottom:var(--space-xl)}
+.tab-item{position:relative;padding:0 0 var(--space-md);font-size:15px;color:var(--color-text-regular);cursor:pointer;font-weight:500}
+.tab-item:hover{color:var(--color-primary)}
+.tab-item.is-active{color:var(--color-primary);font-weight:600}
+.tab-item.is-active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--color-primary)}
+.tab-panel{display:none}
+.tab-panel.is-active{display:block}
+
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);margin-bottom:var(--space-lg);flex-wrap:wrap}
+.search-box{display:flex;gap:var(--space-sm);align-items:center}
+.search-box .form-control{width:200px}
+.role-tags{display:flex;gap:6px;flex-wrap:wrap}
+.link-btn{color:var(--color-primary);cursor:pointer;text-decoration:none;font-size:13px;margin-right:var(--space-md)}
+.link-btn.danger{color:var(--color-danger)}
+.link-btn:hover{text-decoration:underline}
+
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-lg) var(--space-2xl);max-width:760px}
+.form-grid .full{grid-column:1 / -1}
+.hint{font-size:12px;color:var(--color-text-secondary);background:var(--color-bg-hover);border-radius:var(--radius-md);padding:var(--space-md) var(--space-lg);margin-top:var(--space-md);line-height:20px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P18_system.html">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">王</span>
+    <span>王五（系统管理员）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">系统管理</h1>
+        <p class="page-subtitle">用户、组织、角色与系统参数维护（仅系统管理员可见）</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab-item is-active" data-tab="user">用户管理</div>
+      <div class="tab-item" data-tab="org">组织管理</div>
+      <div class="tab-item" data-tab="role">角色管理</div>
+      <div class="tab-item" data-tab="config">系统配置</div>
+    </div>
+
+    <!-- 用户管理 -->
+    <div class="tab-panel is-active" id="tab-user">
+      <div class="toolbar">
+        <div class="search-box">
+          <input class="form-control" placeholder="搜索用户名 / 姓名">
+          <select class="form-control" style="width:160px">
+            <option value="">全部组织</option>
+            <option>通用所</option><option>高速所</option><option>第三所</option><option>第四所</option>
+          </select>
+          <button class="btn btn-default">查询</button>
+        </div>
+        <a class="btn btn-primary" href="D10_add_user.html">+ 新增用户</a>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>用户名</th><th>姓名</th><th>组织</th><th>角色</th><th>状态</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>zhangsan</td><td>张三</td><td>通用所</td>
+            <td><span class="tag tag-primary">所长</span></td>
+            <td><span class="status status-completed">正常</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn danger" href="D12_toggle_user.html">禁用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+          <tr>
+            <td>lisi</td><td>李四</td><td>通用所</td>
+            <td><span class="tag">普通用户</span></td>
+            <td><span class="status status-completed">正常</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn danger" href="D12_toggle_user.html">禁用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+          <tr>
+            <td>wangwu</td><td>王五</td><td>通用所</td>
+            <td><span class="tag tag-danger">系统管理员</span></td>
+            <td><span class="status status-completed">正常</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn danger" href="D12_toggle_user.html">禁用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+          <tr>
+            <td>zhaoliu</td><td>赵六</td><td>高速所</td>
+            <td><span class="tag">普通用户</span></td>
+            <td><span class="status status-completed">正常</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn danger" href="D12_toggle_user.html">禁用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+          <tr>
+            <td>qianqi</td><td>钱七</td><td>第三所</td>
+            <td><span class="tag">普通用户</span></td>
+            <td><span class="status status-terminated">已禁用</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn" href="D12_toggle_user.html" style="color:var(--color-success)">启用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+          <tr>
+            <td>sunba</td><td>孙八</td><td>第四所</td>
+            <td><span class="tag">普通用户</span></td>
+            <td><span class="status status-completed">正常</span></td>
+            <td>
+              <a class="link-btn" href="D11_edit_user.html">编辑</a>
+              <a class="link-btn danger" href="D12_toggle_user.html">禁用</a>
+              <a class="link-btn" href="D13_reset_password.html">重置密码</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 组织管理 -->
+    <div class="tab-panel" id="tab-org">
+      <div class="toolbar">
+        <div class="search-box"><input class="form-control" placeholder="搜索组织名"></div>
+        <a class="btn btn-primary" href="D14_org_edit.html">+ 新增组织</a>
+      </div>
+      <table class="table">
+        <thead><tr><th>组织名</th><th>所长</th><th>用户数</th><th>创建时间</th><th>操作</th></tr></thead>
+        <tbody>
+          <tr><td>通用所</td><td>张三</td><td class="num">3</td><td class="num">2026-01-05 09:00</td><td><a class="link-btn" href="D14_org_edit.html">编辑</a></td></tr>
+          <tr><td>高速所</td><td>周九</td><td class="num">2</td><td class="num">2026-02-11 14:30</td><td><a class="link-btn" href="D14_org_edit.html">编辑</a></td></tr>
+          <tr><td>第三所</td><td>吴十</td><td class="num">2</td><td class="num">2026-03-18 10:15</td><td><a class="link-btn" href="D14_org_edit.html">编辑</a></td></tr>
+          <tr><td>第四所</td><td>郑十一</td><td class="num">1</td><td class="num">2026-04-22 16:45</td><td><a class="link-btn" href="D14_org_edit.html">编辑</a></td></tr>
+        </tbody>
+      </table>
+      <p class="hint">V1 版本组织不支持删除，仅可编辑名称与描述。所长由用户角色推导，为计算字段。</p>
+    </div>
+
+    <!-- 角色管理 -->
+    <div class="tab-panel" id="tab-role">
+      <table class="table">
+        <thead><tr><th>角色名</th><th>标识</th><th>用户数</th><th>描述</th></tr></thead>
+        <tbody>
+          <tr><td>系统管理员</td><td><code>system_admin</code></td><td class="num">1</td><td>拥有系统全部权限，含系统管理与用户/组织维护</td></tr>
+          <tr><td>所长</td><td><code>manager</code></td><td class="num">4</td><td>本所流程模板管理、发起、设计流程、查看与终止所内实例</td></tr>
+          <tr><td>普通用户</td><td><code>user</code></td><td class="num">18</td><td>作为负责人、校验人、审批人参与流程节点处理</td></tr>
+        </tbody>
+      </table>
+      <p class="hint">V1 角色为预置项，不可新增或删除，用户数随用户管理实时统计。</p>
+    </div>
+
+    <!-- 系统配置 -->
+    <div class="tab-panel" id="tab-config">
+      <div class="card">
+        <div class="card-header"><h2 class="card-title">系统参数</h2></div>
+        <div class="card-body">
+          <form class="form" onsubmit="return false">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label form-required">系统名称</label>
+                <input class="form-control" value="企业流程审批系统">
+              </div>
+              <div class="form-group">
+                <label class="form-label form-required">文件大小上限（MB）</label>
+                <input class="form-control num" value="50">
+              </div>
+              <div class="form-group">
+                <label class="form-label form-required">Token 有效期（小时）</label>
+                <input class="form-control num" value="24">
+              </div>
+              <div class="form-group">
+                <label class="form-label">允许文件类型</label>
+                <input class="form-control" value="doc,docx,xls,xlsx,pdf,png,jpg">
+              </div>
+              <div class="form-group">
+                <label class="form-label">PDF 签名 X 坐标</label>
+                <input class="form-control num" value="450">
+              </div>
+              <div class="form-group">
+                <label class="form-label">PDF 签名 Y 坐标</label>
+                <input class="form-control num" value="800">
+              </div>
+              <div class="form-group">
+                <label class="form-label">签名偏移（px）</label>
+                <input class="form-control num" value="12">
+              </div>
+              <div class="form-group">
+                <label class="form-label">签名页码</label>
+                <input class="form-control num" value="-1">
+              </div>
+              <div class="form-group full">
+                <label class="form-label">归档目录</label>
+                <input class="form-control" value="/data/approve/archive/">
+              </div>
+              <div class="form-group full">
+                <label class="form-label">LibreOffice 路径</label>
+                <input class="form-control" value="/usr/bin/libreoffice">
+              </div>
+            </div>
+            <div class="flex" style="gap:var(--space-sm);margin-top:var(--space-lg)">
+              <button class="btn btn-primary">保存</button>
+              <button class="btn btn-default">重置</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+document.getElementById('tabs').addEventListener('click',function(e){
+  var t = e.target.closest('.tab-item'); if(!t) return;
+  document.querySelectorAll('.tab-item').forEach(function(x){x.classList.remove('is-active');});
+  document.querySelectorAll('.tab-panel').forEach(function(x){x.classList.remove('is-active');});
+  t.classList.add('is-active');
+  document.getElementById('tab-'+t.dataset.tab).classList.add('is-active');
+});
+var um=document.getElementById('userMenu');
+if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+</script>
+</body>
+</html>

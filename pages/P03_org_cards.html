@@ -1,0 +1,114 @@
+<!-- P03 流程管理-所概览卡片页 | 功能：网格卡片展示各组织概览，点击进入所内列表 | 关键交互：当前用户所属所(通用所)蓝色边框高亮、点击卡片&#8594;P04 | 跳转关系：&#8594;P04 所内主页 | 角色可见性：所长视角(显示个人中心,隐藏系统管理)，A/M/U 通用 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>流程管理 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.org-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xl);margin-top:var(--space-xl)}
+.org-card{
+  background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);
+  padding:24px;cursor:pointer;transition:box-shadow .15s,border-color .15s,transform .15s;
+  display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-card);
+}
+.org-card:hover{box-shadow:var(--shadow-dialog);transform:translateY(-2px)}
+.org-card.is-current{border-color:var(--color-primary);border-width:2px;padding:23px}
+.org-card-head{display:flex;align-items:center;justify-content:space-between}
+.org-card-name{font-size:16px;font-weight:600}
+.org-badge{font-size:12px;color:var(--color-primary);background:var(--color-primary-light);padding:2px 10px;border-radius:var(--radius-pill)}
+.org-card-metric{display:flex;align-items:baseline;gap:8px}
+.org-card-num{font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.org-card-num.is-warn{color:var(--color-danger)}
+.org-card-unit{font-size:13px;color:var(--color-text-secondary)}
+.org-card-meta{font-size:12px;color:var(--color-text-secondary);border-top:1px solid var(--color-border-light);padding-top:12px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">?</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">流程管理</h1>
+        <p class="page-subtitle">各组织流程运行概览，点击卡片进入对应组织</p>
+      </div>
+    </div>
+
+    <div class="org-grid">
+      <div class="org-card is-current" onclick="location.href='P04_org_home.html'">
+        <div class="org-card-head">
+          <span class="org-card-name">通用所</span>
+          <span class="org-badge">当前所属</span>
+        </div>
+        <div class="org-card-metric">
+          <span class="org-card-num">12</span>
+          <span class="org-card-unit">个运行中实例</span>
+        </div>
+        <div class="org-card-meta">最近更新：2026-07-10 09:42 · 模板 8 个</div>
+      </div>
+
+      <div class="org-card" onclick="location.href='P04_org_home.html'">
+        <div class="org-card-head">
+          <span class="org-card-name">高速所</span>
+        </div>
+        <div class="org-card-metric">
+          <span class="org-card-num is-warn">3</span>
+          <span class="org-card-unit">个运行中实例</span>
+        </div>
+        <div class="org-card-meta">最近更新：2026-07-09 18:20 · 模板 5 个</div>
+      </div>
+
+      <div class="org-card" onclick="location.href='P04_org_home.html'">
+        <div class="org-card-head">
+          <span class="org-card-name">第三所</span>
+        </div>
+        <div class="org-card-metric">
+          <span class="org-card-num">7</span>
+          <span class="org-card-unit">个运行中实例</span>
+        </div>
+        <div class="org-card-meta">最近更新：2026-07-10 08:15 · 模板 6 个</div>
+      </div>
+
+      <div class="org-card" onclick="location.href='P04_org_home.html'">
+        <div class="org-card-head">
+          <span class="org-card-name">第四所</span>
+        </div>
+        <div class="org-card-metric">
+          <span class="org-card-num">5</span>
+          <span class="org-card-unit">个运行中实例</span>
+        </div>
+        <div class="org-card-meta">最近更新：2026-07-08 14:33 · 模板 4 个</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}</script>
+</body>
+</html>

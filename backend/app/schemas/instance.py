@@ -4,6 +4,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# ==================== 发起实例 ====================
+
 class NodeOverride(BaseModel):
     """发起实例时对单个节点的覆盖配置 —— 所有字段选填，未提供则使用模板默认值"""
     node_id: int = Field(..., description="模板节点 ID（快照中的 id）")
@@ -47,3 +49,34 @@ class InstanceResponse(BaseModel):
     status: str
     nodes: list[InstanceNodeBrief] = []
     initiated_at: datetime | None = None
+
+
+# ==================== 实例列表 ====================
+
+class InstanceListItem(BaseModel):
+    """实例列表项（列表视图字段）"""
+    id: int
+    name: str
+    template_id: int
+    template_name: str = ""
+    organization_id: int
+    organization_name: str = ""
+    initiator_id: int
+    initiator_name: str = ""
+    priority: str
+    status: str
+    archive_status: str | None = None
+    current_node_index: int = 0
+    total_nodes: int = 0
+    current_assignee_name: str | None = None
+    initiated_at: datetime | None = None
+    completed_at: datetime | None = None
+    terminated_at: datetime | None = None
+
+
+class InstanceListResponse(BaseModel):
+    """实例列表分页响应"""
+    items: list[InstanceListItem]
+    total: int
+    page: int
+    page_size: int

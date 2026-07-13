@@ -1,0 +1,84 @@
+<!-- D11 编辑用户弹窗 | 功能说明：系统管理员编辑用户（用户名只读不可改） | 关键交互：同 D10 字段，用户名只读，"保存"(.btn-primary)；点击遮罩不可关闭 | 跳转关系：由 P18 用户管理"编辑"触发，确认后&#8594;P18 | 角色可见性：仅系统管理员(A)可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>编辑用户 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.page-bg{filter:brightness(.92) saturate(.9);pointer-events:none;user-select:none}
+.bg-table{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:var(--content-max-width);margin:var(--space-xl) auto 0;overflow:hidden;box-shadow:var(--shadow-card)}
+.bg-table .row{display:flex;padding:12px var(--space-xl);border-bottom:1px solid var(--color-border-light);font-size:13px}
+.bg-table .row.head{background:var(--color-bg-page);font-weight:600}
+.check-list{display:flex;flex-wrap:wrap;gap:var(--space-sm)}
+.check-item{display:flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:6px 12px;font-size:13px;cursor:pointer;background:#fff}
+.check-item input{accent-color:var(--color-primary)}
+.readonly-field{background:var(--color-bg-page);color:var(--color-text-secondary);cursor:not-allowed}
+</style>
+</head>
+<body>
+<div class="page-bg">
+  <header class="topnav">
+    <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+    <nav class="topnav-menu"><a class="topnav-item">Dashboard</a><a class="topnav-item">流程管理</a><a class="topnav-item is-active">系统管理</a></nav>
+    <div class="topnav-user"><span class="topnav-avatar">王</span><span>王五（系统管理员）</span></div>
+  </header>
+  <div class="bg-table">
+    <div class="row head"><span style="flex:1">用户名</span><span style="flex:1">姓名</span><span style="flex:1">组织</span><span style="flex:1">角色</span><span style="flex:1">状态</span><span style="flex:1">操作</span></div>
+    <div class="row"><span style="flex:1">zhangsan</span><span style="flex:1">张三</span><span style="flex:1">通用所</span><span style="flex:1">所长</span><span style="flex:1">正常</span><span style="flex:1">编辑</span></div>
+  </div>
+</div>
+
+<!-- 编辑用户弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span>编辑用户</span>
+      <button class="dialog-close" onclick="location.href='P18_system.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <form class="form" onsubmit="return false">
+        <div class="form-group">
+          <label class="form-label">用户名</label>
+          <input class="form-control readonly-field" value="zhangsan" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label form-required">姓名（2-20 字符）</label>
+          <input class="form-control" value="张三">
+        </div>
+        <div class="form-group">
+          <label class="form-label form-required">组织</label>
+          <select class="form-control"><option>通用所</option><option>高速所</option><option>第三所</option><option>第四所</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label form-required">角色（可多选）</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox"> 系统管理员</label>
+            <label class="check-item"><input type="checkbox" checked> 所长</label>
+            <label class="check-item"><input type="checkbox"> 普通用户</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">邮箱</label>
+          <input class="form-control" type="email" value="zhangsan@company.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">手机</label>
+          <input class="form-control" value="13800001111">
+        </div>
+      </form>
+    </div>
+    <div class="dialog-footer">
+      <a class="btn btn-default" href="P18_system.html">取消</a>
+      <a class="btn btn-primary" href="P18_system.html">保存</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

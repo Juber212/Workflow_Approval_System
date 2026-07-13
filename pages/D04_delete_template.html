@@ -1,0 +1,67 @@
+<!-- D04 删除模板确认弹窗 | 功能说明：以 P04 模板Tab 为暗化背景 + 居中弹窗，"删除后不可恢复"，仅草稿可删 | 关键交互：取消/删除(.btn-danger) | 跳转关系：删除&#8594;P04 | 角色可见性：所长(M)可见，仅草稿 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>删除模板 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.backdrop-dim{filter:brightness(.96);pointer-events:none;opacity:.6}
+.dialog{width:400px}
+.danger-text{color:var(--color-danger);font-weight:600}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<!-- 暗化背景：P04 模板Tab 示意 -->
+<div class="page backdrop-dim">
+  <div class="content">
+    <div class="breadcrumb" style="font-size:13px;color:var(--color-text-secondary)">流程管理 / 通用所</div>
+    <div class="page-header"><h1 class="page-title">通用所</h1></div>
+    <div class="tabs"><div class="tab">流程实例</div><div class="tab is-active">流程模板</div></div>
+    <table class="table"><thead><tr><th>流程名称</th><th>当前版本</th><th>状态</th><th>节点数</th><th>更新时间</th><th>操作</th></tr></thead>
+      <tbody><tr><td>工艺评审流程</td><td class="num">V1</td><td><span class="status status-draft">草稿</span></td><td class="num">3</td><td class="text-secondary">2026-07-10 08:30</td><td><a class="btn btn-text btn-sm">查看</a></td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- 弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog">
+    <div class="dialog-header"><span>删除模板</span><button class="dialog-close" onclick="location.href='P04_org_home.html'">×</button></div>
+    <div class="dialog-body">
+      <p style="margin:0">确定要删除模板 <b>「工艺评审流程（草稿 V1）」</b> 吗？</p>
+      <p class="danger-text" style="margin:12px 0 0">删除后不可恢复，请谨慎操作。</p>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P04_org_home.html'">取消</button>
+      <button class="btn btn-danger" onclick="location.href='P04_org_home.html'">删除</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

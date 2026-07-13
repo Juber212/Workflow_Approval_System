@@ -1,0 +1,164 @@
+<!-- P12 我发起的流程 | 功能：发起人查看/终止自己发起的流程（所长专属） | 关键交互：状态筛选 全部/运行中/已完成/已终止（C3 无 archived 独立项）；任意状态可终止到 D06（终止原因必填） | 跳转：P17 / D06 | 角色：所长（专属） -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>我发起的流程 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+  .filter-tabs{display:flex;gap:var(--space-sm);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-lg)}
+  .filter-tab{height:32px;padding:0 var(--space-lg);border:1px solid var(--color-border);background:#fff;border-radius:var(--radius-md);font-size:14px;color:var(--color-text-regular);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .filter-tab:hover{border-color:var(--color-primary);color:var(--color-primary)}
+  .filter-tab.is-active{background:var(--color-primary);border-color:var(--color-primary);color:#fff}
+  .filter-count{font-variant-numeric:tabular-nums;opacity:.8}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">我发起的流程</h1>
+        <div class="page-subtitle">发起人所见 · 任意状态均可终止（C3 用户可见状态：运行中 / 已完成 / 已终止）</div>
+      </div>
+    </div>
+
+    <div class="filter-tabs" id="filterTabs">
+      <button class="filter-tab is-active" data-status="all">全部 <span class="filter-count">6</span></button>
+      <button class="filter-tab" data-status="running">运行中 <span class="filter-count">3</span></button>
+      <button class="filter-tab" data-status="completed">已完成 <span class="filter-count">2</span></button>
+      <button class="filter-tab" data-status="terminated">已终止 <span class="filter-count">1</span></button>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>实例名称</th>
+              <th>模板</th>
+              <th>当前节点</th>
+              <th>发起时间</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="initBody">
+            <tr data-status="running">
+              <td>XT2026-001 产品设计</td>
+              <td>产品设计模板</td>
+              <td>方案设计</td>
+              <td class="num">2026-06-20 09:12</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+            <tr data-status="running">
+              <td>XT2026-005 上线发布</td>
+              <td>上线发布模板</td>
+              <td>部门审批</td>
+              <td class="num">2026-06-25 14:30</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+            <tr data-status="running">
+              <td>XT2026-009 终验签发</td>
+              <td>终验模板</td>
+              <td>终审签发</td>
+              <td class="num">2026-06-28 10:00</td>
+              <td><span class="status status-running">运行中</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+            <tr data-status="completed">
+              <td>XT2026-010 架构评审</td>
+              <td>架构模板</td>
+              <td>—</td>
+              <td class="num">2026-07-01 09:40</td>
+              <td><span class="status status-completed">已完成</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+            <tr data-status="completed">
+              <td>XT2026-011 年度规划</td>
+              <td>规划模板</td>
+              <td>—</td>
+              <td class="num">2026-05-10 16:20</td>
+              <td><span class="status status-completed">已完成</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+            <tr data-status="terminated">
+              <td>XT2026-012 旧项目清理</td>
+              <td>清理模板</td>
+              <td>—</td>
+              <td class="num">2026-03-15 11:05</td>
+              <td><span class="status status-terminated">已终止</span></td>
+              <td>
+                <a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看详情</a>
+                <a class="btn btn-danger btn-sm" href="D06_terminate.html">终止</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+  var tabs=document.getElementById('filterTabs');
+  tabs.addEventListener('click',function(e){
+    var btn=e.target.closest('.filter-tab'); if(!btn)return;
+    tabs.querySelectorAll('.filter-tab').forEach(function(b){b.classList.remove('is-active');});
+    btn.classList.add('is-active');
+    var s=btn.getAttribute('data-status');
+    document.querySelectorAll('#initBody tr').forEach(function(tr){
+      tr.style.display=(s==='all'||tr.getAttribute('data-status')===s)?'':'none';
+    });
+  });
+</script>
+</body>
+</html>

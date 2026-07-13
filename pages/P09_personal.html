@@ -1,0 +1,109 @@
+<!-- P09 个人中心卡片页 | 功能：一页展示个人业务入口卡片（所长 4 卡：我的待办 / 我的审批 / 我发起的流程 / 我的流程记录） | 关键交互：点击卡片跳转对应列表（P10~P13） | 跳转：P10 / P11 / P12 / P13 | 角色：所长 / 普通用户（普通用户 3 卡，本原型按所长 4 卡绘制） -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>个人中心 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+
+  .profile-banner{display:flex;align-items:center;gap:var(--space-lg);margin-bottom:var(--space-xl)}
+  .profile-banner .avatar-lg{width:64px;height:64px;border-radius:var(--radius-pill);background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700}
+  .profile-banner .who .name{font-size:var(--font-section);font-weight:600}
+  .profile-banner .who .meta{color:var(--color-text-secondary);font-size:var(--font-aux);margin-top:4px}
+
+  .card-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xl)}
+  .entry-card{background:var(--color-bg-card);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-xl);box-shadow:var(--shadow-card);cursor:pointer;transition:box-shadow .15s,transform .15s;text-decoration:none;color:inherit;display:block}
+  .entry-card:hover{box-shadow:var(--shadow-dialog);transform:translateY(-2px)}
+  .entry-card .ic{width:44px;height:44px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin-bottom:var(--space-md)}
+  .entry-card .t{font-size:var(--font-section);font-weight:600}
+  .entry-card .d{color:var(--color-text-secondary);font-size:var(--font-aux);margin-top:var(--space-xs)}
+  .entry-card .n{font-size:var(--font-data);font-weight:600;margin-top:var(--space-md)}
+  .ic-1{background:var(--color-warning-light);color:var(--color-warning)}
+  .ic-2{background:var(--color-primary-light);color:var(--color-primary)}
+  .ic-3{background:var(--color-success-light);color:var(--color-success)}
+  .ic-4{background:var(--color-info-light);color:var(--color-info)}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">个人中心</h1>
+        <div class="page-subtitle">我的待办、审批与流程一览</div>
+      </div>
+    </div>
+
+    <div class="profile-banner">
+      <div class="avatar-lg">张</div>
+      <div class="who">
+        <div class="name">张三</div>
+        <div class="meta">研发一所 · 所长 · 工号 ZS001</div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <a class="entry-card" href="P10_todos.html">
+        <div class="ic ic-1">办</div>
+        <div class="t">我的待办</div>
+        <div class="d">待处理 + 处理中 + 待校验任务</div>
+        <div class="n num">15</div>
+      </a>
+      <a class="entry-card" href="P11_approvals.html">
+        <div class="ic ic-2">审</div>
+        <div class="t">我的审批</div>
+        <div class="d">待我审批及终审任务</div>
+        <div class="n num">7</div>
+      </a>
+      <a class="entry-card" href="P12_my_initiated.html">
+        <div class="ic ic-3">起</div>
+        <div class="t">我发起的流程</div>
+        <div class="d">运行中 + 已完成 + 已终止</div>
+        <div class="n num">9</div>
+      </a>
+      <a class="entry-card" href="P13_my_records.html">
+        <div class="ic ic-4">记</div>
+        <div class="t">我的流程记录</div>
+        <div class="d">参与过的流程（负责人/审批/发起）</div>
+        <div class="n num">23</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+</script>
+</body>
+</html>

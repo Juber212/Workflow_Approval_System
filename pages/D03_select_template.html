@@ -1,0 +1,89 @@
+<!-- D03 发起流程-模板选择弹窗 | 功能说明：以 P04 实例Tab 为暗化背景 + 居中弹窗，列本所已发布模板(单选)，下一步&#8594;P08(C1) | 关键交互：单选列表、取消/下一步 | 跳转关系：下一步&#8594;P08_start_instance.html | 角色可见性：所长(M)可见，仅列本所已发布模板 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>选择模板 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+/* 暗化背景（模拟 P04 实例Tab，不可交互） */
+.backdrop-dim{filter:brightness(.96);pointer-events:none;opacity:.6}
+.tpl-radio{display:flex;flex-direction:column;gap:10px;max-height:300px;overflow-y:auto}
+.tpl-option{display:flex;align-items:center;gap:12px;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.tpl-option:hover{border-color:var(--color-primary)}
+.tpl-option.sel{border-color:var(--color-primary);background:var(--color-primary-light)}
+.tpl-option input{margin:0}
+.tpl-option .meta{font-size:12px;color:var(--color-text-secondary)}
+.dialog{width:480px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<!-- 暗化背景：P04 实例Tab 示意 -->
+<div class="page backdrop-dim">
+  <div class="content">
+    <div class="breadcrumb" style="font-size:13px;color:var(--color-text-secondary)">流程管理 / 通用所</div>
+    <div class="page-header"><h1 class="page-title">通用所</h1></div>
+    <div class="tabs"><div class="tab is-active">流程实例</div><div class="tab">流程模板</div></div>
+    <table class="table"><thead><tr><th>实例名称</th><th>模板</th><th>优先级</th><th>当前负责人</th><th>节点进度</th><th>状态</th><th>发起时间</th><th>操作</th></tr></thead>
+      <tbody><tr><td>XT2026-001产品设计</td><td>产品设计流程</td><td><span class="status pri-high">高</span></td><td>李四</td><td class="num">2/5</td><td><span class="status status-running">运行中</span></td><td class="text-secondary">2026-07-10 09:12</td><td><a class="btn btn-text btn-sm">查看</a></td></tr>
+      <tr><td>XT2026-002结构设计</td><td>结构设计流程</td><td><span class="status pri-urgent">紧急</span></td><td>王五</td><td class="num">1/4</td><td><span class="status status-running">运行中</span></td><td class="text-secondary">2026-07-09 16:40</td><td><a class="btn btn-text btn-sm">查看</a></td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- 弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog">
+    <div class="dialog-header"><span>发起流程 · 选择模板</span><button class="dialog-close" onclick="location.href='P04_org_home.html'">×</button></div>
+    <div class="dialog-body">
+      <p class="text-secondary" style="margin:0 0 14px;font-size:13px">仅显示「通用所」已发布模板，请选择其一：</p>
+      <div class="tpl-radio" id="tplRadio">
+        <label class="tpl-option sel"><input type="radio" name="tpl" checked><div><div>工艺评审流程 <span class="status status-published">已发布 V3</span></div><div class="meta">5 个节点 · 更新 2026-07-08</div></div></label>
+        <label class="tpl-option"><input type="radio" name="tpl"><div><div>产品设计流程 <span class="status status-published">已发布 V3</span></div><div class="meta">5 个节点 · 更新 2026-07-08</div></div></label>
+        <label class="tpl-option"><input type="radio" name="tpl"><div><div>结构设计流程 <span class="status status-published">已发布 V2</span></div><div class="meta">4 个节点 · 更新 2026-07-07</div></div></label>
+        <label class="tpl-option"><input type="radio" name="tpl"><div><div>试制流程 <span class="status status-published">已发布 V2</span></div><div class="meta">6 个节点 · 更新 2026-07-02</div></div></label>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P04_org_home.html'">取消</button>
+      <button class="btn btn-primary" onclick="location.href='P08_start_instance.html'">下一步</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.tpl-option').forEach(function(o){
+  o.addEventListener('click',function(){
+    document.querySelectorAll('.tpl-option').forEach(function(x){x.classList.remove('sel');});
+    o.classList.add('sel');
+    o.querySelector('input').checked=true;
+  });
+});
+</script>
+</body>
+</html>

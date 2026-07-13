@@ -1,0 +1,142 @@
+<!-- P17 流程实例详情页 | 功能说明：单页滚动全貌查看（查看型,无提交/审批/校验按钮）| 关键交互：基本信息+流程进度固定、节点卡片(当前展开/已完成折叠/未开始灰显)、操作日志时间线、终止流程(D06,发起人可见)+补交文件(D09) | 跳转关系：P04实例行/P08确认发起&#8594;本页 | 角色可见性：A/M/U通用，所长视角(发起人可见终止/修改人员) -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>实例详情 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.breadcrumb{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px}
+.breadcrumb a{color:var(--color-text-regular);text-decoration:none}
+.breadcrumb a:hover{color:var(--color-primary)}
+.sticky-head{position:sticky;top:56px;background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px 20px;z-index:10;box-shadow:var(--shadow-card);margin-bottom:20px}
+.base-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.base-item .k{font-size:12px;color:var(--color-text-secondary)}
+.base-item .v{font-size:14px;font-weight:500;margin-top:4px}
+.node-card{border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:16px;overflow:hidden}
+.node-card.is-active{border-color:var(--color-primary)}
+.node-card.is-wait{opacity:.6}
+.node-card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--color-bg-page);cursor:pointer}
+.node-card.is-active .node-card-head{background:var(--color-primary-light)}
+.node-card-body{padding:16px;display:none}
+.node-card.open .node-card-body{display:block}
+.timeline{list-style:none;padding:0;margin:0;border-left:2px solid var(--color-border);margin-left:8px}
+.timeline li{position:relative;padding:0 0 18px 20px}
+.timeline li::before{content:"";position:absolute;left:-7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--color-primary);border:2px solid #fff}
+.timeline .t-time{font-size:12px;color:var(--color-text-secondary)}
+.timeline .t-text{font-size:13px;margin-top:2px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">?</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="breadcrumb"><a href="P03_org_cards.html">流程管理</a> / <a href="P04_org_home.html">通用所</a> / <span>XT2026-007 新型减速器工艺评审</span></div>
+
+    <!-- 固定头部：基本信息 + 进度 + 操作 -->
+    <div class="sticky-head">
+      <div class="flex-between" style="margin-bottom:14px">
+        <div>
+          <h1 class="page-title" style="display:inline">XT2026-007 新型减速器工艺评审</h1>
+          <span class="status status-running" style="margin-left:10px">运行中</span>
+          <span class="status pri-high" style="margin-left:6px">高</span>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-default" onclick="toast('已打开补交文件(D09)')">补交文件</button>
+          <button class="btn btn-danger" onclick="toast('已打开终止流程确认(D06)')">终止流程</button>
+        </div>
+      </div>
+      <div class="base-grid">
+        <div class="base-item"><div class="k">所属模板</div><div class="v">工艺评审流程 V3</div></div>
+        <div class="base-item"><div class="k">发起人</div><div class="v">张三（所长）</div></div>
+        <div class="base-item"><div class="k">发起时间</div><div class="v num" style="font-size:14px">2026-07-10 09:12</div></div>
+        <div class="base-item"><div class="k">节点进度</div><div class="v num">2 / 5</div></div>
+      </div>
+    </div>
+
+    <!-- 节点卡片 -->
+    <h3 class="card-title" style="margin-bottom:12px">流程节点</h3>
+    <div class="node-card open">
+      <div class="node-card-head" onclick="this.parentNode.classList.toggle('open')"><span><b>① 开始</b> <span class="status status-published">系统</span></span><span class="text-secondary">已完成 ?</span></div>
+      <div class="node-card-body"><div class="text-secondary">系统自动发起，无处理人。</div></div>
+    </div>
+    <div class="node-card open">
+      <div class="node-card-head" onclick="this.parentNode.classList.toggle('open')"><span><b>② 需求分析</b> <span class="status status-completed">已完成</span> · 负责人 李四</span><span class="text-secondary">已完成 ?</span></div>
+      <div class="node-card-body">
+        <div class="base-grid">
+          <div class="base-item"><div class="k">负责人</div><div class="v">李四</div></div>
+          <div class="base-item"><div class="k">校验人</div><div class="v">王五</div></div>
+          <div class="base-item"><div class="k">审批人 / 策略</div><div class="v">张三 · 全部通过</div></div>
+          <div class="base-item"><div class="k">完成时限</div><div class="v">3 天</div></div>
+        </div>
+        <div class="text-secondary" style="font-size:13px;margin-top:10px">文件：需求规格书_v1.pdf（已上传） · 审批意见：同意，需求清晰。</div>
+      </div>
+    </div>
+    <div class="node-card is-active open">
+      <div class="node-card-head" onclick="this.parentNode.classList.toggle('open')"><span><b>③ 方案设计</b> <span class="status status-processing">进行中</span> · 当前负责人 王五</span><span class="text-primary">进行中 ?</span></div>
+      <div class="node-card-body">
+        <div class="base-grid">
+          <div class="base-item"><div class="k">负责人</div><div class="v">王五</div></div>
+          <div class="base-item"><div class="k">校验人</div><div class="v">赵六</div></div>
+          <div class="base-item"><div class="k">审批人 / 策略</div><div class="v">张三 · 全部通过</div></div>
+          <div class="base-item"><div class="k">完成时限</div><div class="v">4 天 <span class="status status-overdue">已逾期</span></div></div>
+        </div>
+        <div class="page-actions" style="margin-top:12px"><button class="btn btn-text btn-sm" onclick="toast('已打开修改人员(D08)')">修改人员</button></div>
+      </div>
+    </div>
+    <div class="node-card is-wait">
+      <div class="node-card-head" onclick="this.parentNode.classList.toggle('open')"><span><b>④ 样机验证</b> <span class="status status-draft">未开始</span> · 负责人 王五</span><span class="text-secondary">未开始 ?</span></div>
+      <div class="node-card-body"><div class="text-secondary">可选节点，待上游完成后开放。</div></div>
+    </div>
+    <div class="node-card is-wait">
+      <div class="node-card-head" onclick="this.parentNode.classList.toggle('open')"><span><b>⑤ 结束</b> <span class="status status-draft">未开始</span></span><span class="text-secondary">未开始 ?</span></div>
+      <div class="node-card-body"><div class="text-secondary">系统默认结束节点。</div></div>
+    </div>
+
+    <!-- 操作日志 -->
+    <div class="card" style="margin-top:24px">
+      <div class="card-header"><h3 class="card-title">操作日志</h3></div>
+      <div class="card-body">
+        <ul class="timeline">
+          <li><div class="t-time">2026-07-10 09:12</div><div class="t-text">张三 发起流程实例「XT2026-007 新型减速器工艺评审」</div></li>
+          <li><div class="t-time">2026-07-10 10:30</div><div class="t-text">李四 提交节点「需求分析」，上传需求规格书_v1.pdf</div></li>
+          <li><div class="t-time">2026-07-10 14:05</div><div class="t-text">王五 校验通过；张三 审批通过（全部通过）</div></li>
+          <li><div class="t-time">2026-07-10 14:10</div><div class="t-text">流程流转至节点「方案设计」，当前负责人 王五</div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toastHost"></div>
+<script>
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+function toast(msg){var h=document.getElementById('toastHost');var t=document.createElement('div');t.className='toast toast-success';t.innerHTML='<span>?</span><span class="toast-text">'+msg+'</span>';h.appendChild(t);setTimeout(function(){t.remove();},4000);}
+</script>
+</body>
+</html>

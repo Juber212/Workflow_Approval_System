@@ -1,0 +1,87 @@
+<!-- D06 终止流程确认弹窗 | 功能说明：永久终止流程并删除文件（危险操作二次确认） | 关键交互：终止原因 textarea 必填、标题"&#9888; 永久终止并删除文件"、红色危险按钮"终止并删除"、点击遮罩不可关闭 | 跳转关系：由 P12/P17 触发，确认后&#8594;P17(状态变更已终止) | 角色可见性：仅发起人(所长)可见；落实 C2 决策(标题强化/原因必填/危险色) -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>终止流程 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+/* 暗化背景（模拟 P17 实例详情） */
+.page-bg{filter:brightness(.92) saturate(.9);pointer-events:none;user-select:none}
+.detail-sticky{position:sticky;top:56px;background:var(--color-bg-page);padding:var(--space-lg) 0 var(--space-md);border-bottom:1px solid var(--color-border-light)}
+.detail-bar{display:flex;align-items:center;justify-content:space-between;max-width:var(--content-max-width);margin:0 auto;padding:0 var(--page-padding);gap:var(--space-xl)}
+.detail-info{display:flex;flex-wrap:wrap;gap:var(--space-lg) var(--space-2xl);align-items:center}
+.di-item{display:flex;flex-direction:column;gap:2px}
+.di-label{font-size:12px;color:var(--color-text-secondary)}
+.di-value{font-size:14px;font-weight:500}
+.steps{display:flex;align-items:center;max-width:var(--content-max-width);margin:var(--space-lg) auto 0;padding:0 var(--page-padding)}
+.step{display:flex;align-items:center;flex:1}
+.step:last-child{flex:0 0 auto}
+.step-node{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid var(--color-primary);background:var(--color-primary);color:#fff}
+.step-line{flex:1;height:2px;background:var(--color-primary);margin:0 var(--space-sm)}
+.bg-card{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:var(--content-max-width);margin:var(--space-xl) auto 0;padding:var(--space-lg) var(--space-xl);box-shadow:var(--shadow-card)}
+/* 弹窗内增强 */
+.dialog-body .warn-box{background:var(--color-danger-light);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-md) var(--space-lg);color:var(--color-danger);font-size:13px;line-height:22px;margin-top:var(--space-lg)}
+.dialog-body .field-hint{font-size:12px;color:var(--color-text-secondary);margin-top:var(--space-xs)}
+</style>
+</head>
+<body>
+<!-- 暗化背景：P17 实例详情（顶部信息 + 进度 + 节点卡片占位） -->
+<div class="page-bg">
+  <header class="topnav">
+    <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+    <nav class="topnav-menu">
+      <a class="topnav-item">Dashboard</a><a class="topnav-item is-active">流程管理</a><a class="topnav-item">个人中心</a>
+    </nav>
+    <div class="topnav-user"><span class="topnav-avatar">张</span><span>张三（所长）</span></div>
+  </header>
+  <div class="detail-sticky">
+    <div class="detail-bar">
+      <div class="detail-info">
+        <div class="di-item"><span class="di-label">实例</span><span class="di-value">XT2026-001 产品设计</span></div>
+        <div class="di-item"><span class="di-label">状态</span><span class="di-value">运行中</span></div>
+        <div class="di-item"><span class="di-label">优先级</span><span class="di-value">高</span></div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step"><div class="step-node">&#10003;</div></div><div class="step-line"></div>
+      <div class="step"><div class="step-node">&#10003;</div></div><div class="step-line"></div>
+      <div class="step"><div class="step-node">3</div></div><div class="step-line"></div>
+      <div class="step"><div class="step-node">4</div></div><div class="step-line"></div>
+      <div class="step"><div class="step-node">5</div></div>
+    </div>
+  </div>
+  <div class="bg-card">节点明细 · 毛坯图下发（进行中） · 全套图纸下发（未开始） · 结束（未开始）</div>
+</div>
+
+<!-- 终止流程确认弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span>&#9888; 永久终止并删除文件</span>
+      <button class="dialog-close" onclick="location.href='P17_instance_detail.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-group">
+        <label class="form-label form-required">终止原因</label>
+        <textarea class="form-control" rows="4" placeholder="请填写终止原因（必填），将记入操作日志"></textarea>
+        <div class="form-error" style="display:none">终止原因不能为空</div>
+      </div>
+      <div class="warn-box">
+        终止后不可恢复，流程文件将被永久删除，仅保留操作日志。该实例状态将变更为"已终止"，所有待办任务关闭。
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <a class="btn btn-default" href="P17_instance_detail.html">取消</a>
+      <a class="btn btn-danger" href="P17_instance_detail.html">终止并删除</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

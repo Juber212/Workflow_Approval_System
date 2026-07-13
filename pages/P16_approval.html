@@ -1,0 +1,205 @@
+<!-- P16 审批处理 | 功能：审批人审批（普通节点 / 结束节点终审 两种模式同页，顶部标注区分） | 关键交互：流程进度 + 信息 + 文件 + 备注 + 审批意见 + 审批进度 +（终审额外）各节点审批记录；通过（签名上 PDF）/ 驳回（原因必填到 D07 选目标节点回退） | 跳转：P11 / D07 | 角色：所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>审批处理 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+
+  .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-lg)}
+  .info-grid .kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--color-border-light)}
+  .info-grid .kv:last-child{border-bottom:none}
+  .info-grid .k{color:var(--color-text-secondary)}
+  .mode-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-pill);font-weight:600;font-size:13px}
+  .mode-normal{background:var(--color-primary-light);color:var(--color-primary)}
+  .mode-final{background:var(--color-danger-light);color:var(--color-danger)}
+  .approval-progress{display:flex;flex-direction:column;gap:var(--space-sm)}
+  .approval-row{display:flex;align-items:center;gap:var(--space-md);padding:10px var(--space-md);border:1px solid var(--color-border);border-radius:var(--radius-md)}
+  .approval-row .who{font-weight:600;width:80px}
+  .footer-bar{display:flex;justify-content:flex-end;gap:var(--space-sm);margin-top:var(--space-xl)}
+  .sign-box{border:1px dashed var(--color-border);border-radius:var(--radius-md);padding:var(--space-md);text-align:center;color:var(--color-text-secondary)}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">审批处理 · <span id="instName">XT2026-005 上线发布</span></h1>
+        <div class="page-subtitle">当前节点：<span id="nodeName">部门审批</span> · 审批人：张三（你）</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-default" id="modeToggle">切换模式（演示）</button>
+        <a class="btn btn-text" href="P11_approvals.html">返回审批</a>
+      </div>
+    </div>
+
+    <!-- 模式标注 -->
+    <div style="margin-bottom:var(--space-lg)">
+      <span class="mode-badge mode-normal" id="modeBadge">审批模式：普通节点审批</span>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">流程进度</h2></div>
+      <div class="card-body">
+        <div class="steps">
+          <div class="step is-done"><div class="step-node">1</div><div class="step-label">需求分析</div></div>
+          <div class="step-line"></div>
+          <div class="step is-done"><div class="step-node">2</div><div class="step-label">开发实现</div></div>
+          <div class="step-line"></div>
+          <div class="step is-done"><div class="step-node">3</div><div class="step-label">质量校验</div></div>
+          <div class="step-line"></div>
+          <div class="step is-active"><div class="step-node">4</div><div class="step-label">部门审批</div></div>
+          <div class="step-line"></div>
+          <div class="step is-wait"><div class="step-node">5</div><div class="step-label">终审签发</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">流程信息</h2></div>
+      <div class="card-body">
+        <div class="info-grid">
+          <div>
+            <div class="kv"><span class="k">实例编号</span><span class="num" id="instNo">XT2026-005</span></div>
+            <div class="kv"><span class="k">流程模板</span><span>上线发布模板</span></div>
+            <div class="kv"><span class="k">所属组织</span><span>研发一所</span></div>
+          </div>
+          <div>
+            <div class="kv"><span class="k">发起人</span><span>张三</span></div>
+            <div class="kv"><span class="k">负责人</span><span>张三</span></div>
+            <div class="kv"><span class="k">优先级</span><span class="pri-high">高</span></div>
+          </div>
+          <div>
+            <div class="kv"><span class="k">当前节点</span><span id="infoNode">部门审批</span></div>
+            <div class="kv"><span class="k">审批策略</span><span>全部通过</span></div>
+            <div class="kv"><span class="k">逾期判定</span><span class="status ov-normal">正常</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">节点文件</h2></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:center;gap:var(--space-md);padding:8px 0;border-bottom:1px solid var(--color-border-light)">
+          <span style="flex:1">上线包v1.2.zip</span><span class="text-secondary">48 MB · 张三 · 2026-07-13</span><a class="btn btn-text btn-sm">下载</a>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--space-md);padding:8px 0">
+          <span style="flex:1">测试用例.xlsx</span><span class="text-secondary">22 KB · 张三 · 2026-07-13</span><a class="btn btn-text btn-sm">下载</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">负责人 / 校验备注</h2></div>
+      <div class="card-body">
+        <p class="text-secondary">负责人备注：已完成全部功能开发并通过自测。校验结论：质量门禁通过，可进入审批。遗留项：移动端适配待下个迭代。</p>
+      </div>
+    </div>
+
+    <!-- 终审额外：各节点审批记录 -->
+    <div class="card" id="finalRecords" style="display:none">
+      <div class="card-header"><h2 class="card-title">各节点审批记录（终审模式）</h2></div>
+      <div class="card-body">
+        <div class="approval-progress">
+          <div class="approval-row"><span class="who">部门审批</span><span class="status status-approved">已通过</span><span class="text-secondary" style="margin-left:auto">张三 · 2026-07-09 14:20 · 签名已上 PDF</span></div>
+          <div class="approval-row"><span class="who">技术评审</span><span class="status status-approved">已通过</span><span class="text-secondary" style="margin-left:auto">王五 · 2026-07-08 16:40 · 签名已上 PDF</span></div>
+          <div class="approval-row"><span class="who">合规审批</span><span class="status status-approved">已通过</span><span class="text-secondary" style="margin-left:auto">王五 · 2026-07-07 10:55 · 签名已上 PDF</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">审批进度</h2><span class="card-extra text-secondary">全部审批人通过后流转</span></div>
+      <div class="card-body">
+        <div class="approval-progress">
+          <div class="approval-row"><span class="who">张三</span><span class="status status-wait-approve">待审批（你）</span><span class="text-secondary" style="margin-left:auto">当前处理中</span></div>
+          <div class="approval-row"><span class="who">李四</span><span class="status status-approved">已通过</span><span class="text-secondary" style="margin-left:auto">2026-07-09 11:05</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2 class="card-title">审批意见</h2></div>
+      <div class="card-body">
+        <textarea class="form-control" id="approvalOpinion" rows="4" placeholder="填写审批意见（通过时可不填；驳回时原因必填）"></textarea>
+        <div class="sign-box mt-md" id="signBox">电子签名将加盖于审批 PDF（通过时自动上签）</div>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <button class="btn btn-primary" id="approveBtn">通过</button>
+      <button class="btn btn-danger" id="rejectBtn">驳回</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+  // 模式切换（演示两种模式同页）
+  var isFinal=false;
+  document.getElementById('modeToggle').addEventListener('click',function(){
+    isFinal=!isFinal;
+    var badge=document.getElementById('modeBadge');
+    if(isFinal){
+      badge.className='mode-badge mode-final';
+      badge.textContent='审批模式：结束节点终审';
+      document.getElementById('finalRecords').style.display='';
+      document.getElementById('instName').textContent='XT2026-009 终验签发';
+      document.getElementById('nodeName').textContent='终审签发';
+      document.getElementById('instNo').textContent='XT2026-009';
+      document.getElementById('infoNode').textContent='终审签发';
+    }else{
+      badge.className='mode-badge mode-normal';
+      badge.textContent='审批模式：普通节点审批';
+      document.getElementById('finalRecords').style.display='none';
+      document.getElementById('instName').textContent='XT2026-005 上线发布';
+      document.getElementById('nodeName').textContent='部门审批';
+      document.getElementById('instNo').textContent='XT2026-005';
+      document.getElementById('infoNode').textContent='部门审批';
+    }
+  });
+  document.getElementById('approveBtn').addEventListener('click',function(){
+    alert(isFinal?'终审通过，流程完成并归档':'审批通过，签名已上 PDF，流转至下一节点');
+    location.href='P11_approvals.html';
+  });
+  document.getElementById('rejectBtn').addEventListener('click',function(){
+    var v=document.getElementById('approvalOpinion').value.trim();
+    if(!v){ alert('驳回必须填写原因'); return; }
+    location.href='D07_reject_node.html';
+  });
+</script>
+</body>
+</html>

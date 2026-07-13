@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>企业流程审批系统 · 原型导航</title>
+  <link rel="stylesheet" href="../assets/design-system.css" />
+  <style>
+    .hero {
+      background: var(--color-primary);
+      color: #fff;
+      padding: var(--space-2xl) var(--page-padding);
+    }
+    .hero-inner { max-width: var(--content-max-width); margin: 0 auto; }
+    .hero-title { font-size: 24px; font-weight: 600; margin: 0; }
+    .hero-sub {
+      margin-top: var(--space-sm);
+      font-size: var(--font-aux);
+      color: rgba(255, 255, 255, 0.85);
+      max-width: 880px;
+      line-height: 22px;
+    }
+    .hero-meta {
+      margin-top: var(--space-lg);
+      display: flex;
+      gap: var(--space-md);
+      flex-wrap: wrap;
+    }
+    .hero-chip {
+      background: rgba(255, 255, 255, 0.16);
+      border-radius: var(--radius-pill);
+      padding: 4px 14px;
+      font-size: var(--font-minor);
+    }
+    .section { margin-bottom: var(--space-3xl); }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-md);
+      margin-bottom: var(--space-lg);
+      padding-bottom: var(--space-sm);
+      border-bottom: 2px solid var(--color-border);
+    }
+    .section-no {
+      font-size: var(--font-data);
+      font-weight: 700;
+      color: var(--color-primary);
+      line-height: 1;
+    }
+    .section-name { font-size: var(--font-section); font-weight: 600; }
+    .section-count { font-size: var(--font-minor); color: var(--color-text-secondary); }
+    .nav-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-lg);
+    }
+    .nav-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--color-bg-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      text-decoration: none;
+      color: inherit;
+      box-shadow: var(--shadow-card);
+      transition: border-color .15s, transform .15s, box-shadow .15s;
+    }
+    .nav-card:hover {
+      border-color: var(--color-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12);
+    }
+    .nav-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-sm);
+    }
+    .nav-code {
+      font-weight: 700;
+      font-size: var(--font-sub);
+      color: var(--color-primary);
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
+    }
+    .nav-type {
+      font-size: var(--font-minor);
+      padding: 1px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--color-bg-page);
+      color: var(--color-text-secondary);
+      border: 1px solid var(--color-border);
+    }
+    .nav-type.is-dialog { color: var(--color-warning); background: var(--color-warning-light); border-color: transparent; }
+    .nav-name { font-size: var(--font-section); font-weight: 600; margin-bottom: 4px; }
+    .nav-desc {
+      font-size: var(--font-minor);
+      color: var(--color-text-regular);
+      line-height: 20px;
+      flex: 1;
+      margin-bottom: var(--space-md);
+    }
+    .nav-roles { display: flex; flex-wrap: wrap; gap: 6px; }
+    .role {
+      font-size: var(--font-minor);
+      padding: 1px 8px;
+      border-radius: var(--radius-pill);
+      line-height: 18px;
+      font-weight: 500;
+    }
+    .role-a { color: var(--color-primary); background: var(--color-primary-light); }
+    .role-m { color: var(--pri-high); background: var(--color-warning-light); }
+    .role-u { color: var(--color-success); background: var(--color-success-light); }
+    .role-g { color: var(--color-info); background: var(--color-info-light); }
+    .foot {
+      text-align: center;
+      color: var(--color-text-secondary);
+      font-size: var(--font-minor);
+      padding: var(--space-xl) 0 var(--space-3xl);
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-title">企业流程审批系统 · 原型导航</h1>
+      <p class="hero-sub">点击任一卡片打开对应原型；所有页面共享顶部导航与统一设计系统，可直接用于团队评审。角色标签：管理员（A）/ 所长·经理（M）/ 普通用户（U）/ 通用（全局）。</p>
+      <div class="hero-meta">
+        <span class="hero-chip">18 个独立页面</span>
+        <span class="hero-chip">15 个弹窗 / 面板</span>
+        <span class="hero-chip">共 33 个原型单元</span>
+        <span class="hero-chip">主色 #2563EB</span>
+        <span class="hero-chip">UTF-8 终检 33/33 通过</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- ① 认证与入口 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">①</span>
+        <span class="section-name">认证与入口</span>
+        <span class="section-count">P01 · P02（2）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="P01_login.html">
+          <div class="nav-card-head"><span class="nav-code">P01</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">登录页</div>
+          <div class="nav-desc">用户名 / 密码登录返回 JWT；未登录访问任意页均跳转至此。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P02_dashboard.html">
+          <div class="nav-card-head"><span class="nav-code">P02</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">Dashboard 首页看板</div>
+          <div class="nav-desc">全局运行概况：统计卡、状态分布、卡点追踪、逾期预警、各所概览；所有角色内容一致。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ② 流程管理 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">②</span>
+        <span class="section-name">流程管理</span>
+        <span class="section-count">P03–P08 + D03/D04/D05（10）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="P03_org_cards.html">
+          <div class="nav-card-head"><span class="nav-code">P03</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">所概览卡片页</div>
+          <div class="nav-desc">以卡片展示所有组织概览，当前所属所高亮，点击进入所内主页。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P04_org_home.html">
+          <div class="nav-card-head"><span class="nav-code">P04</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">所内主页（实例 + 模板 Tab）</div>
+          <div class="nav-desc">默认实例 Tab；模板 Tab 含查看 / 编辑 / 发布 / 停用 / 删除 / 发起；右上「发起流程」「创建流程」。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P05_template_edit.html">
+          <div class="nav-card-head"><span class="nav-code">P05</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">创建 / 编辑流程模板页</div>
+          <div class="nav-desc">填写基础信息表单，进入设计器配置节点；草稿保存或发布生成 V1。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="P06_designer.html">
+          <div class="nav-card-head"><span class="nav-code">P06</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">流程设计器 Flow Designer</div>
+          <div class="nav-desc">可视化配置流程结构：节点库 / 画布 / 属性面板，撤销重做与缩放平移，发布连通性校验。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="P07_template_detail.html">
+          <div class="nav-card-head"><span class="nav-code">P07</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">流程模板详情页（只读）</div>
+          <div class="nav-desc">只读展示模板全貌：基础信息 + 只读流程图 + 节点配置 + 版本历史；支持软 / 硬修改。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P08_start_instance.html">
+          <div class="nav-card-head"><span class="nav-code">P08</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">发起流程实例页</div>
+          <div class="nav-desc">选模板后填写实例信息，可逐节点调整负责人 / 校验人 / 审批人 / 时限后确认发起。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="D03_select_template.html">
+          <div class="nav-card-head"><span class="nav-code">D03</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">发起流程 · 模板选择</div>
+          <div class="nav-desc">P04「发起流程」前置：仅列本所已发布模板，作为 P08 的前置选择器（C1）。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="D04_delete_template.html">
+          <div class="nav-card-head"><span class="nav-code">D04</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">删除模板确认</div>
+          <div class="nav-desc">P04 模板 Tab：仅草稿可删除，提示「删除后不可恢复」。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="D05_disable_template.html">
+          <div class="nav-card-head"><span class="nav-code">D05</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">停用模板确认</div>
+          <div class="nav-desc">P04 模板 Tab：仅已发布可停用，停用后不可发起。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ③ 个人中心与任务处理 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">③</span>
+        <span class="section-name">个人中心与任务处理</span>
+        <span class="section-count">P09–P16 + D01/D02/D07/D09（12）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="P09_personal.html">
+          <div class="nav-card-head"><span class="nav-code">P09</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">个人中心卡片页</div>
+          <div class="nav-desc">一页聚合业务入口：待办 / 审批 / 流程记录，所长多「我发起的流程」。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P10_todos.html">
+          <div class="nav-card-head"><span class="nav-code">P10</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">我的待办列表</div>
+          <div class="nav-desc">负责人待处理任务（含校验任务合并 WaitCheck）；逾期红高亮，处理入口至 P14/P15。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P11_approvals.html">
+          <div class="nav-card-head"><span class="nav-code">P11</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">我的审批列表</div>
+          <div class="nav-desc">审批人待审项（含结束节点终审）；「审批」进入 P16。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P12_my_initiated.html">
+          <div class="nav-card-head"><span class="nav-code">P12</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">我发起的流程列表</div>
+          <div class="nav-desc">所长专属：查看 / 终止自己发起的流程，任意状态可终止。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="P13_my_records.html">
+          <div class="nav-card-head"><span class="nav-code">P13</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">我的流程记录列表</div>
+          <div class="nav-desc">用户参与过的流程（负责人 / 审批人 / 发起人），查看详情至 P17。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P14_task.html">
+          <div class="nav-card-head"><span class="nav-code">P14</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">任务处理页</div>
+          <div class="nav-desc">负责人执行节点：上传 / 删除文件、保存草稿、提交节点，含补交文件入口。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P15_check.html">
+          <div class="nav-card-head"><span class="nav-code">P15</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">校验处理页</div>
+          <div class="nav-desc">校验人质量门禁：通过 / 不通过退回，全部通过方进审批。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="P16_approval.html">
+          <div class="nav-card-head"><span class="nav-code">P16</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">审批处理页</div>
+          <div class="nav-desc">审批人审批：普通节点 + 结束节点终审两模式，含驳回节点选择器。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="D01_profile.html">
+          <div class="nav-card-head"><span class="nav-code">D01</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">个人信息面板</div>
+          <div class="nav-desc">用户名下拉：只读信息 + 上传 / 更换签名 PNG（200×60，<500KB）。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="D02_password.html">
+          <div class="nav-card-head"><span class="nav-code">D02</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">修改密码面板</div>
+          <div class="nav-desc">用户名下拉：原密码 + 新密码 + 确认，成功后清 Token 跳登录。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="D07_reject_node.html">
+          <div class="nav-card-head"><span class="nav-code">D07</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">驳回节点选择器</div>
+          <div class="nav-desc">P16 审批-驳回：列当前及之前节点，之后节点灰禁不可选。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+        <a class="nav-card" href="D09_supplement.html">
+          <div class="nav-card-head"><span class="nav-code">D09</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">补交文件弹窗</div>
+          <div class="nav-desc">附件区 / P17：多文件上传、自动转 PDF、标记「补交」，不触发审批。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ④ 流程实例详情 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">④</span>
+        <span class="section-name">流程实例详情</span>
+        <span class="section-count">P17（1）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="P17_instance_detail.html">
+          <div class="nav-card-head"><span class="nav-code">P17</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">流程实例详情页</div>
+          <div class="nav-desc">单页滚动全貌：基本信息 + 进度 + 节点卡片 + 操作日志；含终止 / 补交 / 修改人员入口。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span><span class="role role-m">所长</span><span class="role role-u">用户</span></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ⑤ 系统管理 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">⑤</span>
+        <span class="section-name">系统管理</span>
+        <span class="section-count">P18 + D06/D08/D10/D11/D12/D13/D14（8）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="P18_system.html">
+          <div class="nav-card-head"><span class="nav-code">P18</span><span class="nav-type">页面</span></div>
+          <div class="nav-name">系统管理页（4 Tab）</div>
+          <div class="nav-desc">用户 / 组织 / 角色 / 系统配置维护，仅管理员可见。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+        <a class="nav-card" href="D06_terminate.html">
+          <div class="nav-card-head"><span class="nav-code">D06</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">终止流程确认</div>
+          <div class="nav-desc">P12 / P17：含终止原因必填，「永久终止并删除文件，不可恢复」（C2）。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="D08_modify_personnel.html">
+          <div class="nav-card-head"><span class="nav-code">D08</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">修改节点人员（紧急换人）</div>
+          <div class="nav-desc">P17 节点卡片：仅发起人、仅未完成节点可改。</div>
+          <div class="nav-roles"><span class="role role-m">所长</span></div>
+        </a>
+        <a class="nav-card" href="D10_add_user.html">
+          <div class="nav-card-head"><span class="nav-code">D10</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">新增用户弹窗</div>
+          <div class="nav-desc">P18 用户管理：新增用户，字段按数据模型。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+        <a class="nav-card" href="D11_edit_user.html">
+          <div class="nav-card-head"><span class="nav-code">D11</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">编辑用户弹窗</div>
+          <div class="nav-desc">P18 用户管理：编辑用户，用户名不可改。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+        <a class="nav-card" href="D12_toggle_user.html">
+          <div class="nav-card-head"><span class="nav-code">D12</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">启用 / 禁用用户确认</div>
+          <div class="nav-desc">P18 用户管理：禁用后 Token 立即失效。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+        <a class="nav-card" href="D13_reset_password.html">
+          <div class="nav-card-head"><span class="nav-code">D13</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">重置密码弹窗</div>
+          <div class="nav-desc">P18 用户管理：管理员重置，无需原密码。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+        <a class="nav-card" href="D14_org_edit.html">
+          <div class="nav-card-head"><span class="nav-code">D14</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">新增 / 编辑组织弹窗</div>
+          <div class="nav-desc">P18 组织管理：名称唯一，不设所长（计算字段）。</div>
+          <div class="nav-roles"><span class="role role-a">管理员</span></div>
+        </a>
+      </div>
+    </section>
+
+    <!-- ⑥ 通用 -->
+    <section class="section">
+      <div class="section-head">
+        <span class="section-no">⑥</span>
+        <span class="section-name">通用组件</span>
+        <span class="section-count">D15（1）</span>
+      </div>
+      <div class="nav-grid">
+        <a class="nav-card" href="D15_confirm.html">
+          <div class="nav-card-head"><span class="nav-code">D15</span><span class="nav-type is-dialog">弹窗</span></div>
+          <div class="nav-name">通用确认 / 表单弹窗</div>
+          <div class="nav-desc">全局通用模板：确认类 [取消][确认]、表单类 [取消][提交]。</div>
+          <div class="nav-roles"><span class="role role-g">通用</span></div>
+        </a>
+      </div>
+    </section>
+
+    <div class="foot">企业流程审批系统 · 高保真原型交付包 · 共 33 个原型单元（18 页 + 15 弹窗）· 设计系统 v1.0</div>
+  </main>
+</body>
+</html>

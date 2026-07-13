@@ -1,0 +1,151 @@
+<!-- P08 发起流程实例页 | 功能说明：选模板后填实例信息，可逐节点调整配置发起(C1: D03&#8594;P08&#8594;P17) | 关键交互：实例名称* 2-100、优先级下拉、节点配置调整(可展开面板,默认折叠用模板配置,逐节点改负责人/校验人/审批人/时限/跳过可选节点)、确认发起&#8594;P17 Toast成功 | 跳转关系：确认发起&#8594;P17 | 角色可见性：所长(M)可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>发起流程 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.breadcrumb{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px}
+.breadcrumb a{color:var(--color-text-regular);text-decoration:none}
+.breadcrumb a:hover{color:var(--color-primary)}
+.template-info{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.tpl-info-item .k{font-size:12px;color:var(--color-text-secondary)}
+.tpl-info-item .v{font-size:14px;font-weight:500;margin-top:4px}
+.node-panel{border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden}
+.node-panel-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--color-bg-page);cursor:pointer}
+.node-panel-body{padding:16px;display:none}
+.node-panel.open .node-panel-body{display:block}
+.node-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="breadcrumb"><a href="P03_org_cards.html">流程管理</a> / <a href="P04_org_home.html">通用所</a> / <span>发起流程 · 工艺评审流程</span></div>
+
+    <div class="page-header">
+      <div><h1 class="page-title">发起流程实例</h1>
+        <p class="page-subtitle">基于「工艺评审流程 V3」发起，可逐节点调整配置</p></div>
+    </div>
+
+    <!-- 模板信息（只读） -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">模板信息</h3><span class="status status-published">已发布 V3</span></div>
+      <div class="card-body">
+        <div class="template-info">
+          <div class="tpl-info-item"><div class="k">模板名称</div><div class="v">工艺评审流程</div></div>
+          <div class="tpl-info-item"><div class="k">所属组织</div><div class="v">通用所</div></div>
+          <div class="tpl-info-item"><div class="k">节点数</div><div class="v num">5</div></div>
+          <div class="tpl-info-item"><div class="k">审批策略</div><div class="v"><span class="tag tag-primary">全部通过</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实例信息 -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">实例信息</h3></div>
+      <div class="card-body">
+        <form class="form" id="instForm" onsubmit="return false">
+          <div class="form-group">
+            <label class="form-label form-required">实例名称</label>
+            <input class="form-control" id="instName" type="text" placeholder="请输入实例名称（2-100 字符）" value="XT2026-007 新型减速器工艺评审">
+          </div>
+          <div class="form-group">
+            <label class="form-label">实例描述</label>
+            <textarea class="form-control" rows="2" placeholder="补充说明本次发起的背景或特殊要求">针对新型减速器首版工艺方案开展评审，需重点关注样机验证环节。</textarea>
+          </div>
+          <div class="form-group" style="max-width:240px">
+            <label class="form-label">优先级</label>
+            <select class="form-control" id="instPri">
+              <option>普通</option><option selected>高</option><option>紧急</option><option>低</option>
+            </select>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 节点配置调整（可展开，默认折叠用模板配置） -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">节点配置调整</h3>
+        <span class="text-secondary" style="font-size:12px">默认使用模板配置，展开可逐节点修改</span></div>
+      <div class="card-body">
+        <div id="nodePanels"></div>
+      </div>
+    </div>
+
+    <div class="page-actions" style="margin-top:24px">
+      <button class="btn btn-primary" onclick="submitInstance()">确认发起</button>
+      <a class="btn btn-text" href="P04_org_home.html">取消</a>
+    </div>
+  </div>
+</div>
+
+<div id="toastHost"></div>
+<script>
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+
+/* 节点默认配置（取自模板 V3） */
+var nodeCfgs=[
+  {name:'需求分析', owner:'李四', checker:'王五', approver:'张三', limit:'3 天', optional:false},
+  {name:'方案设计', owner:'未配置', checker:'未配置', approver:'未配置', limit:'—', optional:false},
+  {name:'样机验证', owner:'王五', checker:'赵六', approver:'张三', limit:'5 天', optional:true}
+];
+function renderNodes(){
+  var box=document.getElementById('nodePanels');box.innerHTML='';
+  nodeCfgs.forEach(function(n,i){
+    var p=document.createElement('div');
+    p.className='node-panel';
+    p.innerHTML=
+      '<div class="node-panel-head" onclick="this.parentNode.classList.toggle(\'open\')">'+
+        '<span><b>'+n.name+'</b>'+(n.optional?' <span class="tag tag-info">可选节点</span>':'')+'</span>'+
+        '<span class="text-secondary">展开调整 &#9662;</span>'+
+      '</div>'+
+      '<div class="node-panel-body"><div class="node-grid">'+
+        '<div class="form-group"><label class="form-label">负责人</label><input class="form-control" value="'+n.owner+'"></div>'+
+        '<div class="form-group"><label class="form-label">校验人</label><input class="form-control" value="'+n.checker+'"></div>'+
+        '<div class="form-group"><label class="form-label">审批人</label><input class="form-control" value="'+n.approver+'"></div>'+
+        '<div class="form-group"><label class="form-label">完成时限</label><input class="form-control" value="'+n.limit+'"></div>'+
+        (n.optional?'<div class="switch-row" style="grid-column:1/-1"><span class="form-label">跳过该可选节点</span><input type="checkbox"></div>':'')+
+      '</div></div>';
+    box.appendChild(p);
+  });
+}
+renderNodes();
+
+function submitInstance(){
+  var name=document.getElementById('instName').value.trim();
+  if(name.length<2||name.length>100){alert('实例名称需为 2-100 个字符');return;}
+  toast('流程发起成功，正在跳转实例详情…');
+  setTimeout(function(){location.href='P17_instance_detail.html';},1200);
+}
+function toast(msg){var h=document.getElementById('toastHost');var t=document.createElement('div');t.className='toast toast-success';t.innerHTML='<span>&#10003;</span><span class="toast-text">'+msg+'</span>';h.appendChild(t);setTimeout(function(){t.remove();},4000);}
+</script>
+</body>
+</html>

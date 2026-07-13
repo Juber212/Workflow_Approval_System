@@ -1,0 +1,149 @@
+<!-- P07 流程模板详情页（只读） | 功能说明：只读展示模板全貌；基础信息区+只读流程图+节点配置列表+版本历史 | 关键交互：软修改(点节点改审批人/时限即时生效)+编辑流程(&#8594;P06 硬修改生成新版本,C7) | 跳转关系：编辑流程&#8594;P06 | 角色可见性：A/M/U通用，所长视角 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>模板详情 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.breadcrumb{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px}
+.breadcrumb a{color:var(--color-text-regular);text-decoration:none}
+.breadcrumb a:hover{color:var(--color-primary)}
+.info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.info-item .k{font-size:12px;color:var(--color-text-secondary)}
+.info-item .v{font-size:14px;font-weight:500;margin-top:4px}
+/* 只读流程图 */
+.ro-canvas{position:relative;height:300px;background:var(--color-bg-page);border-radius:var(--radius-md);overflow:hidden}
+.flow-node{position:absolute;width:130px;min-height:50px;border-radius:var(--radius-md);padding:9px 11px;font-size:13px;background:#fff;border:1px solid var(--color-border);box-shadow:var(--shadow-card);cursor:pointer}
+.flow-node:hover{border-color:var(--color-primary)}
+.flow-node.start,.flow-node.end{background:var(--color-bg-page);text-align:center}
+.flow-node.work.unconfig{border:1.5px dashed var(--pri-high);background:var(--color-warning-light)}
+.flow-node .red-dot{position:absolute;top:-6px;right:-6px;width:12px;height:12px;border-radius:50%;background:var(--color-danger);border:2px solid #fff}
+.flow-node .n-name{font-weight:600}.flow-node .n-type{font-size:11px;color:var(--color-text-secondary)}
+.flow-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.flow-svg path{stroke:var(--color-text-secondary);stroke-width:1.5;fill:none}
+.ver-list{list-style:none;padding:0;margin:0}
+.ver-list li{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--color-border-light)}
+.ver-list li:last-child{border-bottom:none}
+.ver-dot{width:10px;height:10px;border-radius:50%;background:var(--color-primary);flex-shrink:0}
+.ver-dot.old{background:var(--color-text-placeholder)}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="breadcrumb"><a href="P03_org_cards.html">流程管理</a> / <a href="P04_org_home.html">通用所</a> / <span>工艺评审流程</span></div>
+
+    <div class="page-header">
+      <div><h1 class="page-title">工艺评审流程</h1>
+        <p class="page-subtitle">当前版本 V3 · <span class="status status-published">已发布</span> · 通用所</p></div>
+      <div class="page-actions">
+        <button class="btn btn-default" onclick="softEdit()">软修改</button>
+        <a class="btn btn-primary" href="P06_designer.html">编辑流程（硬修改，生成新版本）</a>
+      </div>
+    </div>
+
+    <!-- 基础信息 -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">基础信息</h3></div>
+      <div class="card-body">
+        <div class="info-grid">
+          <div class="info-item"><div class="k">流程名称</div><div class="v">工艺评审流程</div></div>
+          <div class="info-item"><div class="k">所属组织</div><div class="v">通用所</div></div>
+          <div class="info-item"><div class="k">当前版本</div><div class="v num">V3</div></div>
+          <div class="info-item"><div class="k">状态</div><div class="v"><span class="status status-published">已发布</span></div></div>
+          <div class="info-item"><div class="k">节点数</div><div class="v num">5</div></div>
+          <div class="info-item"><div class="k">创建人</div><div class="v">张三</div></div>
+          <div class="info-item"><div class="k">更新时间</div><div class="v">2026-07-08 10:00</div></div>
+          <div class="info-item"><div class="k">描述</div><div class="v">新产品工艺方案评审与批准</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 只读流程图 -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">流程图（只读）</h3>
+        <span class="text-secondary" style="font-size:12px">点击节点可软修改审批人/时限</span></div>
+      <div class="card-body">
+        <div class="ro-canvas">
+          <svg class="flow-svg">
+            <path d="M 180 60 C 210 60, 220 110, 250 110"/>
+            <path d="M 350 137 C 380 137, 390 90, 420 90"/>
+            <path d="M 350 137 C 380 137, 390 200, 420 200"/>
+            <path d="M 520 117 C 560 117, 600 150, 630 150"/>
+            <path d="M 520 227 C 600 227, 600 200, 630 200"/>
+          </svg>
+          <div class="flow-node start" style="left:40px;top:50px" onclick="softEdit()"><div class="n-name">开始</div></div>
+          <div class="flow-node work config-ok" style="left:250px;top:88px" onclick="softEdit()"><div class="n-type">工作节点</div><div class="n-name">需求分析</div><div class="text-secondary" style="font-size:11px">李四 / 张三</div></div>
+          <div class="flow-node work unconfig" style="left:420px;top:65px" onclick="softEdit()"><div class="red-dot"></div><div class="n-type">工作节点</div><div class="n-name">方案设计</div></div>
+          <div class="flow-node work config-ok" style="left:420px;top:175px" onclick="softEdit()"><div class="n-type">工作节点</div><div class="n-name">样机验证</div></div>
+          <div class="flow-node end" style="left:630px;top:125px" onclick="softEdit()"><div class="n-name">结束</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 节点配置列表 -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">节点配置列表</h3></div>
+      <div class="card-body">
+        <table class="table">
+          <thead><tr><th>节点</th><th>类型</th><th>负责人</th><th>校验人</th><th>审批人</th><th>完成时限</th><th>必须上传</th><th>配置状态</th></tr></thead>
+          <tbody>
+            <tr><td>开始</td><td>系统默认</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="status status-published">系统</span></td></tr>
+            <tr><td>需求分析</td><td>工作节点</td><td>李四</td><td>王五</td><td>张三</td><td>3 天</td><td><span class="tag tag-success">是</span></td><td><span class="status status-completed">已配置</span></td></tr>
+            <tr><td>方案设计</td><td>工作节点</td><td><span class="text-danger">未配置</span></td><td><span class="text-danger">未配置</span></td><td><span class="text-danger">未配置</span></td><td>—</td><td><span class="tag">否</span></td><td><span class="status status-draft">未配置</span></td></tr>
+            <tr><td>样机验证</td><td>工作节点</td><td>王五</td><td>赵六</td><td>张三</td><td>5 天</td><td><span class="tag tag-success">是</span></td><td><span class="status status-completed">已配置</span></td></tr>
+            <tr><td>结束</td><td>系统默认</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="status status-published">系统</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 版本历史 -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">版本历史</h3></div>
+      <div class="card-body">
+        <ul class="ver-list">
+          <li><span class="ver-dot"></span><div><b>V3</b> · 当前版本 · 2026-07-08 10:00 · 张三（硬修改：新增样机验证节点）</div></li>
+          <li><span class="ver-dot old"></span><div><b>V2</b> · 2026-06-20 14:30 · 李四（软修改：调整方案设计审批人）</div></li>
+          <li><span class="ver-dot old"></span><div><b>V1</b> · 2026-05-12 09:15 · 张三（首次发布）</div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toastHost"></div>
+<script>
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+function softEdit(){toast('软修改：点击节点即可调整审批人 / 时限，保存后即时生效（不生成新版本）');}
+function toast(msg){var h=document.getElementById('toastHost');var t=document.createElement('div');t.className='toast toast-success';t.innerHTML='<span>&#10003;</span><span class="toast-text">'+msg+'</span>';h.appendChild(t);setTimeout(function(){t.remove();},4000);}
+</script>
+</body>
+</html>

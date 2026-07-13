@@ -1,0 +1,93 @@
+<!-- D01 个人信息面板 | 功能：用户名下拉触发（暗化背景示意 P09 个人中心）；只读信息 + 上传/更换签名 PNG（200x60，<500KB） | 关键交互：签名上传预览占位、关闭/取消不可点遮罩关闭 | 跳转：P09 | 角色：所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>个人信息 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+  /* 暗化背景（示意 P09 个人中心） */
+  .bg-dimmer{filter:blur(1px) brightness(.96);opacity:.45;pointer-events:none;margin-top:var(--topnav-height);padding:var(--page-padding)}
+  .dim-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xl);max-width:960px;margin:0 auto}
+  .dim-card{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);height:140px}
+  .profile-row{display:flex;justify-content:space-between;padding:var(--space-md) 0;border-bottom:1px solid var(--color-border-light)}
+  .profile-row:last-of-type{border-bottom:none}
+  .profile-row .k{color:var(--color-text-secondary)}
+  .profile-row .v{font-weight:600}
+  .sign-area{display:flex;align-items:center;gap:var(--space-lg);margin-top:var(--space-md)}
+  .sign-preview{width:200px;height:60px;border:1px dashed var(--color-border);border-radius:var(--radius-md);background:var(--color-bg-page);display:flex;align-items:center;justify-content:center;color:var(--color-text-placeholder);font-size:var(--font-aux)}
+  .sign-hint{color:var(--color-text-secondary);font-size:var(--font-aux);margin-top:var(--space-xs)}
+</style>
+</head>
+<body class="app-shell">
+
+<!-- 暗化背景：P09 个人中心示意 -->
+<header class="topnav" style="position:static">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+  </nav>
+</header>
+<div class="bg-dimmer">
+  <div class="dim-grid">
+    <div class="dim-card"></div><div class="dim-card"></div>
+    <div class="dim-card"></div><div class="dim-card"></div>
+  </div>
+</div>
+
+<!-- 弹窗（点击遮罩不可关闭） -->
+<div class="dialog-mask">
+  <div class="dialog" style="min-width:480px">
+    <div class="dialog-header">
+      <span>个人信息</span>
+      <button class="dialog-close" onclick="location.href='P09_personal.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="profile-row"><span class="k">用户名</span><span class="v">zhangsan</span></div>
+      <div class="profile-row"><span class="k">姓名</span><span class="v">张三</span></div>
+      <div class="profile-row"><span class="k">所属组织</span><span class="v">研发一所</span></div>
+      <div class="profile-row"><span class="k">角色</span><span class="v">所长</span></div>
+      <div class="profile-row"><span class="k">工号</span><span class="v">ZS001</span></div>
+      <div class="profile-row"><span class="k">邮箱</span><span class="v">zhangsan@corp.com</span></div>
+      <div class="profile-row"><span class="k">手机号</span><span class="v">138****0001</span></div>
+
+      <div style="margin-top:var(--space-xl)">
+        <div class="form-label">电子签名</div>
+        <div class="sign-area">
+          <div class="sign-preview" id="signPreview">签名预览 200 x 60</div>
+          <div>
+            <input type="file" id="signInput" accept="image/png" />
+            <div class="sign-hint">仅支持 PNG，尺寸 200 x 60，小于 500KB</div>
+            <button class="btn btn-default btn-sm mt-sm" id="uploadSign">上传 / 更换</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P09_personal.html'">关闭</button>
+      <button class="btn btn-primary" id="saveSign">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('uploadSign').addEventListener('click',function(){
+    var f=document.getElementById('signInput').files[0];
+    if(!f){ alert('请先选择签名图片'); return; }
+    if(f.type!=='image/png'){ alert('仅支持 PNG 格式'); return; }
+    if(f.size>500*1024){ alert('签名图片需小于 500KB'); return; }
+    var reader=new FileReader();
+    reader.onload=function(e){ document.getElementById('signPreview').innerHTML='<img src="'+e.target.result+'" style="max-width:200px;max-height:60px">'; };
+    reader.readAsDataURL(f);
+  });
+  document.getElementById('saveSign').addEventListener('click',function(){
+    alert('个人信息已保存（演示）');
+    location.href='P09_personal.html';
+  });
+</script>
+</body>
+</html>

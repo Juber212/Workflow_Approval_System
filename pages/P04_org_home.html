@@ -1,0 +1,219 @@
+<!-- P04 流程管理-所内主页 | 功能：所内实例Tab+模板Tab；右上角 +创建流程(&#8594;P05)、+发起流程(&#8594;D03)；实例Tab状态筛选 全部/运行中/已完成/已终止(默认运行中,C3 归档归入已完成);模板Tab操作可见性矩阵 草稿/已发布/已停用 | 关键交互：实例行&#8594;P17、模板名称模糊搜索、C6 模板Tab 右上角必含 +创建流程按钮 | 跳转关系：P03/P05/P17/P08/D03/D04/D05 | 角色可见性：所长视角 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>通用所 - 流程管理 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.breadcrumb{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px}
+.breadcrumb a{color:var(--color-text-regular);text-decoration:none}
+.breadcrumb a:hover{color:var(--color-primary)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--color-border);margin-bottom:20px}
+.tab{
+  padding:10px 18px;font-size:14px;color:var(--color-text-regular);cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;
+}
+.tab.is-active{color:var(--color-primary);border-bottom-color:var(--color-primary);font-weight:600}
+.filter-tags{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.filter-tag{
+  padding:5px 14px;border-radius:var(--radius-pill);font-size:13px;cursor:pointer;
+  border:1px solid var(--color-border);background:#fff;color:var(--color-text-regular);
+}
+.filter-tag.is-active{background:var(--color-primary-light);color:var(--color-primary);border-color:var(--color-primary)}
+.search-box{margin-left:auto;width:240px}
+.btn-row{display:flex;gap:8px}
+.link-edit{color:var(--color-primary);cursor:pointer}
+/* 操作列按钮间距 */
+.op{display:flex;gap:6px;flex-wrap:wrap}
+.op .btn{padding:0 10px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">?</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="breadcrumb"><a href="P03_org_cards.html">流程管理</a> / <span>通用所</span></div>
+
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">通用所</h1>
+        <p class="page-subtitle">所长：张三 · 成员 24 人 · 模板 8 个</p>
+      </div>
+      <div class="page-actions">
+        <a class="btn btn-default" href="P05_template_edit.html">+ 创建流程</a>
+        <button class="btn btn-primary" onclick="openD03()">+ 发起流程</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab is-active" data-tab="instance" onclick="switchTab('instance',this)">流程实例</div>
+      <div class="tab" data-tab="template" onclick="switchTab('template',this)">流程模板</div>
+    </div>
+
+    <!-- ============ 实例 Tab ============ -->
+    <div id="tab-instance">
+      <div class="filter-tags">
+        <span class="filter-tag is-active" data-status="运行中" onclick="filterInstance('运行中',this)">运行中</span>
+        <span class="filter-tag" data-status="全部" onclick="filterInstance('全部',this)">全部</span>
+        <span class="filter-tag" data-status="已完成" onclick="filterInstance('已完成',this)">已完成</span>
+        <span class="filter-tag" data-status="已终止" onclick="filterInstance('已终止',this)">已终止</span>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>实例名称</th><th>模板</th><th>优先级</th><th>当前负责人</th>
+            <th>节点进度</th><th>状态</th><th>发起时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="instanceBody"><!-- JS 渲染 --></tbody>
+      </table>
+    </div>
+
+    <!-- ============ 模板 Tab ============ -->
+    <div id="tab-template" class="hidden">
+      <div class="filter-tags">
+        <input class="form-control search-box" id="tplSearch" placeholder="搜索流程名称…" oninput="renderTemplate()">
+        <a class="btn btn-default" href="P05_template_edit.html" style="margin-left:8px">+ 创建流程</a>
+        <span class="text-secondary" style="margin-left:8px;font-size:13px">C6：模板Tab 右上角「创建流程」入口 &#8594; P05</span>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>流程名称</th><th>当前版本</th><th>状态</th><th>节点数</th><th>更新时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="templateBody"><!-- JS 渲染 --></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- 占位背景加载 D03/D04/D05 弹窗 -->
+<div id="dialogHost"></div>
+
+<script>
+/* ---------- 顶部用户菜单 ---------- */
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+
+/* ---------- 实例 mock 数据 ---------- */
+var instances = [
+  {name:'XT2026-001产品设计', tpl:'产品设计流程', pri:'高', owner:'李四', prog:'2/5', status:'运行中', time:'2026-07-10 09:12', overdue:false},
+  {name:'XT2026-002结构设计', tpl:'结构设计流程', pri:'紧急', owner:'王五', prog:'1/4', status:'运行中', time:'2026-07-09 16:40', overdue:true},
+  {name:'XT2026-003工艺评审', tpl:'工艺评审流程', pri:'普通', owner:'赵六', prog:'3/5', status:'运行中', time:'2026-07-09 11:05', overdue:false},
+  {name:'XT2026-004物料采购', tpl:'采购审批流程', pri:'普通', owner:'张三', prog:'5/5', status:'已完成', time:'2026-07-05 10:20', overdue:false},
+  {name:'XT2026-005样机试制', tpl:'试制流程', pri:'高', owner:'李四', prog:'5/6', status:'已完成', time:'2026-07-03 09:00', overdue:false},
+  {name:'XT2026-006型号停产', tpl:'停产流程', pri:'低', owner:'王五', prog:'0/3', status:'已终止', time:'2026-06-28 14:30', overdue:false}
+];
+var curFilter='运行中';
+function priClass(p){return {'紧急':'pri-urgent','高':'pri-high','普通':'pri-normal','低':'pri-low'}[p];}
+function statusClass(s){return {'运行中':'status-running','已完成':'status-completed','已终止':'status-terminated'}[s];}
+function renderInstance(){
+  var b=document.getElementById('instanceBody');b.innerHTML='';
+  instances.filter(function(r){
+    if(curFilter==='全部')return true;
+    // C3：归档归入已完成（此处已完成已含归档）
+    return r.status===curFilter;
+  }).forEach(function(r){
+    var tr=document.createElement('tr');
+    if(r.overdue)tr.className='table-row--overdue';
+    tr.innerHTML='<td><a class="link-edit" href="P17_instance_detail.html">'+r.name+'</a></td>'+
+      '<td>'+r.tpl+'</td>'+
+      '<td><span class="status '+priClass(r.pri)+'">'+r.pri+'</span></td>'+
+      '<td>'+r.owner+'</td>'+
+      '<td class="num">'+r.prog+'</td>'+
+      '<td><span class="status '+statusClass(r.status)+'">'+r.status+'</span></td>'+
+      '<td class="text-secondary">'+r.time+'</td>'+
+      '<td><a class="btn btn-text btn-sm" href="P17_instance_detail.html">查看</a></td>';
+    b.appendChild(tr);
+  });
+  if(!b.children.length)b.innerHTML='<tr><td colspan="8" class="table-empty">暂无数据</td></tr>';
+}
+function filterInstance(s,el){
+  curFilter=s;
+  document.querySelectorAll('#tab-instance .filter-tag').forEach(function(t){t.classList.remove('is-active');});
+  el.classList.add('is-active');
+  renderInstance();
+}
+
+/* ---------- 模板 mock 数据 + 操作可见性矩阵 ---------- */
+var templates = [
+  {name:'产品设计流程', ver:'V3', status:'已发布', nodes:5, time:'2026-07-08 10:00'},
+  {name:'结构设计流程', ver:'V2', status:'已发布', nodes:4, time:'2026-07-07 15:20'},
+  {name:'工艺评审流程', ver:'V1', status:'草稿',   nodes:3, time:'2026-07-10 08:30'},
+  {name:'采购审批流程', ver:'V1', status:'已停用', nodes:4, time:'2026-06-30 09:10'},
+  {name:'试制流程',     ver:'V2', status:'已发布', nodes:6, time:'2026-07-02 11:40'}
+];
+var tplStatusClass={'草稿':'status-draft','已发布':'status-published','已停用':'status-disabled'};
+function renderTemplate(){
+  var kw=document.getElementById('tplSearch').value.trim();
+  var b=document.getElementById('templateBody');b.innerHTML='';
+  templates.filter(function(t){return !kw || t.name.indexOf(kw)>=0;}).forEach(function(t){
+    var tr=document.createElement('tr');
+    var ops='';
+    if(t.status==='草稿'){
+      ops='<a class="btn btn-text btn-sm" href="P07_template_detail.html">查看</a>'+
+          '<a class="btn btn-text btn-sm" href="P06_designer.html" title="编辑结构">编辑</a>'+
+          '<a class="btn btn-text btn-sm" href="P06_designer.html">发布</a>'+
+          '<a class="btn btn-text btn-sm text-danger" onclick="openD04()">删除</a>';
+    }else if(t.status==='已发布'){
+      ops='<a class="btn btn-text btn-sm" href="P07_template_detail.html">查看</a>'+
+          '<a class="btn btn-text btn-sm" href="P07_template_detail.html" title="仅软修改(改审批人/时限)">编辑</a>'+
+          '<a class="btn btn-text btn-sm" onclick="openD05()">停用</a>'+
+          '<a class="btn btn-text btn-sm" href="P08_start_instance.html">发起</a>';
+    }else{ // 已停用
+      ops='<a class="btn btn-text btn-sm" href="P07_template_detail.html">查看</a>';
+    }
+    tr.innerHTML='<td>'+t.name+'</td><td class="num">'+t.ver+'</td>'+
+      '<td><span class="status '+tplStatusClass[t.status]+'">'+t.status+'</span></td>'+
+      '<td class="num">'+t.nodes+'</td><td class="text-secondary">'+t.time+'</td>'+
+      '<td><div class="op">'+ops+'</div></td>';
+    b.appendChild(tr);
+  });
+  if(!b.children.length)b.innerHTML='<tr><td colspan="6" class="table-empty">未找到相关结果，请调整搜索条件</td></tr>';
+}
+
+/* ---------- Tab 切换 ---------- */
+function switchTab(tab,el){
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('is-active');});
+  el.classList.add('is-active');
+  document.getElementById('tab-instance').classList.toggle('hidden',tab!=='instance');
+  document.getElementById('tab-template').classList.toggle('hidden',tab!=='template');
+  if(tab==='template')renderTemplate();
+}
+
+/* ---------- 弹窗触发：D03/D04/D05 在本页占位背景上叠加 ---------- */
+function openD03(){ location.href='D03_select_template.html'; }
+function openD04(){ location.href='D04_delete_template.html'; }
+function openD05(){ location.href='D05_disable_template.html'; }
+
+renderInstance();
+</script>
+</body>
+</html>

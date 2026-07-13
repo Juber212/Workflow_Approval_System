@@ -1,0 +1,62 @@
+<!-- D14 新增/编辑组织弹窗 | 功能说明：新增或编辑组织（V1 无删除） | 关键交互：名称(组织内唯一)/描述；提示"所长为计算字段，由用户角色推导，此处不设置"，"保存"(.btn-primary)；点击遮罩不可关闭 | 跳转关系：由 P18 组织管理"+ 新增组织/编辑"触发，确认后&#8594;P18 | 角色可见性：仅系统管理员(A)可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>新增/编辑组织 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.page-bg{filter:brightness(.92) saturate(.9);pointer-events:none;user-select:none}
+.bg-table{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:var(--content-max-width);margin:var(--space-xl) auto 0;overflow:hidden;box-shadow:var(--shadow-card)}
+.bg-table .row{display:flex;padding:12px var(--space-xl);border-bottom:1px solid var(--color-border-light);font-size:13px}
+.bg-table .row.head{background:var(--color-bg-page);font-weight:600}
+.dialog-body .field-hint{font-size:12px;color:var(--color-text-secondary);margin-top:var(--space-xs)}
+</style>
+</head>
+<body>
+<div class="page-bg">
+  <header class="topnav">
+    <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+    <nav class="topnav-menu"><a class="topnav-item">Dashboard</a><a class="topnav-item">流程管理</a><a class="topnav-item is-active">系统管理</a></nav>
+    <div class="topnav-user"><span class="topnav-avatar">王</span><span>王五（系统管理员）</span></div>
+  </header>
+  <div class="bg-table">
+    <div class="row head"><span style="flex:1">组织名</span><span style="flex:1">所长</span><span style="flex:1">用户数</span><span style="flex:1">创建时间</span><span style="flex:1">操作</span></div>
+    <div class="row"><span style="flex:1">通用所</span><span style="flex:1">张三</span><span style="flex:1">3</span><span style="flex:1">2026-01-05</span><span style="flex:1">编辑</span></div>
+  </div>
+</div>
+
+<!-- 新增/编辑组织弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span>新增组织</span>
+      <button class="dialog-close" onclick="location.href='P18_system.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <form class="form" onsubmit="return false">
+        <div class="form-group">
+          <label class="form-label form-required">组织名称（组织内唯一）</label>
+          <input class="form-control" placeholder="如：第五所">
+        </div>
+        <div class="form-group">
+          <label class="form-label">描述</label>
+          <textarea class="form-control" rows="3" placeholder="组织职责/业务范围说明（选填）"></textarea>
+        </div>
+        <div class="field-hint">提示：所长为计算字段，由用户角色推导，此处不设置。新增组织后，再于"用户管理"为成员分配"所长"角色即可。</div>
+      </form>
+    </div>
+    <div class="dialog-footer">
+      <a class="btn btn-default" href="P18_system.html">取消</a>
+      <a class="btn btn-primary" href="P18_system.html">保存</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

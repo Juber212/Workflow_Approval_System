@@ -1,0 +1,76 @@
+<!-- D07 驳回节点选择 | 功能：P16 审批-驳回触发（暗化背景示意 P16 审批处理） | 关键交互：列出当前及之前节点（之后节点灰禁），单选 + 确认按钮标注目标节点名 | 跳转：P16 / P11 | 角色：所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>驳回节点选择 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+  .bg-dimmer{filter:blur(1px) brightness(.96);opacity:.45;pointer-events:none;margin-top:var(--topnav-height);padding:var(--page-padding)}
+  .dim-grid{display:grid;grid-template-columns:1fr;gap:var(--space-lg);max-width:600px;margin:0 auto}
+  .dim-card{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);height:120px}
+  .node-opt{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md) var(--space-lg);border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:var(--space-sm);cursor:pointer}
+  .node-opt:hover{border-color:var(--color-primary)}
+  .node-opt.is-disabled{opacity:.5;cursor:not-allowed;background:var(--color-bg-page)}
+  .node-opt .idx{width:24px;height:24px;border-radius:50%;background:var(--color-bg-page);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--color-text-secondary)}
+  .node-opt.is-current .idx{background:var(--color-primary);color:#fff}
+  .node-opt .meta{color:var(--color-text-secondary);font-size:var(--font-minor);margin-left:auto}
+  .target-tip{color:var(--color-text-regular);font-size:var(--font-aux);margin-bottom:var(--space-md)}
+  .target-tip b{color:var(--color-primary)}
+</style>
+</head>
+<body class="app-shell">
+
+<header class="topnav" style="position:static">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+  </nav>
+</header>
+<div class="bg-dimmer">
+  <div class="dim-grid"><div class="dim-card"></div><div class="dim-card"></div></div>
+</div>
+
+<div class="dialog-mask">
+  <div class="dialog" style="min-width:460px">
+    <div class="dialog-header">
+      <span>选择驳回目标节点</span>
+      <button class="dialog-close" onclick="location.href='P16_approval.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="target-tip">当前节点：<b>部门审批</b> · 仅可选择当前及之前节点，之后节点不可选</div>
+      <div id="nodeList">
+        <label class="node-opt"><input type="radio" name="rejectNode" value="需求分析" /><span class="idx">1</span><span>需求分析</span><span class="meta">已完成</span></label>
+        <label class="node-opt"><input type="radio" name="rejectNode" value="开发实现" /><span class="idx">2</span><span>开发实现</span><span class="meta">已完成</span></label>
+        <label class="node-opt"><input type="radio" name="rejectNode" value="质量校验" /><span class="idx">3</span><span>质量校验</span><span class="meta">已完成</span></label>
+        <label class="node-opt is-current"><input type="radio" name="rejectNode" value="部门审批" checked /><span class="idx">4</span><span>部门审批</span><span class="meta">当前节点</span></label>
+        <label class="node-opt is-disabled"><input type="radio" name="rejectNode" value="终审签发" disabled /><span class="idx">5</span><span>终审签发</span><span class="meta">之后节点（不可选）</span></label>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P16_approval.html'">取消</button>
+      <button class="btn btn-danger" id="confirmReject">确认驳回至「<span id="targetName">部门审批</span>」</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var radios=document.querySelectorAll('input[name="rejectNode"]');
+  radios.forEach(function(r){
+    r.addEventListener('change',function(){
+      document.getElementById('targetName').textContent=r.value;
+    });
+  });
+  document.getElementById('confirmReject').addEventListener('click',function(){
+    var sel=document.querySelector('input[name="rejectNode"]:checked');
+    if(!sel){ alert('请选择驳回目标节点'); return; }
+    alert('已驳回至「'+sel.value+'」，实例将回退至该节点重新处理');
+    location.href='P11_approvals.html';
+  });
+</script>
+</body>
+</html>

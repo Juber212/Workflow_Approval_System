@@ -1,18 +1,24 @@
 <template>
   <div class="login-page">
-    <el-card class="login-card" shadow="always">
-      <template #header>
-        <h2 class="login-title">企业流程审批系统</h2>
-      </template>
+    <div class="login-card">
+      <!-- 品牌标识区 -->
+      <div class="login-brand">
+        <span class="login-logo-icon">流</span>
+        <div>
+          <h1 class="login-title">企业流程审批系统</h1>
+          <p class="login-subtitle">Enterprise Workflow Approval System</p>
+        </div>
+      </div>
 
+      <!-- 登录表单 -->
       <el-form
         ref="formRef"
         :model="form"
         :rules="rules"
         label-position="top"
         @keyup.enter="handleLogin"
+        class="login-form"
       >
-        <!-- 用户名 -->
         <el-form-item label="用户名" prop="username">
           <el-input
             v-model="form.username"
@@ -22,7 +28,6 @@
           />
         </el-form-item>
 
-        <!-- 密码 -->
         <el-form-item label="密码" prop="password">
           <el-input
             v-model="form.password"
@@ -34,12 +39,10 @@
           />
         </el-form-item>
 
-        <!-- 记住密码 -->
         <el-form-item>
           <el-checkbox v-model="form.remember">记住用户名</el-checkbox>
         </el-form-item>
 
-        <!-- 登录按钮 -->
         <el-form-item>
           <el-button
             type="primary"
@@ -48,7 +51,7 @@
             class="login-btn"
             @click="handleLogin"
           >
-            {{ loading ? '登录中...' : '登 录' }}
+            {{ loading ? '登录中…' : '登 录' }}
           </el-button>
         </el-form-item>
       </el-form>
@@ -62,7 +65,15 @@
         :closable="false"
         class="login-error"
       />
-    </el-card>
+
+      <!-- 演示账号提示 -->
+      <div class="login-demo">
+        <b>演示账号</b><br>
+        所长：张三 / 123456 → 通用所，可见「个人中心」<br>
+        管理员：admin / admin123 → 可见「系统管理」<br>
+        普通用户：李四 / 123456
+      </div>
+    </div>
   </div>
 </template>
 
@@ -125,8 +136,6 @@ async function handleLogin() {
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
   } catch (err: any) {
-    // 后端返回的 message 已在 request 拦截器中 ElMessage.error 显示了
-    // 这里额外在卡片下方展示，防止用户错过 toast
     errorMsg.value = err?.message || '登录失败，请检查用户名和密码'
   } finally {
     loading.value = false
@@ -139,29 +148,82 @@ async function handleLogin() {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  background: linear-gradient(135deg, #f0f5fb 0%, #e8f0f8 100%);
+  min-height: 100vh;
+  background: linear-gradient(135deg, #EFF4FF 0%, #F5F6F8 60%);
 }
 
 .login-card {
   width: 420px;
+  background: #fff;
   border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  padding: 40px 36px;
+}
+
+/* 品牌标识 */
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.login-logo-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .login-title {
-  text-align: center;
   font-size: 20px;
   font-weight: 600;
-  color: var(--el-color-primary);
+  color: var(--el-text-color-primary);
   margin: 0;
+  line-height: 1.3;
+}
+
+.login-subtitle {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin: 2px 0 0;
+  letter-spacing: 0.5px;
+}
+
+/* 表单 */
+.login-form {
+  margin-top: 24px;
 }
 
 .login-btn {
   width: 100%;
   letter-spacing: 4px;
+  font-size: 15px;
 }
 
 .login-error {
-  margin-top: -8px;
+  margin-top: 4px;
+}
+
+/* 演示账号提示 */
+.login-demo {
+  margin-top: 20px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 20px;
+
+  b {
+    font-weight: 600;
+  }
 }
 </style>

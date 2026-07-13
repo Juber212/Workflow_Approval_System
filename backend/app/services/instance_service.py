@@ -1,9 +1,10 @@
-"""流程实例服务 —— 发起实例、配置合并、快照复制"""
+"""流程实例服务 —— 发起实例、配置合并、快照复制、列表查询"""
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, func, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
@@ -14,8 +15,11 @@ from app.models import (
     InstanceNode,
     InstanceEdge,
     OperationLog,
+    User,
+    Organization,
+    Task,
 )
-from app.schemas.instance import CreateInstanceRequest
+from app.schemas.instance import CreateInstanceRequest, InstanceListItem
 from app.api.deps import CurrentUser
 from app.engine.flow_engine import (
     calculate_incoming_counts,
@@ -239,3 +243,136 @@ async def create_instance(
         ],
         "initiated_at": instance.initiated_at,
     }
+
+
+async def list_instances(
+    db: AsyncSession,
+    *,
+    organization_id: int | None = None,
+    status: list[str] | None = None,
+    priority: str | None = None,
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """查询流程实例列表（分页 + 多条件筛选）
+
+    返回每个实例的：
+    - current_node_index: 已完成/跳过节点数（反映当前进度）
+    - total_nodes: 总节点数
+    - current_assignee_name: 当前活跃节点的负责人姓名
+    """
+
+    # ========== 基础查询（联表获取名称字段） ==========
+    Initiator = aliased(User)
+    Org = aliased(Organization)
+
+    base_stmt = (
+        select(
+            FlowInstance,
+            Initiator.real_name.label("initiator_name"),
+            Org.name.label("organization_name"),
+            FlowTemplate.name.label("template_name"),
+        )
+        .join(Initiator, FlowInstance.initiator_id == Initiator.id)
+        .join(Org, FlowInstance.organization_id == Org.id)
+        .outerjoin(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
+    )
+
+    # ========== 筛选条件 ==========
+    if organization_id is not None:
+        base_stmt = base_stmt.where(FlowInstance.organization_id == organization_id)
+
+    if status:
+        # 多选：status=running,completed
+        base_stmt = base_stmt.where(FlowInstance.status.in_(status))
+
+    if priority:
+        base_stmt = base_stmt.where(FlowInstance.priority == priority)
+
+    if keyword:
+        # 模糊搜索实例名称
+        base_stmt = base_stmt.where(FlowInstance.name.like(f"%{keyword}%"))
+
+    # ========== 总数 ==========
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
+
+    # ========== 排序 + 分页 ==========
+    list_stmt = base_stmt.order_by(FlowInstance.id.desc())
+    list_stmt = list_stmt.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(list_stmt)
+    rows = result.all()
+
+    # ========== 组装结果 ==========
+    items: list[InstanceListItem] = []
+    for row in rows:
+        instance = row[0]  # FlowInstance 对象（元组第一项）
+        initiator_name = row[1]
+        org_name = row[2]
+        template_name = row[3]
+
+        # 批量查询节点数据（为每个实例单独查 — 后续可优化为批量查询）
+        node_stats = await _get_instance_node_stats(db, instance.id)
+        current_assignee = await _get_current_assignee_name(db, instance.id)
+
+        items.append(InstanceListItem(
+            id=instance.id,
+            name=instance.name,
+            template_id=instance.template_id,
+            template_name=template_name or "",
+            organization_id=instance.organization_id,
+            organization_name=org_name or "",
+            initiator_id=instance.initiator_id,
+            initiator_name=initiator_name or "",
+            priority=(instance.priority or "normal").lower(),
+            status=(instance.status or "created").lower(),
+            archive_status=(instance.archive_status or "").lower() if instance.archive_status else None,
+            current_node_index=node_stats["processed"],
+            total_nodes=node_stats["total"],
+            current_assignee_name=current_assignee,
+            initiated_at=instance.initiated_at,
+            completed_at=instance.completed_at,
+            terminated_at=instance.terminated_at,
+        ))
+
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+async def _get_instance_node_stats(db: AsyncSession, instance_id: int) -> dict:
+    """获取实例节点统计：总节点数、已完成/跳过节点数"""
+    stmt = select(
+        func.count(InstanceNode.id).label("total"),
+        func.sum(
+            func.if_(InstanceNode.status.in_(["finished", "skipped"]), 1, 0)
+        ).label("processed"),
+    ).where(InstanceNode.instance_id == instance_id)
+
+    result = await db.execute(stmt)
+    row = result.first()
+    return {
+        "total": int(row.total) if row and row.total else 0,
+        "processed": int(row.processed) if row and row.processed else 0,
+    }
+
+
+async def _get_current_assignee_name(db: AsyncSession, instance_id: int) -> str | None:
+    """获取当前活跃节点（running）的负责人姓名"""
+    stmt = (
+        select(User.real_name)
+        .join(InstanceNode, InstanceNode.assignee_id == User.id)
+        .where(
+            InstanceNode.instance_id == instance_id,
+            InstanceNode.status == "running",
+        )
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar()

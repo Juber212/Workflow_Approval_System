@@ -1,0 +1,253 @@
+<!-- P06 流程设计器 Flow Designer | 功能说明：可视化配置流程结构（开始/工作/结束统一节点模型）；未配置节点橙色虚线+右上红点；fork/join连线；底部属性面板；[画布]/[节点列表]切换；撤销重做/保存/发布 | 关键交互：选节点显示属性表单、开始/结束显示"系统默认节点无需配置"、未选显示"请选择节点" | 跳转关系：保存/发布&#8594;P07 | 角色可见性：所长(M)可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>流程设计器 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+
+/* 设计器整体布局 */
+.designer{display:flex;flex-direction:column;height:calc(100vh - 56px)}
+.designer-toolbar{
+  display:flex;align-items:center;gap:8px;padding:8px 16px;
+  background:#fff;border-bottom:1px solid var(--color-border);
+}
+.designer-toolbar .sep{width:1px;height:20px;background:var(--color-border);margin:0 4px}
+.designer-toolbar .title{font-size:14px;font-weight:600;margin-right:8px}
+.designer-body{flex:1;display:flex;min-height:0}
+.node-lib{
+  width:200px;background:#fff;border-right:1px solid var(--color-border);
+  padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;
+}
+.node-lib h4{margin:0;font-size:13px;color:var(--color-text-secondary);font-weight:600}
+.node-palette{
+  border:1px dashed var(--color-border);border-radius:var(--radius-md);
+  padding:12px;text-align:center;font-size:13px;color:var(--color-text-regular);
+  cursor:grab;background:var(--color-bg-page);
+}
+.canvas-wrap{flex:1;position:relative;background:
+  linear-gradient(var(--color-border-light) 1px,transparent 1px) 0 0/24px 24px,
+  linear-gradient(90deg,var(--color-border-light) 1px,transparent 1px) 0 0/24px 24px,
+  var(--color-bg-page);overflow:auto}
+.canvas{position:relative;width:900px;height:560px;margin:24px}
+/* 节点 */
+.flow-node{
+  position:absolute;width:140px;min-height:54px;border-radius:var(--radius-md);
+  padding:10px 12px;font-size:13px;cursor:pointer;background:#fff;
+  border:1px solid var(--color-border);box-shadow:var(--shadow-card);
+  display:flex;flex-direction:column;gap:2px;
+}
+.flow-node:hover{box-shadow:var(--shadow-dialog)}
+.flow-node.is-selected{border-color:var(--color-primary);box-shadow:0 0 0 3px var(--color-primary-light)}
+.flow-node .n-type{font-size:11px;color:var(--color-text-secondary)}
+.flow-node .n-name{font-weight:600}
+/* 开始/结束 系统默认灰 */
+.flow-node.start,.flow-node.end{background:var(--color-bg-page);border-color:var(--color-border);text-align:center;align-items:center;justify-content:center}
+/* 工作节点未配置：橙色虚线 + 右上红点 */
+.flow-node.work.unconfig{border:1.5px dashed var(--pri-high);background:var(--color-warning-light)}
+.flow-node .red-dot{position:absolute;top:-6px;right:-6px;width:12px;height:12px;border-radius:50%;background:var(--color-danger);border:2px solid #fff}
+.flow-node.config-ok{border-color:var(--color-success)}
+/* 连线 SVG */
+.flow-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.flow-svg path{stroke:var(--color-text-secondary);stroke-width:1.5;fill:none}
+.flow-svg path.fork{stroke:var(--pri-high)}
+/* 属性面板 */
+.prop-panel{
+  width:320px;background:#fff;border-left:1px solid var(--color-border);
+  padding:16px;overflow-y:auto;
+}
+.prop-panel h4{margin:0 0 12px;font-size:14px}
+.prop-form{display:flex;flex-direction:column;gap:14px}
+.prop-empty{color:var(--color-text-placeholder);text-align:center;padding:48px 0}
+.switch-row{display:flex;align-items:center;justify-content:space-between}
+/* 节点列表视图 */
+.node-table-wrap{padding:16px;overflow:auto}
+/* 缩放控制 */
+.zoom{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--color-text-secondary)}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="designer">
+  <!-- 顶部工具栏 -->
+  <div class="designer-toolbar">
+    <span class="title">工艺评审流程</span>
+    <span class="status status-draft">草稿</span>
+    <button class="btn btn-sm btn-default" title="撤销 Ctrl+Z" onclick="toast('已撤销')">↶ 撤销</button>
+    <button class="btn btn-sm btn-default" title="重做 Ctrl+Y" onclick="toast('已重做')">↷ 重做</button>
+    <span class="sep"></span>
+    <button class="btn btn-sm btn-default" onclick="toast('已保存')">保存</button>
+    <button class="btn btn-sm btn-primary" onclick="location.href='P07_template_detail.html'">发布</button>
+    <a class="btn btn-sm btn-text" href="P04_org_home.html">返回</a>
+    <div class="zoom">
+      <span>视图：</span>
+      <span class="tab" id="viewCanvas" style="border:none;padding:4px 10px;cursor:pointer" onclick="switchView('canvas')">画布</span>
+      <span style="color:var(--color-border)">|</span>
+      <span class="tab" id="viewList" style="border:none;padding:4px 10px;cursor:pointer;color:var(--color-text-secondary)" onclick="switchView('list')">节点列表</span>
+    </div>
+  </div>
+
+  <div class="designer-body">
+    <!-- 左侧节点库 -->
+    <div class="node-lib" id="nodeLib">
+      <h4>节点库</h4>
+      <div class="node-palette" onclick="addNode()">＋ 添加节点</div>
+      <div style="font-size:12px;color:var(--color-text-secondary);line-height:20px">
+        拖拽或点击「添加节点」在画布新增工作节点。<br>
+        开始 / 结束为系统默认节点，不可删除、不可配置。
+      </div>
+      <div style="margin-top:auto;font-size:12px;color:var(--color-text-secondary)">
+        提示：橙色虚线节点表示<b style="color:var(--pri-high)">未配置</b>，右上红点提示待补充必填项。
+      </div>
+    </div>
+
+    <!-- 中央画布 / 节点列表 -->
+    <div class="canvas-wrap" id="canvasView">
+      <div class="canvas" id="canvas">
+        <svg class="flow-svg">
+          <path d="M 190 70 C 220 70, 230 130, 260 130"/>
+          <path d="M 360 157 C 390 157, 400 240, 430 240" class="fork"/>
+          <path d="M 360 157 C 390 157, 400 360, 430 360" class="fork"/>
+          <path d="M 530 267 C 560 267, 620 270, 650 270"/>
+          <path d="M 530 387 C 600 387, 620 410, 650 410"/>
+        </svg>
+        <div class="flow-node start" style="left:50px;top:60px" data-id="start" onclick="selectNode(this)">
+          <div class="n-name">开始</div><div class="n-type">系统默认</div>
+        </div>
+        <div class="flow-node work config-ok" style="left:230px;top:103px" data-id="n1" onclick="selectNode(this)">
+          <div class="n-type">工作节点</div><div class="n-name">需求分析</div>
+        </div>
+        <div class="flow-node work unconfig" style="left:430px;top:213px" data-id="n2" onclick="selectNode(this)">
+          <div class="red-dot"></div>
+          <div class="n-type">工作节点</div><div class="n-name">方案设计</div>
+        </div>
+        <div class="flow-node work config-ok" style="left:430px;top:333px" data-id="n3" onclick="selectNode(this)">
+          <div class="n-type">工作节点</div><div class="n-name">样机验证</div>
+        </div>
+        <div class="flow-node end" style="left:650px;top:250px" data-id="end" onclick="selectNode(this)">
+          <div class="n-name">结束</div><div class="n-type">系统默认</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas-wrap hidden" id="listView">
+      <div class="node-table-wrap">
+        <table class="table">
+          <thead><tr><th>序号</th><th>节点名称</th><th>类型</th><th>负责人</th><th>审批人</th><th>完成时限</th><th>配置状态</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>开始</td><td>系统默认</td><td>—</td><td>—</td><td>—</td><td><span class="status status-published">系统</span></td></tr>
+            <tr><td class="num">2</td><td>需求分析</td><td>工作节点</td><td>李四</td><td>张三</td><td>3 天</td><td><span class="status status-completed">已配置</span></td></tr>
+            <tr><td class="num">3</td><td>方案设计</td><td>工作节点</td><td>未配置</td><td>未配置</td><td>—</td><td><span class="status status-draft">未配置</span></td></tr>
+            <tr><td class="num">4</td><td>样机验证</td><td>工作节点</td><td>王五</td><td>张三</td><td>5 天</td><td><span class="status status-completed">已配置</span></td></tr>
+            <tr><td class="num">5</td><td>结束</td><td>系统默认</td><td>—</td><td>—</td><td>—</td><td><span class="status status-published">系统</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 底部属性面板 -->
+    <div class="prop-panel" id="propPanel">
+      <h4>节点属性</h4>
+      <div id="propContent">
+        <div class="prop-empty">请选择节点查看 / 编辑属性</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 容器 -->
+<div id="toastHost"></div>
+
+<script>
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+
+function switchView(v){
+  var c=document.getElementById('canvasView'),l=document.getElementById('listView');
+  var vc=document.getElementById('viewCanvas'),vl=document.getElementById('viewList');
+  if(v==='canvas'){c.classList.remove('hidden');l.classList.add('hidden');vc.style.color='';vc.style.fontWeight='600';vl.style.color='var(--color-text-secondary)';vl.style.fontWeight='';}
+  else{c.classList.add('hidden');l.classList.remove('hidden');vl.style.color='';vl.style.fontWeight='600';vc.style.color='var(--color-text-secondary)';vc.style.fontWeight='';}
+}
+
+function selectNode(el){
+  document.querySelectorAll('.flow-node').forEach(function(n){n.classList.remove('is-selected');});
+  el.classList.add('is-selected');
+  var id=el.dataset.id, type=el.classList.contains('start')?'start':el.classList.contains('end')?'end':'work';
+  var name=el.querySelector('.n-name').textContent;
+  var c=document.getElementById('propContent');
+  if(type==='start'||type==='end'){
+    c.innerHTML='<div class="prop-empty">系统默认节点，无需配置</div>';
+    return;
+  }
+  var unconfig=el.classList.contains('unconfig');
+  c.innerHTML=
+  '<div class="prop-form">'+
+    '<div class="form-group"><label class="form-label form-required">节点名称</label><input class="form-control" value="'+name+'"></div>'+
+    '<div class="form-group"><label class="form-label">节点描述</label><textarea class="form-control" rows="2" placeholder="节点说明">'+(unconfig?'':'完成该阶段的产出物与交付标准')+'</textarea></div>'+
+    '<div class="form-group"><label class="form-label form-required">负责人</label><select class="form-control"><option'+(unconfig?'':' selected')+'>李四</option><option>王五</option><option>赵六</option><option>张三</option></select></div>'+
+    '<div class="form-group"><label class="form-label">校验人</label><select class="form-control"><option>王五</option><option>赵六</option></select></div>'+
+    '<div class="form-group"><label class="form-label form-required">完成时限</label><input class="form-control" value="'+(unconfig?'':(name==='样机验证'?'5 天':'3 天'))+'"></div>'+
+    '<div class="switch-row"><span class="form-label">必须上传文件</span><input type="checkbox" '+(unconfig?'':'checked')+'></div>'+
+    '<div class="form-group"><label class="form-label form-required">审批人</label><select class="form-control"><option'+(unconfig?'':' selected')+'>张三</option><option>赵六</option></select></div>'+
+    '<div class="switch-row"><span class="form-label">审批策略</span><span class="tag tag-primary">全部通过（锁定）</span></div>'+
+    '<div class="switch-row"><span class="form-label">可选节点</span><input type="checkbox"></div>'+
+    '<button class="btn btn-primary btn-sm" onclick="markConfigured(\''+id+'\')">保存节点配置</button>'+
+  '</div>';
+}
+
+function markConfigured(id){
+  var el=document.querySelector('.flow-node[data-id="'+id+'"]');
+  if(el){el.classList.remove('unconfig');el.classList.add('config-ok');var d=el.querySelector('.red-dot');if(d)d.remove();}
+  toast('节点配置已保存');
+}
+
+var nodeSeq=4;
+function addNode(){
+  nodeSeq++;
+  var canvas=document.getElementById('canvas');
+  var d=document.createElement('div');
+  d.className='flow-node work unconfig';
+  d.style.left=(430)+'px';d.style.top=(80+nodeSeq*10)+'px';
+  d.dataset.id='n'+nodeSeq;
+  d.setAttribute('onclick','selectNode(this)');
+  d.innerHTML='<div class="red-dot"></div><div class="n-type">工作节点</div><div class="n-name">新节点'+nodeSeq+'</div>';
+  canvas.appendChild(d);
+  toast('已添加节点，请在属性面板配置');
+}
+
+function toast(msg){
+  var h=document.getElementById('toastHost');
+  var t=document.createElement('div');
+  t.className='toast toast-success';
+  t.innerHTML='<span>&#10003;</span><span class="toast-text">'+msg+'</span>';
+  h.appendChild(t);
+  setTimeout(function(){t.remove();},3000);
+}
+</script>
+</body>
+</html>

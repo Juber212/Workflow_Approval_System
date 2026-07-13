@@ -1,0 +1,101 @@
+<!-- P05 创建/编辑流程模板页 | 功能：填写基础信息，进入设计器配置节点；保存草稿或发布 | 关键交互：流程名称 2-50字符同组织唯一、发布时校验节点完整性 | 跳转关系：保存草稿&#8594;P06、发布&#8594;P06(生成V1) | 角色可见性：所长/经理(M)可见，A/U 不可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>新建模板 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.breadcrumb{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px}
+.breadcrumb a{color:var(--color-text-regular);text-decoration:none}
+.breadcrumb a:hover{color:var(--color-primary)}
+.form-card{max-width:640px}
+.hint{font-size:12px;color:var(--color-text-secondary);margin-top:6px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">?</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content content-narrow">
+    <div class="breadcrumb"><a href="P03_org_cards.html">流程管理</a> / <a href="P04_org_home.html">通用所</a> / <span>新建模板</span></div>
+
+    <div class="page-header">
+      <div><h1 class="page-title">新建流程模板</h1>
+        <p class="page-subtitle">填写基础信息后进入设计器配置流程节点</p></div>
+    </div>
+
+    <div class="card form-card">
+      <div class="card-body">
+        <form class="form" id="tplForm" onsubmit="return false">
+          <div class="form-group">
+            <label class="form-label form-required">流程名称</label>
+            <input class="form-control" id="tplName" type="text" placeholder="请输入流程名称（2-50 字符，同组织唯一）" value="工艺评审流程">
+            <div class="hint">2-50 个字符，同一组织内名称不可重复。</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">流程描述</label>
+            <textarea class="form-control" id="tplDesc" rows="3" placeholder="简要说明该流程的用途与适用范围">用于新产品工艺评审与标准确认，覆盖需求分析、方案设计、样机验证等节点。</textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label form-required">所属组织</label>
+            <select class="form-control" id="tplOrg">
+              <option selected>通用所</option>
+              <option>高速所</option>
+              <option>第三所</option>
+              <option>第四所</option>
+            </select>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="page-actions" style="margin-top:24px">
+      <button class="btn btn-default" onclick="goDesigner('draft')">保存草稿</button>
+      <button class="btn btn-primary" onclick="goDesigner('publish')">发布</button>
+      <a class="btn btn-text" href="P04_org_home.html">取消</a>
+    </div>
+  </div>
+</div>
+
+<script>
+var um=document.getElementById('userMenu');if(um){um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});document.addEventListener('click',function(){if(um)um.classList.remove('open');});}
+
+function goDesigner(mode){
+  var name=document.getElementById('tplName').value.trim();
+  var err=document.getElementById('tplName');
+  if(name.length<2||name.length>50){
+    err.classList.add('is-error');
+    alert('流程名称需为 2-50 个字符');
+    return;
+  }
+  // 发布时校验节点完整性（此处跳转设计器，实际发布由 P06 校验）
+  location.href='P06_designer.html';
+}
+</script>
+</body>
+</html>

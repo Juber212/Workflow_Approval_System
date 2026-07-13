@@ -1,0 +1,79 @@
+<!-- D09 补交文件 | 功能：P14/P15/P16 附件区 + P17 触发（暗化背景示意 P14 任务处理） | 关键交互：多文件上传（≤50MB，doc/xls/pdf/png/jpg，自动转 PDF 提示，标记「补交」）；不触发审批 | 跳转：P14 | 角色：发起人相关 / 所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>补交文件 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+  .bg-dimmer{filter:blur(1px) brightness(.96);opacity:.45;pointer-events:none;margin-top:var(--topnav-height);padding:var(--page-padding)}
+  .dim-grid{display:grid;grid-template-columns:1fr;gap:var(--space-lg);max-width:600px;margin:0 auto}
+  .dim-card{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);height:120px}
+  .upload-zone{border:1px dashed var(--color-border);border-radius:var(--radius-md);padding:var(--space-xl);text-align:center;color:var(--color-text-secondary)}
+  .file-row{display:flex;align-items:center;gap:var(--space-md);padding:8px 0;border-bottom:1px solid var(--color-border-light)}
+  .file-row:last-child{border-bottom:none}
+  .file-name{flex:1}
+  .file-meta{color:var(--color-text-secondary);font-size:var(--font-minor)}
+  .tag-sup{margin-left:6px}
+</style>
+</head>
+<body class="app-shell">
+
+<header class="topnav" style="position:static">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+  </nav>
+</header>
+<div class="bg-dimmer">
+  <div class="dim-grid"><div class="dim-card"></div><div class="dim-card"></div></div>
+</div>
+
+<div class="dialog-mask">
+  <div class="dialog" style="min-width:520px">
+    <div class="dialog-header">
+      <span>补交文件 · XT2026-001 产品设计</span>
+      <button class="dialog-close" onclick="location.href='P14_task.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="upload-zone">
+        <div>拖拽文件到此处，或点击下方选择</div>
+        <input type="file" id="supInput" multiple accept=".doc,.docx,.xls,.xlsx,.pdf,.png,.jpg" style="margin-top:8px" />
+        <div class="file-meta" style="margin-top:6px">支持 doc / xls / pdf / png / jpg，单文件 ≤ 50MB；非 PDF 将自动转为 PDF；补交文件标记「补交」，不触发审批</div>
+      </div>
+      <div id="supList" style="margin-top:var(--space-md)"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P14_task.html'">取消</button>
+      <button class="btn btn-primary" id="submitSup">提交补交</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('supInput').addEventListener('change',function(){
+    var list=document.getElementById('supList');
+    Array.prototype.forEach.call(this.files,function(f){
+      var isPdf=/\.pdf$/i.test(f.name);
+      var row=document.createElement('div');
+      row.className='file-row';
+      row.innerHTML='<span class="file-name">'+f.name+'</span>'+
+        '<span class="tag tag-warning tag-sup">补交</span>'+
+        '<span class="file-meta">'+(f.size/1024).toFixed(0)+' KB'+(isPdf?'':' · 将转 PDF')+'</span>'+
+        '<button class="btn btn-text btn-sm" onclick="this.closest(\'.file-row\').remove()">移除</button>';
+      list.appendChild(row);
+    });
+    this.value='';
+  });
+  document.getElementById('submitSup').addEventListener('click',function(){
+    if(!document.getElementById('supList').children.length){ alert('请先选择要补交的文件'); return; }
+    alert('补交文件已上传并标记「补交」，不触发审批流程');
+    location.href='P14_task.html';
+  });
+</script>
+</body>
+</html>

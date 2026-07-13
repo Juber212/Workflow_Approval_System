@@ -1,0 +1,89 @@
+<!-- D08 修改节点人员弹窗 | 功能说明：紧急换人，修改未完成节点的负责人/校验人/审批人 | 关键交互：负责人(下拉/可搜索)、校验人(多选)、审批人(多选)、"保存修改"(.btn-primary)、变更即时生效并记入日志、仅发起人且仅未完成节点可操作 | 跳转关系：由 P17 节点卡片"修改人员"触发，确认后&#8594;P17 | 角色可见性：仅发起人(所长)可见；仅未完成节点(当前/未开始)可操作 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>修改节点人员 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.page-bg{filter:brightness(.92) saturate(.9);pointer-events:none;user-select:none}
+.detail-sticky{position:sticky;top:56px;background:var(--color-bg-page);padding:var(--space-lg) 0 var(--space-md);border-bottom:1px solid var(--color-border-light)}
+.detail-bar{display:flex;align-items:center;justify-content:space-between;max-width:var(--content-max-width);margin:0 auto;padding:0 var(--page-padding);gap:var(--space-xl)}
+.di-item{display:flex;flex-direction:column;gap:2px}
+.di-label{font-size:12px;color:var(--color-text-secondary)}
+.di-value{font-size:14px;font-weight:500}
+.bg-card{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:var(--content-max-width);margin:var(--space-xl) auto 0;padding:var(--space-lg) var(--space-xl);box-shadow:var(--shadow-card)}
+.check-list{display:flex;flex-wrap:wrap;gap:var(--space-sm)}
+.check-item{display:flex;align-items:center;gap:6px;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:6px 12px;font-size:13px;cursor:pointer;background:#fff}
+.check-item input{accent-color:var(--color-primary)}
+.node-tag{font-size:12px;color:var(--color-text-secondary);background:var(--color-bg-hover);padding:2px 10px;border-radius:var(--radius-pill);margin-bottom:var(--space-md);display:inline-block}
+.dialog-body .field-hint{font-size:12px;color:var(--color-text-secondary);margin-top:var(--space-xs)}
+</style>
+</head>
+<body>
+<div class="page-bg">
+  <header class="topnav">
+    <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+    <nav class="topnav-menu">
+      <a class="topnav-item">Dashboard</a><a class="topnav-item is-active">流程管理</a><a class="topnav-item">个人中心</a>
+    </nav>
+    <div class="topnav-user"><span class="topnav-avatar">张</span><span>张三（所长）</span></div>
+  </header>
+  <div class="detail-sticky">
+    <div class="detail-bar"><div class="di-item"><span class="di-label">实例</span><span class="di-value">XT2026-001 产品设计 · 运行中</span></div></div>
+  </div>
+  <div class="bg-card">节点明细 · 当前节点「毛坯图下发」（进行中） · 修改人员入口</div>
+</div>
+
+<!-- 修改节点人员弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span>修改节点人员</span>
+      <button class="dialog-close" onclick="location.href='P17_instance_detail.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <span class="node-tag">目标节点：毛坯图下发（进行中）</span>
+      <form class="form" onsubmit="return false">
+        <div class="form-group">
+          <label class="form-label form-required">负责人</label>
+          <select class="form-control">
+            <option>孙八</option>
+            <option>李四</option>
+            <option>钱七</option>
+            <option>赵六</option>
+          </select>
+          <div class="field-hint">支持输入搜索；节点负责人同一时间仅一人。</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">校验人（可多选）</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox" checked> 赵六</label>
+            <label class="check-item"><input type="checkbox"> 李四</label>
+            <label class="check-item"><input type="checkbox"> 钱七</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">审批人（可多选）</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox" checked> 王五</label>
+            <label class="check-item"><input type="checkbox"> 张三</label>
+          </div>
+        </div>
+        <div class="field-hint">提示：变更即时生效并记入操作日志，相关待办任务将重新分配。</div>
+      </form>
+    </div>
+    <div class="dialog-footer">
+      <a class="btn btn-default" href="P17_instance_detail.html">取消</a>
+      <a class="btn btn-primary" href="P17_instance_detail.html">保存修改</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

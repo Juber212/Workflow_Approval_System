@@ -1,0 +1,69 @@
+<!-- D12 启用/禁用用户确认弹窗 | 功能说明：启用或禁用用户（禁用后 Token 立即失效） | 关键交互：默认"禁用"态文案"禁用后该用户将立即无法登录（Token 失效）"、按钮"确认禁用"(.btn-danger)；若为"启用"态则文案与按钮变为"启用"/.btn-primary（见下方注释说明两种态差异）；点击遮罩不可关闭 | 跳转关系：由 P18 用户管理"禁用/启用"触发，确认后&#8594;P18 | 角色可见性：仅系统管理员(A)可见 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>禁用用户 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.page-bg{filter:brightness(.92) saturate(.9);pointer-events:none;user-select:none}
+.bg-table{background:#fff;border:1px solid var(--color-border);border-radius:var(--radius-lg);max-width:var(--content-max-width);margin:var(--space-xl) auto 0;overflow:hidden;box-shadow:var(--shadow-card)}
+.bg-table .row{display:flex;padding:12px var(--space-xl);border-bottom:1px solid var(--color-border-light);font-size:13px}
+.bg-table .row.head{background:var(--color-bg-page);font-weight:600}
+.dialog-body .warn-box{background:var(--color-danger-light);border:1px solid var(--color-danger);border-radius:var(--radius-md);padding:var(--space-md) var(--space-lg);color:var(--color-danger);font-size:13px;line-height:22px}
+.dialog-body .ok-box{background:var(--color-success-light);border:1px solid var(--color-success);border-radius:var(--radius-md);padding:var(--space-md) var(--space-lg);color:var(--color-success);font-size:13px;line-height:22px}
+/* 演示用：切换启用/禁用态说明 */
+.variant-toggle{font-size:12px;color:var(--color-text-secondary);margin-top:12px}
+</style>
+</head>
+<body>
+<div class="page-bg">
+  <header class="topnav">
+    <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+    <nav class="topnav-menu"><a class="topnav-item">Dashboard</a><a class="topnav-item">流程管理</a><a class="topnav-item is-active">系统管理</a></nav>
+    <div class="topnav-user"><span class="topnav-avatar">王</span><span>王五（系统管理员）</span></div>
+  </header>
+  <div class="bg-table">
+    <div class="row head"><span style="flex:1">用户名</span><span style="flex:1">姓名</span><span style="flex:1">状态</span><span style="flex:1">操作</span></div>
+    <div class="row"><span style="flex:1">lisi</span><span style="flex:1">李四</span><span style="flex:1">正常</span><span style="flex:1">禁用</span></div>
+  </div>
+</div>
+
+<!-- 启用/禁用用户确认弹窗（默认禁用态） -->
+<div class="dialog-mask">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dialog-header">
+      <span>禁用用户</span>
+      <button class="dialog-close" onclick="location.href='P18_system.html'">×</button>
+    </div>
+    <div class="dialog-body">
+      <p style="margin:0 0 4px">确定要禁用用户 <b>lisi（李四）</b> 吗？</p>
+      <div class="warn-box">禁用后该用户将立即无法登录（Token 失效），其待办任务需由管理员重新分配。</div>
+      <!--
+        两种态差异说明（同一弹窗，依目标用户当前状态切换）：
+        【禁用态 — 目标用户当前为"正常"】
+          标题：禁用用户
+          文案：禁用后该用户将立即无法登录（Token 失效），其待办任务需由管理员重新分配。
+          按钮：确认禁用（.btn-danger）
+        【启用态 — 目标用户当前为"已禁用"】
+          标题：启用用户
+          文案：启用后该用户可正常登录，原权限恢复。
+          按钮：确认启用（.btn-primary）
+        下方 .variant-toggle 仅为原型演示提示，实际由触发来源（禁用/启用链接）决定呈现哪一态。
+      -->
+      <p class="variant-toggle">提示：若目标用户当前为"已禁用"态，本弹窗将切换为启用态——文案"启用后该用户可正常登录"，按钮为"确认启用".btn-primary。</p>
+    </div>
+    <div class="dialog-footer">
+      <a class="btn btn-default" href="P18_system.html">取消</a>
+      <a class="btn btn-danger" href="P18_system.html">确认禁用</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,416 @@
+<!-- P02 Dashboard 首页看板 | 功能：全局运行概况（所有角色内容一致，张三所长视角） | 关键交互：统计卡、任务状态分布饼图（可点扇区/图例跳 P10/P11/P12）、流程卡点追踪表（组织筛选、按优先级到逾期排序、红/橙行高亮）、逾期任务预警（按逾期天数排序）、各所流程概览折叠面板（C4 只列运行中实例名+节点+状态，点击到 P17） | 跳转：P10 / P11 / P12 / P17 / P04 | 角色：所长 / 普通用户 / 管理员 内容一致 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>Dashboard · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+
+  .dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-xl)}
+  .dashboard-grid .full{grid-column:1 / -1}
+  .refresh-btn{cursor:pointer}
+
+  /* 饼图 */
+  .pie-wrap{display:flex;align-items:center;gap:var(--space-2xl)}
+  .pie{width:200px;height:200px;border-radius:50%;flex-shrink:0;cursor:pointer;position:relative;
+    background:conic-gradient(from 0deg,
+      #E6A23C 0deg 69.68deg,
+      #2563EB 69.68deg 116.13deg,
+      #F7B955 116.13deg 145.16deg,
+      #D97706 145.16deg 185.81deg,
+      #67C23A 185.81deg 360deg);
+  }
+  .pie-hole{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .pie-hole .big{font-size:28px;font-weight:600;line-height:1}
+  .pie-hole .small{font-size:12px;color:var(--color-text-secondary);margin-top:4px}
+  .legend{display:flex;flex-direction:column;gap:10px;font-size:var(--font-sub);flex:1}
+  .legend-item{display:flex;align-items:center;gap:var(--space-sm);cursor:pointer;padding:4px 6px;border-radius:var(--radius-sm)}
+  .legend-item:hover{background:var(--color-bg-hover)}
+  .legend-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+  .legend-name{color:var(--color-text-regular)}
+  .legend-num{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600}
+
+  /* 卡点筛选 */
+  .filter-bar{display:flex;gap:var(--space-md);align-items:center;flex-wrap:wrap}
+  .filter-bar select{height:32px;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0 10px;font-size:14px;color:var(--color-text-regular);background:#fff}
+  .link-p17{color:var(--color-primary);cursor:pointer}
+  .link-p17:hover{text-decoration:underline}
+
+  /* 折叠面板 */
+  .collapse{border:1px solid var(--color-border);border-radius:var(--radius-lg);margin-bottom:var(--space-md);overflow:hidden}
+  .collapse-head{display:flex;align-items:center;justify-content:space-between;padding:var(--space-md) var(--space-lg);background:var(--color-bg-page);cursor:pointer;font-weight:600}
+  .collapse-head .count-tag{font-size:var(--font-minor);color:var(--color-text-secondary);font-weight:400;margin-left:8px}
+  .collapse-body{display:none;padding:0}
+  .collapse.open .collapse-body{display:block}
+  .collapse.open .collapse-head .caret{transform:rotate(180deg)}
+  .collapse .caret{transition:transform .15s}
+  .ov-list li{display:flex;align-items:center;gap:var(--space-md);padding:10px var(--space-lg);border-bottom:1px solid var(--color-border-light)}
+  .ov-list li:last-child{border-bottom:none}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item is-active" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Dashboard 运行看板</h1>
+        <div class="page-subtitle">全局流程运行概况 · 数据截至 2026-07-10 09:30</div>
+      </div>
+      <div class="page-actions">
+        <button class="btn btn-default" id="refreshBtn">刷新数据</button>
+      </div>
+    </div>
+
+    <!-- ① 4 张统计卡 -->
+    <div class="stat-grid">
+      <div class="card stat-card">
+        <div class="stat-label">运行中流程</div>
+        <div class="stat-value num">32</div>
+        <div class="page-subtitle">当前所有组织中正在流转的实例</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">本月完成</div>
+        <div class="stat-value num">30</div>
+        <div class="page-subtitle">2026 年 7 月已完成 / 已归档</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">待处理任务</div>
+        <div class="stat-value num">32</div>
+        <div class="page-subtitle">待处理 + 处理中 + 待校验 + 待审批</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-label">逾期任务</div>
+        <div class="stat-value num is-danger">4</div>
+        <div class="page-subtitle text-danger">已超出节点时限，需重点关注</div>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <!-- ② 任务状态分布饼图 -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">任务状态分布</h2>
+          <span class="card-extra text-secondary">点击扇区 / 图例查看对应列表</span>
+        </div>
+        <div class="card-body">
+          <div class="pie-wrap">
+            <div class="pie" id="pie" title="任务状态分布，点击跳转">
+              <div class="pie-hole">
+                <span class="big num">62</span>
+                <span class="small">任务总数</span>
+              </div>
+            </div>
+            <div class="legend" id="legend">
+              <div class="legend-item" data-target="P10_todos.html" data-filter="pending">
+                <span class="legend-dot" style="background:#E6A23C"></span>
+                <span class="legend-name">待处理 Pending</span>
+                <span class="legend-num">12</span>
+              </div>
+              <div class="legend-item" data-target="P10_todos.html" data-filter="processing">
+                <span class="legend-dot" style="background:#2563EB"></span>
+                <span class="legend-name">处理中 Processing</span>
+                <span class="legend-num">8</span>
+              </div>
+              <div class="legend-item" data-target="P10_todos.html" data-filter="wait-check">
+                <span class="legend-dot" style="background:#F7B955"></span>
+                <span class="legend-name">待校验 WaitCheck</span>
+                <span class="legend-num">5</span>
+              </div>
+              <div class="legend-item" data-target="P11_approvals.html">
+                <span class="legend-dot" style="background:#D97706"></span>
+                <span class="legend-name">待审批 WaitApprove</span>
+                <span class="legend-num">7</span>
+              </div>
+              <div class="legend-item" data-target="P12_my_initiated.html" data-filter="completed">
+                <span class="legend-dot" style="background:#67C23A"></span>
+                <span class="legend-name">已完成 Completed</span>
+                <span class="legend-num">30</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ④ 逾期任务预警列表 -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">逾期任务预警</h2>
+          <span class="card-extra text-danger">按逾期天数排序</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <ul class="ov-list" style="list-style:none;margin:0;padding:0">
+            <li>
+              <span class="status ov-overdue">已逾期 5天</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-003 接口开发</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：王五</span>
+            </li>
+            <li>
+              <span class="status ov-overdue">已逾期 3天2时</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-001 产品设计</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：张三</span>
+            </li>
+            <li>
+              <span class="status ov-overdue">已逾期 1天4时</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-005 上线发布</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：张三</span>
+            </li>
+            <li>
+              <span class="status ov-overdue">已逾期 8时</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-007 财务预算</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：王五</span>
+            </li>
+            <li>
+              <span class="status ov-soon">即将逾期 6时</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-002 需求评审</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：李四</span>
+            </li>
+            <li>
+              <span class="status ov-soon">即将逾期 12时</span>
+              <span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-004 测试用例设计</span>
+              <span class="text-secondary" style="margin-left:auto">负责人：赵六</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ③ 流程卡点追踪表格 -->
+      <div class="card full">
+        <div class="card-header">
+          <h2 class="card-title">流程卡点追踪</h2>
+          <div class="card-extra filter-bar">
+            <label class="text-secondary">组织</label>
+            <select id="orgFilter">
+              <option value="">全部组织</option>
+              <option value="研发一所">研发一所</option>
+              <option value="研发二所">研发二所</option>
+              <option value="测试所">测试所</option>
+              <option value="产品所">产品所</option>
+            </select>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>实例名称</th>
+                <th>当前节点</th>
+                <th>负责人</th>
+                <th>已耗时</th>
+                <th>逾期判定</th>
+                <th>优先级</th>
+                <th>状态</th>
+                <th>组织</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="trackBody">
+              <tr class="table-row--overdue" data-org="研发一所" data-pri="urgent">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-001 产品设计</span></td>
+                <td>方案设计</td><td>张三</td><td class="num">3天2时</td>
+                <td><span class="status ov-overdue">已逾期</span></td>
+                <td><span class="pri-urgent">紧急</span></td>
+                <td><span class="status status-processing">处理中</span></td>
+                <td>研发一所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr class="table-row--overdue" data-org="测试所" data-pri="normal">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-003 接口开发</span></td>
+                <td>开发实现</td><td>王五</td><td class="num">5天</td>
+                <td><span class="status ov-overdue">已逾期</span></td>
+                <td><span class="pri-normal">普通</span></td>
+                <td><span class="status status-processing">处理中</span></td>
+                <td>测试所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr class="table-row--overdue" data-org="研发一所" data-pri="high">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-005 上线发布</span></td>
+                <td>部门审批</td><td>张三</td><td class="num">4天</td>
+                <td><span class="status ov-overdue">已逾期</span></td>
+                <td><span class="pri-high">高</span></td>
+                <td><span class="status status-wait-approve">待审批</span></td>
+                <td>研发一所</td>
+                <td><a class="btn btn-text btn-sm" href="P16_approval.html">审批</a></td>
+              </tr>
+              <tr class="table-row--soon" data-org="研发二所" data-pri="high">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-002 需求评审</span></td>
+                <td>需求分析</td><td>李四</td><td class="num">1天5时</td>
+                <td><span class="status ov-soon">即将逾期</span></td>
+                <td><span class="pri-high">高</span></td>
+                <td><span class="status status-pending">待处理</span></td>
+                <td>研发二所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr class="table-row--soon" data-org="测试所" data-pri="urgent">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-007 财务预算</span></td>
+                <td>方案设计</td><td>王五</td><td class="num">2天3时</td>
+                <td><span class="status ov-soon">即将逾期</span></td>
+                <td><span class="pri-urgent">紧急</span></td>
+                <td><span class="status status-pending">待处理</span></td>
+                <td>测试所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr data-org="产品所" data-pri="low">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-004 测试用例设计</span></td>
+                <td>方案设计</td><td>赵六</td><td class="num">2天</td>
+                <td><span class="status ov-normal">正常</span></td>
+                <td><span class="pri-low">低</span></td>
+                <td><span class="status status-pending">待处理</span></td>
+                <td>产品所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr data-org="研发二所" data-pri="normal">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-006 市场推广方案</span></td>
+                <td>需求分析</td><td>李四</td><td class="num">6时</td>
+                <td><span class="status ov-normal">正常</span></td>
+                <td><span class="pri-normal">普通</span></td>
+                <td><span class="status status-processing">处理中</span></td>
+                <td>研发二所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+              <tr data-org="产品所" data-pri="low">
+                <td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-008 客户调研</span></td>
+                <td>开发实现</td><td>赵六</td><td class="num">1天</td>
+                <td><span class="status ov-normal">正常</span></td>
+                <td><span class="pri-low">低</span></td>
+                <td><span class="status status-processing">处理中</span></td>
+                <td>产品所</td>
+                <td><a class="btn btn-text btn-sm" href="P14_task.html">处理</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ⑤ 各所流程概览折叠面板（C4：只列运行中实例名 + 当前节点 + 状态） -->
+      <div class="card full">
+        <div class="card-header">
+          <h2 class="card-title">各所流程概览</h2>
+          <span class="card-extra text-secondary">仅展示运行中实例 · 点击实例名查看详情</span>
+        </div>
+        <div class="card-body">
+          <div class="collapse open">
+            <div class="collapse-head" onclick="this.parentElement.classList.toggle('open')">
+              <span>研发一所<span class="count-tag">运行中 3</span></span>
+              <span class="caret"></span>
+            </div>
+            <div class="collapse-body">
+              <table class="table">
+                <thead><tr><th>实例名称</th><th>当前节点</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-001 产品设计</span></td><td>方案设计</td><td><span class="status status-running">运行中</span></td></tr>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-005 上线发布</span></td><td>部门审批</td><td><span class="status status-running">运行中</span></td></tr>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-010 架构评审</span></td><td>需求分析</td><td><span class="status status-running">运行中</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="collapse">
+            <div class="collapse-head" onclick="this.parentElement.classList.toggle('open')">
+              <span>研发二所<span class="count-tag">运行中 2</span></span>
+              <span class="caret"></span>
+            </div>
+            <div class="collapse-body">
+              <table class="table">
+                <thead><tr><th>实例名称</th><th>当前节点</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-002 需求评审</span></td><td>需求分析</td><td><span class="status status-running">运行中</span></td></tr>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-006 市场推广方案</span></td><td>需求分析</td><td><span class="status status-running">运行中</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="collapse">
+            <div class="collapse-head" onclick="this.parentElement.classList.toggle('open')">
+              <span>测试所<span class="count-tag">运行中 2</span></span>
+              <span class="caret"></span>
+            </div>
+            <div class="collapse-body">
+              <table class="table">
+                <thead><tr><th>实例名称</th><th>当前节点</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-003 接口开发</span></td><td>开发实现</td><td><span class="status status-running">运行中</span></td></tr>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-007 财务预算</span></td><td>方案设计</td><td><span class="status status-running">运行中</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="collapse">
+            <div class="collapse-head" onclick="this.parentElement.classList.toggle('open')">
+              <span>产品所<span class="count-tag">运行中 2</span></span>
+              <span class="caret"></span>
+            </div>
+            <div class="collapse-body">
+              <table class="table">
+                <thead><tr><th>实例名称</th><th>当前节点</th><th>状态</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-004 测试用例设计</span></td><td>方案设计</td><td><span class="status status-running">运行中</span></td></tr>
+                  <tr><td><span class="link-p17" onclick="location.href='P17_instance_detail.html'">XT2026-008 客户调研</span></td><td>开发实现</td><td><span class="status status-running">运行中</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 顶部用户菜单
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+  // 刷新
+  document.getElementById('refreshBtn').addEventListener('click',function(){
+    this.textContent='刷新中…';
+    var self=this;
+    setTimeout(function(){self.textContent='刷新数据';alert('数据已刷新（演示）');},500);
+  });
+  // 饼图 / 图例点击跳转
+  document.querySelectorAll('#legend .legend-item').forEach(function(item){
+    item.addEventListener('click',function(){
+      location.href=item.getAttribute('data-target');
+    });
+  });
+  document.getElementById('pie').addEventListener('click',function(){
+    location.href='P10_todos.html';
+  });
+  // 组织筛选
+  document.getElementById('orgFilter').addEventListener('change',function(){
+    var v=this.value;
+    document.querySelectorAll('#trackBody tr').forEach(function(tr){
+      tr.style.display=(!v||tr.getAttribute('data-org')===v)?'':'none';
+    });
+  });
+</script>
+</body>
+</html>

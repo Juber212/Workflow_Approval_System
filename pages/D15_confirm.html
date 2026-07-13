@@ -1,0 +1,65 @@
+<!-- D15 通用确认弹窗示例 | 功能说明：通用确认/表单弹窗模板（[取消][确认]），以暗化背景承载 | 关键交互：点击遮罩不可关闭(防误操作)、取消/确认 | 跳转关系：示例页，确认类通用 | 角色可见性：全局通用 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>通用确认弹窗 - 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+.topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+.topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+.topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+.topnav-user.open .topnav-dropdown{display:flex}
+.caret{font-size:10px}
+.backdrop-dim{filter:brightness(.96);pointer-events:none;opacity:.6}
+.dialog{width:420px}
+.dialog-body .confirm-icon{width:36px;height:36px;border-radius:50%;background:var(--color-primary-light);color:var(--color-primary);display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px}
+</style>
+</head>
+<body>
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item is-active" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret">&#9662;</span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<!-- 暗化背景（通用页面示意） -->
+<div class="page backdrop-dim">
+  <div class="content">
+    <div class="page-header"><h1 class="page-title">通用确认弹窗示例</h1></div>
+    <div class="card"><div class="card-body">这是通用确认弹窗（D15）的承载背景示例。实际使用中，弹窗会叠加在任意触发页面的暗化背景之上。</div></div>
+  </div>
+</div>
+
+<!-- 弹窗 -->
+<div class="dialog-mask">
+  <div class="dialog">
+    <div class="dialog-header"><span>确认操作</span><button class="dialog-close" onclick="location.href='P04_org_home.html'">×</button></div>
+    <div class="dialog-body">
+      <div class="confirm-icon">?</div>
+      <p style="margin:0">这里放置确认正文，例如「确定要执行该操作吗？」。</p>
+      <p class="text-secondary" style="margin:12px 0 0">通用模板：标题 + 正文 + [取消] / [确认]。</p>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn btn-default" onclick="location.href='P04_org_home.html'">取消</button>
+      <button class="btn btn-primary" onclick="location.href='P04_org_home.html'">确认</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

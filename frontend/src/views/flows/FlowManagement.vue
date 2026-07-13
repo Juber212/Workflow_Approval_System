@@ -1,7 +1,22 @@
 <template>
   <div class="flow-management">
+    <!-- 面包屑导航 -->
+    <div class="page-breadcrumb">
+      <router-link to="/dashboard">Dashboard</router-link>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">流程管理</span>
+    </div>
+
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div class="page-header__info">
+        <h1 class="page-header__title">流程管理</h1>
+        <p class="page-header__subtitle">管理流程模板与实例，查看各组织流程运行概况</p>
+      </div>
+    </div>
+
     <!-- Tab 切换 -->
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" class="flow-tabs">
       <el-tab-pane label="流程模板" name="template" />
       <el-tab-pane label="流程实例" name="instance" />
     </el-tabs>
@@ -245,3 +260,14 @@ function handleStart(_id: number) {
   router.push('/flows/start')
 }
 </script>
+
+<style lang="scss" scoped>
+.flow-management {
+  max-width: var(--content-max-width, 1200px);
+  margin: 0 auto;
+
+  .flow-tabs {
+    margin-bottom: 20px;
+  }
+}
+</style>

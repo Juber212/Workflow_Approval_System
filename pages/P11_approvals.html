@@ -1,0 +1,132 @@
+<!-- P11 我的审批 | 功能：当前用户作为审批人的待审项（含结束节点终审任务） | 关键交互：表格（实例名/节点名/提交人/提交时间/状态 Pending/类型 普通节点&结束节点终审）；审批跳转 P16（按节点类型自动切换模式） | 跳转：P16 | 角色：所长 / 普通用户 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1280" />
+<title>我的审批 · 企业流程审批系统</title>
+<link rel="stylesheet" href="../assets/design-system.css" />
+<style>
+  .topnav-dropdown{position:absolute;top:56px;right:0;background:#fff;border:1px solid var(--color-border);border-radius:8px;box-shadow:var(--shadow-dialog);min-width:160px;display:none;flex-direction:column;overflow:hidden;z-index:1500}
+  .topnav-dropdown a{display:block;padding:10px 16px;color:var(--color-text-regular);text-decoration:none;font-size:14px}
+  .topnav-dropdown a:hover{background:var(--color-bg-hover);color:var(--color-primary)}
+  .topnav-user.open .topnav-dropdown{display:flex}
+  .caret{display:inline-block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid currentColor;vertical-align:middle;margin-left:2px}
+  .type-final{color:var(--color-danger);font-weight:600}
+</style>
+</head>
+<body class="app-shell">
+<header class="topnav">
+  <div class="topnav-brand"><span class="topnav-logo">流</span>企业流程审批系统</div>
+  <nav class="topnav-menu">
+    <a class="topnav-item" href="P02_dashboard.html">Dashboard</a>
+    <a class="topnav-item" href="P03_org_cards.html">流程管理</a>
+    <a class="topnav-item is-active" href="P09_personal.html">个人中心</a>
+    <a class="topnav-item" href="P18_system.html" style="display:none">系统管理</a>
+  </nav>
+  <div class="topnav-user" id="userMenu">
+    <span class="topnav-avatar">张</span>
+    <span>张三（所长）</span>
+    <span class="caret"></span>
+    <div class="topnav-dropdown">
+      <a href="D01_profile.html">个人信息</a>
+      <a href="D02_password.html">修改密码</a>
+      <a href="P01_login.html">退出登录</a>
+    </div>
+  </div>
+</header>
+
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">我的审批</h1>
+        <div class="page-subtitle">待我审批及结束节点终审任务</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>实例名称</th>
+              <th>节点名称</th>
+              <th>提交人</th>
+              <th>提交时间</th>
+              <th>状态</th>
+              <th>类型</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>XT2026-005 上线发布</td>
+              <td>部门审批</td>
+              <td>张三</td>
+              <td class="num">2026-07-09 14:20</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td>普通节点</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-001 产品设计</td>
+              <td>方案审批</td>
+              <td>张三</td>
+              <td class="num">2026-07-09 11:05</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td>普通节点</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-003 接口开发</td>
+              <td>技术评审</td>
+              <td>王五</td>
+              <td class="num">2026-07-08 16:40</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td>普通节点</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-009 终验签发</td>
+              <td>终审签发</td>
+              <td>李四</td>
+              <td class="num">2026-07-08 09:30</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td class="type-final">结束节点终审</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-006 市场推广方案</td>
+              <td>预算审批</td>
+              <td>李四</td>
+              <td class="num">2026-07-07 15:10</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td>普通节点</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+            <tr>
+              <td>XT2026-007 财务预算</td>
+              <td>合规审批</td>
+              <td>王五</td>
+              <td class="num">2026-07-07 10:55</td>
+              <td><span class="status status-pending">待审批</span></td>
+              <td>普通节点</td>
+              <td><a class="btn btn-primary btn-sm" href="P16_approval.html">审批</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var um=document.getElementById('userMenu');
+  if(um){
+    um.addEventListener('click',function(e){e.stopPropagation();um.classList.toggle('open');});
+    document.addEventListener('click',function(){if(um)um.classList.remove('open');});
+  }
+</script>
+</body>
+</html>
