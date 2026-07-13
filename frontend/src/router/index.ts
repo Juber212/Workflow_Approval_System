@@ -44,6 +44,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '流程设计器', roles: ['manager'] },
       },
       {
+        path: 'flows/start',
+        name: 'StartInstance',
+        component: () => import('@/views/flows/StartInstance.vue'),
+        meta: { title: '发起流程实例', roles: ['manager'] },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/profile/index.vue'),

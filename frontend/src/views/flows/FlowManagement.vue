@@ -28,6 +28,7 @@
         @disable="handleDisable"
         @new-version="handleNewVersion"
         @delete="handleDelete"
+        @start="handleStart"
         @page-change="handlePageChange"
       />
     </template>
@@ -237,5 +238,10 @@ async function handleNewVersion(id: number) {
 // ========== 详情 ==========
 function handleDetail(id: number) {
   router.push(`/flows/detail/${id}`)
+}
+
+// ========== 发起实例 ==========
+function handleStart(_id: number) {
+  router.push('/flows/start')
 }
 </script>
