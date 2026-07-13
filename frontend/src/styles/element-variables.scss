@@ -1,0 +1,20 @@
+/* Element Plus 主题变量覆盖 —— 企业审批系统品牌色 */
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': (
+      'base': #1a6fb5,
+    ),
+    'success': (
+      'base': #3da36a,
+    ),
+    'warning': (
+      'base': #e6a23c,
+    ),
+    'danger': (
+      'base': #e65d5d,
+    ),
+  ),
+  $border-radius: (
+    'base': 6px,
+  ),
+);
