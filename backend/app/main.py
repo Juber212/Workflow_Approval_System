@@ -19,6 +19,7 @@ from app.api.roles import router as roles_router
 from app.api.configs import router as configs_router
 from app.api.templates import router as templates_router
 from app.api.designer import router as designer_router
+from app.api.instances import router as instances_router
 from app.core.database import async_session_factory
 from app.services.config_service import config_service
 
@@ -96,6 +97,7 @@ app.include_router(roles_router)
 app.include_router(configs_router)
 app.include_router(templates_router)
 app.include_router(designer_router)
+app.include_router(instances_router)
 
 # ================= 健康检查 =================
 

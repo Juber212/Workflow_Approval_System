@@ -1,11 +1,10 @@
 """文件模型"""
 
-from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey, Enum
+from sqlalchemy import String, Integer, BigInteger, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
-from app.models.enums import UploadType
 
 
 class File(Base):
@@ -17,7 +16,7 @@ class File(Base):
     task_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tasks.id"), comment="关联任务（补交可为NULL）")
     round: Mapped[int] = mapped_column(Integer, default=1, comment="文件所属轮次")
     uploader_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="上传人")
-    upload_type: Mapped[UploadType] = mapped_column(Enum(UploadType), default=UploadType.NORMAL, comment="上传类型")
+    upload_type: Mapped[str] = mapped_column(String(20), default="normal", comment="上传类型")
     original_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="原始文件名")
     stored_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="存储文件名（UUID）")
     file_path: Mapped[str] = mapped_column(String(500), nullable=False, comment="最终PDF存储相对路径")

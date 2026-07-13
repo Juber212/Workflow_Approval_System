@@ -1,11 +1,10 @@
 """操作日志模型（按年分区，只写不删）"""
 
-from sqlalchemy import String, Integer, DateTime, JSON, Enum
+from sqlalchemy import String, Integer, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
-from app.models.enums import OperatorType
 
 
 class OperationLog(Base):
@@ -13,7 +12,7 @@ class OperationLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, comment="自增ID")
     instance_id: Mapped[int | None] = mapped_column(Integer, comment="所属流程实例")
-    operator_type: Mapped[OperatorType] = mapped_column(Enum(OperatorType), default=OperatorType.USER, comment="操作者类型")
+    operator_type: Mapped[str] = mapped_column(String(20), default="user", comment="操作者类型")
     operator_id: Mapped[int | None] = mapped_column(Integer, comment="操作人；系统操作为NULL")
     triggered_by: Mapped[int | None] = mapped_column(Integer, comment="可选触发人")
     node_id: Mapped[int | None] = mapped_column(Integer, comment="关联实例节点")
