@@ -15,6 +15,15 @@
           <div class="node-collapse-title">
             <span class="node-name">{{ node.name }}</span>
             <span class="node-summary">{{ getNodeSummary(node) }}</span>
+            <el-tag
+              v-if="getNodeIssues(node).length > 0"
+              size="small"
+              type="danger"
+              effect="plain"
+              class="node-issue-tag"
+            >
+              {{ getNodeIssues(node).length }} 项问题
+            </el-tag>
           </div>
         </template>
 
@@ -49,27 +58,37 @@
           <!-- 校验人 -->
           <div class="override-row" v-if="!isNodeSkipped(node.id)">
             <label class="override-label">校验人</label>
-            <UserSelector
-              :model-value="getOverride(node.id, 'checkers_ids') ?? getCheckerIds(node)"
-              @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'checkers_ids', v as number[] | undefined)"
-              :multiple="true"
-              :placeholder="'选择校验人（可多选）'"
-              style="width: 400px"
-              @options-loaded="(users: any[]) => cacheNames(users)"
-            />
+            <div>
+              <UserSelector
+                :model-value="getOverride(node.id, 'checkers_ids') ?? getCheckerIds(node)"
+                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'checkers_ids', v as number[] | undefined)"
+                :multiple="true"
+                :placeholder="'选择校验人（可多选）'"
+                style="width: 400px"
+                @options-loaded="(users: any[]) => cacheNames(users)"
+              />
+              <p class="override-warn" v-if="isFieldEmpty(node, 'checkers')">
+                ⚠ 校验人不能为空，至少选择 1 人
+              </p>
+            </div>
           </div>
 
           <!-- 审批人 -->
           <div class="override-row" v-if="!isNodeSkipped(node.id)">
             <label class="override-label">审批人</label>
-            <UserSelector
-              :model-value="getOverride(node.id, 'approvers_ids') ?? getApproverIds(node)"
-              @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'approvers_ids', v as number[] | undefined)"
-              :multiple="true"
-              :placeholder="'选择审批人（可多选）'"
-              style="width: 400px"
-              @options-loaded="(users: any[]) => cacheNames(users)"
-            />
+            <div>
+              <UserSelector
+                :model-value="getOverride(node.id, 'approvers_ids') ?? getApproverIds(node)"
+                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'approvers_ids', v as number[] | undefined)"
+                :multiple="true"
+                :placeholder="'选择审批人（可多选）'"
+                style="width: 400px"
+                @options-loaded="(users: any[]) => cacheNames(users)"
+              />
+              <p class="override-warn" v-if="isFieldEmpty(node, 'approvers')">
+                ⚠ 审批人不能为空，至少选择 1 人
+              </p>
+            </div>
           </div>
 
           <!-- 截止日期 -->
@@ -219,6 +238,63 @@ function getNodeSummary(node: TemplateNodeItem): string {
   if (approverIds && approverIds.length > 0) parts.push(`${approverIds.length}位审批人`)
   return parts.join(' · ') || '未配置'
 }
+
+// ========== 校验逻辑 ==========
+
+/** 检查节点某个字段是否为空（覆盖后） */
+function isFieldEmpty(node: TemplateNodeItem, field: 'checkers' | 'approvers'): boolean {
+  if (isNodeSkipped(node.id)) return false  // 跳过节点不校验
+
+  if (field === 'checkers') {
+    const overrideVal = getOverride(node.id, 'checkers_ids')
+    if (overrideVal !== undefined) return !overrideVal || overrideVal.length === 0
+    // 未被覆盖，检查模板默认值
+    return getCheckerIds(node).length === 0
+  }
+
+  if (field === 'approvers') {
+    const overrideVal = getOverride(node.id, 'approvers_ids')
+    if (overrideVal !== undefined) return !overrideVal || overrideVal.length === 0
+    return getApproverIds(node).length === 0
+  }
+
+  return false
+}
+
+/** 获取节点配置问题列表 */
+function getNodeIssues(node: TemplateNodeItem): string[] {
+  const issues: string[] = []
+  if (isNodeSkipped(node.id)) return issues  // 跳过节点无需校验
+
+  if (isFieldEmpty(node, 'checkers')) issues.push('校验人未设置')
+  if (isFieldEmpty(node, 'approvers')) issues.push('审批人未设置')
+
+  return issues
+}
+
+/** 对外暴露：校验全部节点配置，返回问题列表 */
+function validate(): { nodeId: number; nodeName: string; issues: string[] }[] {
+  const errors: { nodeId: number; nodeName: string; issues: string[] }[] = []
+  for (const node of workNodes.value) {
+    const issues = getNodeIssues(node)
+    if (issues.length > 0) {
+      errors.push({ nodeId: node.id, nodeName: node.name, issues })
+      // 自动展开有问题的节点
+      if (!activeNames.value.includes(String(node.id))) {
+        activeNames.value = [String(node.id), ...activeNames.value]
+      }
+    }
+  }
+  return errors
+}
+
+/** 检查是否有任何校验问题 */
+function hasIssues(): boolean {
+  return workNodes.value.some(n => getNodeIssues(n).length > 0)
+}
+
+// 对外暴露校验方法
+defineExpose({ validate, hasIssues })
 </script>
 
 <script lang="ts">
@@ -290,6 +366,18 @@ export default { name: 'NodeOverridePanel' }
         line-height: 32px;
       }
     }
+
+    .override-warn {
+      font-size: 12px;
+      color: var(--el-color-danger);
+      margin: 4px 0 0 0;
+      line-height: 1.4;
+    }
+  }
+
+  .node-issue-tag {
+    margin-left: auto;
+    flex-shrink: 0;
   }
 }
 </style>

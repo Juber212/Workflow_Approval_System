@@ -47,7 +47,14 @@
             maxlength="100"
             show-word-limit
             style="max-width: 480px"
+            @blur="handleNameBlur"
           />
+          <div class="name-hint">
+            <el-icon v-if="form.name.trim().length >= 2"><InfoFilled /></el-icon>
+            <span v-if="form.name.trim().length >= 2" class="hint-text">
+              建议使用唯一、易识别的名称，方便后续查找与追踪
+            </span>
+          </div>
         </el-form-item>
 
         <el-form-item label="补充说明" prop="description">
@@ -77,10 +84,29 @@
     <div class="section" v-if="selectedTemplate && templateNodes.length > 0">
       <h3 class="section-title">3. 节点配置调整</h3>
       <NodeOverridePanel
+        ref="nodePanelRef"
         :nodes="templateNodes"
         :overrides="nodeOverrides"
         @update:overrides="nodeOverrides = $event"
       />
+
+      <!-- 节点配置问题汇总 -->
+      <el-alert
+        v-if="nodeIssues.length > 0"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="node-issues-alert"
+      >
+        <template #title>
+          <span>以下节点配置存在问题，请修正后提交：</span>
+        </template>
+        <ul class="issue-list">
+          <li v-for="err in nodeIssues" :key="err.nodeId">
+            <strong>{{ err.nodeName }}</strong>：{{ err.issues.join('、') }}
+          </li>
+        </ul>
+      </el-alert>
     </div>
 
     <!-- 底部操作栏 -->
@@ -100,9 +126,10 @@
 
 <script setup lang="ts">
 /** 发起流程实例页面 —— 选择模板 → 填写信息 → 调整节点配置 → 发起 */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
   getTemplates,
@@ -118,6 +145,8 @@ const router = useRouter()
 const loadingTemplates = ref(false)
 const submitting = ref(false)
 const formRef = ref<FormInstance>()
+/** NodeOverridePanel 组件引用 */
+const nodePanelRef = ref<InstanceType<typeof import('./components/NodeOverridePanel.vue')['default']> | null>(null)
 
 /** 已发布的模板列表 */
 const publishedTemplates = ref<TemplateItem[]>([])
@@ -145,16 +174,27 @@ const formRules: FormRules = {
 
 /** 节点覆盖配置：{ [nodeId]: { assignee_id?, deadline?, checkers_ids?, approvers_ids?, skip? } } */
 const nodeOverrides = ref<Record<number, Record<string, any>>>({})
+/** 节点校验问题列表 */
+const nodeIssues = ref<{ nodeId: number; nodeName: string; issues: string[] }[]>([])
 
-/** 是否可以提交 */
+/** 是否可以提交（名称有效 + 无严重校验问题） */
 const canSubmit = computed(() => {
-  return selectedTemplate.value !== null && form.value.name.trim().length >= 2
+  if (!selectedTemplate.value) return false
+  if (form.value.name.trim().length < 2) return false
+  // 检查是否有空校验人/审批人的节点（跳过节点除外）
+  const hasEmptyRequired = nodeIssues.value.length > 0
+  return !hasEmptyRequired
 })
 
 // ========== 生命周期 ==========
 onMounted(() => {
   loadTemplates()
 })
+
+/** overrides 变更后延迟重新校验（等 DOM 更新） */
+watch(nodeOverrides, () => {
+  setTimeout(refreshNodeIssues, 100)
+}, { deep: true })
 
 // ========== 方法 ==========
 
@@ -171,6 +211,19 @@ async function loadTemplates() {
   }
 }
 
+/** 名称失焦时刷新节点校验（触发不重复，仅做UI提示） */
+function handleNameBlur() {
+  // 名称变更时重新评估节点问题（节点问题不依赖名称，此处仅触发 UI 刷新）
+  refreshNodeIssues()
+}
+
+/** 刷新节点校验问题 */
+function refreshNodeIssues() {
+  if (nodePanelRef.value && typeof nodePanelRef.value.validate === 'function') {
+    nodeIssues.value = nodePanelRef.value.validate()
+  }
+}
+
 /** 选择模板 */
 async function selectTemplate(tpl: TemplateItem) {
   selectedTemplate.value = tpl
@@ -178,6 +231,7 @@ async function selectTemplate(tpl: TemplateItem) {
   form.value.description = ''
   form.value.priority = 'normal'
   nodeOverrides.value = {}
+  nodeIssues.value = []
 
   // 加载模板详情获取节点列表和版本ID
   try {
@@ -206,6 +260,13 @@ async function handleSubmit() {
   // 表单校验
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid || !selectedTemplate.value) return
+
+  // 节点配置校验
+  refreshNodeIssues()
+  if (nodeIssues.value.length > 0) {
+    ElMessage.warning('请修正节点配置问题后再提交')
+    return
+  }
 
   submitting.value = true
   try {
@@ -322,6 +383,43 @@ async function handleSubmit() {
 
   .basic-form {
     margin-top: 8px;
+  }
+
+  // 名称唯一性提示
+  .name-hint {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+
+    .hint-text {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+
+    .el-icon {
+      font-size: 14px;
+      color: var(--el-color-info);
+    }
+  }
+
+  // 节点配置问题汇总
+  .node-issues-alert {
+    margin-top: 16px;
+
+    .issue-list {
+      margin: 0;
+      padding-left: 18px;
+
+      li {
+        font-size: 13px;
+        line-height: 1.8;
+
+        strong {
+          color: var(--el-color-danger);
+        }
+      }
+    }
   }
 
   .footer-bar {
