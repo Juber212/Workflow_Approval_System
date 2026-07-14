@@ -18,8 +18,19 @@ from app.models import (
     User,
     Organization,
     Task,
+    CheckRecord,
+    Approval,
+    File,
 )
-from app.schemas.instance import CreateInstanceRequest, InstanceListItem
+from app.schemas.instance import (
+    CreateInstanceRequest,
+    InstanceListItem,
+    DetailNodeInfo,
+    NodeFileBrief,
+    CheckRecordBrief,
+    ApprovalBrief,
+    LogItemBrief,
+)
 from app.api.deps import CurrentUser
 from app.engine.flow_engine import (
     calculate_incoming_counts,
@@ -347,11 +358,13 @@ async def list_instances(
 
 
 async def _get_instance_node_stats(db: AsyncSession, instance_id: int) -> dict:
-    """获取实例节点统计：总节点数、已完成/跳过节点数"""
+    """获取实例节点统计：总节点数、已完成/跳过节点数（大小写不敏感）"""
     stmt = select(
         func.count(InstanceNode.id).label("total"),
         func.sum(
-            func.if_(InstanceNode.status.in_(["finished", "skipped"]), 1, 0)
+            func.if_(
+                func.lower(InstanceNode.status).in_(["finished", "skipped"]), 1, 0
+            )
         ).label("processed"),
     ).where(InstanceNode.instance_id == instance_id)
 
@@ -376,3 +389,248 @@ async def _get_current_assignee_name(db: AsyncSession, instance_id: int) -> str 
     )
     result = await db.execute(stmt)
     return result.scalar()
+
+
+# ==================== 实例详情 ====================
+
+
+async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
+    """查询实例完整详情 —— 基础信息 + 节点列表（含文件/校验/审批/日志） + 操作日志分页
+
+    Args:
+        db: 异步数据库会话
+        instance_id: 实例 ID
+
+    Returns:
+        完整实例详情字典，含嵌套节点信息
+    """
+    # ========== 1. 查询实例基本信息（联表获取名称） ==========
+    stmt = (
+        select(
+            FlowInstance,
+            User.real_name.label("initiator_name"),
+            Organization.name.label("organization_name"),
+            FlowTemplate.name.label("template_name"),
+            FlowVersion.version_number,
+        )
+        .join(User, FlowInstance.initiator_id == User.id)
+        .join(Organization, FlowInstance.organization_id == Organization.id)
+        .outerjoin(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
+        .outerjoin(FlowVersion, FlowInstance.version_id == FlowVersion.id)
+        .where(FlowInstance.id == instance_id)
+    )
+    result = await db.execute(stmt)
+    row = result.first()
+
+    if row is None:
+        from app.core.exceptions import AppException
+        from app.core.error_codes import ErrorCode
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+
+    instance = row[0]
+    initiator_name = row[1]
+    org_name = row[2]
+    template_name = row[3]
+    version_number = row[4]
+
+    # ========== 2. 查询所有节点（按 sort_order 排序） ==========
+    nodes_stmt = (
+        select(InstanceNode)
+        .where(InstanceNode.instance_id == instance_id)
+        .order_by(InstanceNode.sort_order)
+    )
+    nodes_result = await db.execute(nodes_stmt)
+    node_models = nodes_result.scalars().all()
+
+    # 获取节点相关人员名称（批量查询，避免 N+1）
+    user_ids: set[int | None] = set()
+    for n in node_models:
+        if n.assignee_id:
+            user_ids.add(n.assignee_id)
+    user_ids.discard(None)
+
+    user_name_map: dict[int, str] = {}
+    if user_ids:
+        users_stmt = select(User.id, User.real_name).where(User.id.in_(list(user_ids)))
+        users_result = await db.execute(users_stmt)
+        for uid, uname in users_result:
+            user_name_map[uid] = uname
+
+    # ========== 3. 节点统计 ==========
+    total_nodes = len(node_models)
+    processed_count = sum(
+        1 for n in node_models
+        if (n.status or "").lower() in ("finished", "skipped")
+    )
+
+    # ========== 4. 批量查询各节点的文件/校验/审批 ==========
+    node_ids = [n.id for n in node_models]
+
+    # 文件（按 node_id 分组）
+    files_by_node: dict[int, list] = {}
+    if node_ids:
+        files_stmt = (
+            select(File, User.real_name.label("uploader_name"))
+            .join(User, File.uploader_id == User.id)
+            .where(File.node_id.in_(node_ids))
+            .order_by(File.created_at)
+        )
+        files_result = await db.execute(files_stmt)
+        for f, u_name in files_result:
+            if f.node_id not in files_by_node:
+                files_by_node[f.node_id] = []
+            files_by_node[f.node_id].append(
+                NodeFileBrief(
+                    id=f.id,
+                    original_name=f.original_name,
+                    file_size=f.file_size,
+                    uploader_id=f.uploader_id,
+                    uploader_name=u_name or "",
+                    upload_type=(f.upload_type or "normal").lower(),
+                    round=f.round,
+                    created_at=f.created_at,
+                )
+            )
+
+    # 校验记录（按 node_id 分组）
+    checks_by_node: dict[int, list] = {}
+    if node_ids:
+        checks_stmt = (
+            select(CheckRecord, User.real_name.label("checker_name"))
+            .join(User, CheckRecord.checker_id == User.id)
+            .where(CheckRecord.node_id.in_(node_ids))
+            .order_by(CheckRecord.created_at)
+        )
+        checks_result = await db.execute(checks_stmt)
+        for c, c_name in checks_result:
+            if c.node_id not in checks_by_node:
+                checks_by_node[c.node_id] = []
+            checks_by_node[c.node_id].append(
+                CheckRecordBrief(
+                    id=c.id,
+                    checker_id=c.checker_id,
+                    checker_name=c_name or "",
+                    status=(c.status or "pending").lower(),
+                    opinion=c.opinion,
+                    decided_at=c.decided_at,
+                )
+            )
+
+    # 审批记录（按 node_id 分组）
+    approvals_by_node: dict[int, list] = {}
+    if node_ids:
+        approvals_stmt = (
+            select(Approval, User.real_name.label("approver_name"))
+            .join(User, Approval.approver_id == User.id)
+            .where(Approval.node_id.in_(node_ids))
+            .order_by(Approval.created_at)
+        )
+        approvals_result = await db.execute(approvals_stmt)
+        for a, a_name in approvals_result:
+            if a.node_id not in approvals_by_node:
+                approvals_by_node[a.node_id] = []
+            approvals_by_node[a.node_id].append(
+                ApprovalBrief(
+                    id=a.id,
+                    approver_id=a.approver_id,
+                    approver_name=a_name or "",
+                    status=(a.status or "pending").lower(),
+                    opinion=a.opinion,
+                    signature_applied=a.signature_applied,
+                    decided_at=a.decided_at,
+                )
+            )
+
+    # ========== 5. 组装节点列表 ==========
+    nodes: list[DetailNodeInfo] = []
+    for n in node_models:
+        # 标准化 checkers/approvers 为 dict 列表格式
+        def _normalize_personnel(raw: list | None) -> list[dict] | None:
+            """将 [1, 2] 转为 [{\"user_id\": 1}, {\"user_id\": 2}]，已是正确格式则不变"""
+            if raw is None:
+                return None
+            result = []
+            for item in raw:
+                if isinstance(item, dict):
+                    result.append(item)
+                elif isinstance(item, int):
+                    result.append({"user_id": item})
+            return result if result else None
+
+        nodes.append(DetailNodeInfo(
+            id=n.id,
+            name=n.name,
+            is_start=n.is_start,
+            is_end=n.is_end,
+            is_optional=n.is_optional,
+            is_skipped=n.is_skipped,
+            status=(n.status or "waiting").lower(),
+            sort_order=n.sort_order,
+            round=n.round,
+            assignee_id=n.assignee_id,
+            assignee_name=user_name_map.get(n.assignee_id) if n.assignee_id else None,
+            deadline=n.deadline,
+            time_limit_days=n.time_limit_days,
+            checkers=_normalize_personnel(n.checkers),
+            approvers=_normalize_personnel(n.approvers),
+            require_file=n.require_file,
+            approval_strategy=n.approval_strategy,
+            started_at=n.started_at,
+            completed_at=n.completed_at,
+            files=files_by_node.get(n.id, []),
+            checks=checks_by_node.get(n.id, []),
+            approvals=approvals_by_node.get(n.id, []),
+        ))
+
+    # ========== 6. 操作日志（前 50 条，后续可做分页） ==========
+    logs_stmt = (
+        select(OperationLog, User.real_name.label("operator_name"))
+        .outerjoin(User, OperationLog.operator_id == User.id)
+        .where(OperationLog.instance_id == instance_id)
+        .order_by(OperationLog.created_at.desc())
+        .limit(50)
+    )
+    logs_result = await db.execute(logs_stmt)
+    log_items: list[dict] = []
+    for log, op_name in logs_result:
+        log_items.append({
+            "id": log.id,
+            "operator_type": (log.operator_type or "user").lower(),
+            "operator_id": log.operator_id,
+            "operator_name": op_name,
+            "node_id": log.node_id,
+            "operation_type": log.operation_type,
+            "round": log.round,
+            "description": log.description,
+            "detail": log.detail,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+
+    # ========== 7. 组装最终结果 ==========
+    return {
+        "id": instance.id,
+        "name": instance.name,
+        "description": instance.description,
+        "template_id": instance.template_id,
+        "template_name": template_name or "",
+        "version_id": instance.version_id,
+        "version_number": version_number,
+        "organization_id": instance.organization_id,
+        "organization_name": org_name or "",
+        "initiator_id": instance.initiator_id,
+        "initiator_name": initiator_name or "",
+        "priority": (instance.priority or "normal").lower(),
+        "status": (instance.status or "created").lower(),
+        "archive_status": (instance.archive_status or "").lower() if instance.archive_status else None,
+        "termination_reason": instance.termination_reason,
+        "current_node_index": processed_count,
+        "total_nodes": total_nodes,
+        "initiated_at": instance.initiated_at,
+        "completed_at": instance.completed_at,
+        "terminated_at": instance.terminated_at,
+        "nodes": nodes,
+        "logs": {
+            "items": log_items,
+            "total": len(log_items),
+        },
+    }

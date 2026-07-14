@@ -11,7 +11,7 @@ from app.schemas.instance import (
     InstanceResponse,
     InstanceListResponse,
 )
-from app.services.instance_service import create_instance, list_instances
+from app.services.instance_service import create_instance, list_instances, get_instance_detail
 
 router = APIRouter(prefix="/api/v1", tags=["流程实例"])
 
@@ -68,4 +68,18 @@ async def get_instances(
         page_size=page_size,
     )
 
+    return ApiResponse.ok(result)
+
+
+@router.get("/instances/{instance_id}")
+async def get_instance(
+    instance_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询流程实例详情
+
+    返回完整聚合数据：基本信息 + 节点列表（含文件/校验/审批） + 进度 + 操作日志分页。
+    """
+    result = await get_instance_detail(db, instance_id)
     return ApiResponse.ok(result)
