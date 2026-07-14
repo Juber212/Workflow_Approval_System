@@ -1,4 +1,4 @@
-/** 流程模板 API */
+/** 流程模板 API —— 简化版：无版本、无状态 */
 import request from './request'
 
 // ==================== 类型 ====================
@@ -8,6 +8,13 @@ export interface OrgCardItem {
   name: string
   template_count: number
   running_instance_count: number
+  latest_update_time: string | null
+  is_current_user_org: boolean
+}
+
+export interface OrgCardListResponse {
+  organizations: OrgCardItem[]
+  total_running_instances: number
 }
 
 export interface TemplateItem {
@@ -16,13 +23,8 @@ export interface TemplateItem {
   description: string | null
   organization_id: number
   organization_name: string | null
-  status: string
-  current_version: number
   node_count: number
   instance_count: number
-  can_edit: boolean
-  can_publish: boolean
-  can_start: boolean
   created_by: number
   created_by_name: string | null
   created_at: string | null
@@ -35,13 +37,10 @@ export interface TemplateDetail {
   description: string | null
   organization_id: number
   organization_name: string | null
-  status: string
-  current_version: number
   node_count: number
   instance_count: number
   nodes: TemplateNodeItem[]
   edges: TemplateEdgeItem[]
-  versions: VersionItem[]
   created_by: number
   created_by_name: string | null
   created_at: string | null
@@ -71,32 +70,23 @@ export interface TemplateEdgeItem {
   target_node_id: number
 }
 
-export interface VersionItem {
-  id: number
-  version_number: number
-  status: string
-  node_count: number
-  edge_count: number
-  has_soft_overrides: boolean
-  published_by: number | null
-  published_by_name: string | null
-  published_at: string | null
-}
-
 export interface TemplateListParams {
   page?: number
   page_size?: number
   organization_id?: number
-  status?: string
   keyword?: string
 }
 
 // ==================== API ====================
 
 /** 组织卡片列表 */
-export async function getTemplateOrganizations(): Promise<OrgCardItem[]> {
+export async function getTemplateOrganizations(): Promise<OrgCardListResponse> {
   const res = await request.get('/templates/organizations')
-  return res.data
+  const payload = res.data
+  if (Array.isArray(payload)) {
+    return { organizations: payload, total_running_instances: 0 }
+  }
+  return payload
 }
 
 /** 模板列表 */
@@ -113,7 +103,8 @@ export async function getTemplateDetail(id: number): Promise<TemplateDetail> {
 
 /** 创建模板 */
 export async function createTemplate(data: { name: string; description?: string | null; organization_id: number }) {
-  await request.post('/templates', data)
+  const res = await request.post('/templates', data)
+  return res.data as { id: number; name: string }
 }
 
 /** 更新模板 */
@@ -124,22 +115,4 @@ export async function updateTemplate(id: number, data: { name: string; descripti
 /** 删除模板 */
 export async function deleteTemplate(id: number) {
   await request.delete(`/templates/${id}`)
-}
-
-/** 发布模板 */
-export async function publishTemplate(id: number) {
-  const res = await request.post(`/templates/${id}/publish`)
-  return res.data as { version_id: number; version_number: number; node_count: number; edge_count: number }
-}
-
-/** 停用模板 */
-export async function disableTemplate(id: number) {
-  const res = await request.post(`/templates/${id}/disable`)
-  return res.data
-}
-
-/** 创建新版本（从已发布/已停用复制为草稿） */
-export async function newVersionTemplate(id: number) {
-  const res = await request.post(`/templates/${id}/new-version`)
-  return res.data as { id: number; status: string; current_version: number }
 }

@@ -46,6 +46,21 @@ export async function logoutApi(): Promise<void> {
   await request.post('/auth/logout')
 }
 
+/** 修改自己的密码 */
+export async function changePasswordApi(data: { old_password: string; new_password: string }): Promise<void> {
+  await request.put('/auth/password', data)
+}
+
+/** 上传签名图片（multipart/form-data） */
+export async function uploadSignatureApi(file: File): Promise<{ signature_url: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await request.post('/auth/signature', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data
+}
+
 /** 将后端返回的用户数据转为前端 UserInfo 格式 */
 export function toUserInfo(data: {
   user_id: number

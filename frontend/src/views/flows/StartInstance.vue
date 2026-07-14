@@ -2,8 +2,6 @@
   <div class="start-instance">
     <!-- 面包屑导航 -->
     <div class="page-breadcrumb">
-      <router-link to="/dashboard">Dashboard</router-link>
-      <span class="breadcrumb-sep">/</span>
       <router-link to="/flows">流程管理</router-link>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">发起流程{{ selectedTemplate ? ' · ' + selectedTemplate.name : '' }}</span>
@@ -328,7 +326,6 @@ async function handleSubmit() {
 
     const result = await createInstance({
       template_id: selectedTemplate.value.id,
-      version_id: selectedVersionId.value,
       name: form.value.name.trim(),
       description: form.value.description?.trim() || null,
       priority: form.value.priority,

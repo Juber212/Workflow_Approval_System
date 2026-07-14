@@ -1,12 +1,6 @@
 <template>
   <div class="admin-page">
     <!-- 面包屑导航 -->
-    <div class="page-breadcrumb">
-      <router-link to="/dashboard">Dashboard</router-link>
-      <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">系统管理</span>
-    </div>
-
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">

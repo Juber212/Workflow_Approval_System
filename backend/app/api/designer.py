@@ -1,10 +1,13 @@
-"""流程设计器 API —— 画布数据保存/加载 + 单节点 CRUD"""
+"""流程设计器 API —— 画布数据保存/加载 + 单节点/连线 CRUD"""
+
 from fastapi import APIRouter, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.common import ApiResponse
-from app.services.designer_service import save_design_data, add_node, update_node, delete_node, add_edge, delete_edge
+from app.services.designer_service import (
+    save_design_data, add_node, update_node, delete_node, add_edge, delete_edge,
+)
 from app.api.deps import get_current_active_user, CurrentUser
 
 router = APIRouter(prefix="/api/v1", tags=["流程设计器"])
@@ -17,16 +20,12 @@ async def put_design_data(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """批量保存设计器内容 —— 节点坐标 + 连线，自动判断新增/更新/删除"""
+    """批量保存设计器内容 —— 节点坐标 + 连线"""
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
     result = await save_design_data(db, template_id, nodes, edges)
     await db.commit()
-
-    msg = "设计器内容已保存"
-    if result["is_hard_modified"]:
-        msg = "已发布模板硬修改，版本已递增并回到草稿，请编辑后重新发布"
-    return ApiResponse.ok(result, message=msg)
+    return ApiResponse.ok(result, message="设计器内容已保存")
 
 
 # ==================== 单节点 CRUD ====================
@@ -39,40 +38,32 @@ async def post_node(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """添加单个工作节点 —— 自动设为中间节点（非开始/非结束）"""
+    """添加单个工作节点"""
     result = await add_node(db, template_id, data)
     await db.commit()
-
-    msg = "节点已添加"
-    if result["is_hard_modified"]:
-        msg = "已发布模板添加节点为硬修改，版本已递增并回到草稿"
-    return ApiResponse.ok(result, message=msg)
+    return ApiResponse.ok(result, message="节点已添加")
 
 
 @router.put("/templates/{template_id}/nodes/{node_id}")
 async def put_node(
-    template_id: int,
-    node_id: int,
+    template_id: int, node_id: int,
     data: dict = Body(..., description="需更新的字段"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """更新单个节点 —— 自动判定软/硬修改"""
+    """更新单个节点"""
     result = await update_node(db, node_id, data)
     await db.commit()
-
-    msg = "节点已更新（软修改）" if not result["is_hard_modified"] else "硬字段变更，版本已递增并回到草稿"
-    return ApiResponse.ok(result, message=msg)
+    return ApiResponse.ok(result, message="节点已更新")
 
 
 @router.delete("/templates/{template_id}/nodes/{node_id}")
 async def del_node(
-    template_id: int,
-    node_id: int,
+    template_id: int, node_id: int,
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """删除节点 —— 系统节点不可删除，关联连线自动清除"""
+    """删除节点 —— 系统节点不可删除"""
     await delete_node(db, node_id)
     await db.commit()
     return ApiResponse.ok(message="节点已删除")
@@ -88,7 +79,7 @@ async def post_edge(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """添加单条连线 —— 禁止自环/重复，开始不可作target，结束不可作source，支持fork和join"""
+    """添加单条连线"""
     source_node_id = data.get("source_node_id")
     target_node_id = data.get("target_node_id")
     if not source_node_id or not target_node_id:
@@ -98,25 +89,16 @@ async def post_edge(
 
     result = await add_edge(db, template_id, int(source_node_id), int(target_node_id))
     await db.commit()
-
-    msg = "连线已添加"
-    if result["is_hard_modified"]:
-        msg = "已发布模板添加连线为硬修改，版本已递增并回到草稿"
-    return ApiResponse.ok(result, message=msg)
+    return ApiResponse.ok(result, message="连线已添加")
 
 
 @router.delete("/templates/{template_id}/edges/{edge_id}")
 async def del_edge(
-    template_id: int,
-    edge_id: int,
+    template_id: int, edge_id: int,
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """删除单条连线 —— 已发布模板自动触发硬修改"""
+    """删除单条连线"""
     result = await delete_edge(db, edge_id, template_id)
     await db.commit()
-
-    msg = "连线已删除"
-    if result["is_hard_modified"]:
-        msg = "已发布模板删除连线为硬修改，版本已递增并回到草稿"
-    return ApiResponse.ok(message=msg)
+    return ApiResponse.ok(result, message="连线已删除")

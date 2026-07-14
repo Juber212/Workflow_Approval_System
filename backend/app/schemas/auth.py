@@ -29,3 +29,9 @@ class UserInfoResponse(BaseModel):
     organization_id: int | None = None
     organization_name: str | None = None
     has_signature: bool = False  # 是否已上传签名图片
+
+
+class ChangePasswordRequest(BaseModel):
+    """用户修改自己的密码"""
+    old_password: str = Field(..., min_length=1, description="原密码")
+    new_password: str = Field(..., min_length=6, max_length=32, description="新密码（6-32位）")

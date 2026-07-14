@@ -9,6 +9,10 @@ export const useUserStore = defineStore('user', () => {
   const userInfo = ref<UserInfo | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)
+  /** 当前用户是否为所长 */
+  const isManager = computed(() => userInfo.value?.roles?.includes('manager') ?? false)
+  /** 当前用户是否为系统管理员 */
+  const isAdmin = computed(() => userInfo.value?.roles?.includes('system_admin') ?? false)
 
   /** 登录：调用 API → 存储 token → 解析用户信息 */
   async function login(username: string, password: string) {
@@ -44,5 +48,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('token')
   }
 
-  return { token, userInfo, isLoggedIn, login, fetchUserInfo, logout, clearToken }
+  return { token, userInfo, isLoggedIn, isManager, isAdmin, login, fetchUserInfo, logout, clearToken }
 })

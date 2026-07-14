@@ -20,6 +20,10 @@ from app.api.configs import router as configs_router
 from app.api.templates import router as templates_router
 from app.api.designer import router as designer_router
 from app.api.instances import router as instances_router
+from app.api.tasks import router as tasks_router
+from app.api.checks import router as checks_router
+from app.api.approvals import router as approvals_router
+from app.api.dashboard import router as dashboard_router
 from app.core.database import async_session_factory
 from app.services.config_service import config_service
 
@@ -78,13 +82,17 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 async def global_exception_handler(_request: Request, exc: Exception):
     """未知异常 → 500，不泄露堆栈"""
     import logging
+    import traceback
 
-    logger = logging.getLogger("app")
-    logger.exception(f"未捕获异常: {exc}")
+    logger = logging.getLogger(__name__)
+    logger.error(f"全局异常: {type(exc).__name__}: {exc}")
+    logger.error(traceback.format_exc())
+
     return JSONResponse(
         status_code=200,
         content=ApiResponse.fail(
-            ErrorCode.INTERNAL_ERROR, "服务器内部错误，请联系管理员"
+            ErrorCode.INTERNAL_ERROR,
+            f"[DEBUG] {type(exc).__name__}: {exc}",
         ).model_dump(),
     )
 
@@ -98,6 +106,10 @@ app.include_router(configs_router)
 app.include_router(templates_router)
 app.include_router(designer_router)
 app.include_router(instances_router)
+app.include_router(tasks_router)
+app.include_router(checks_router)
+app.include_router(approvals_router)
+app.include_router(dashboard_router)
 
 # ================= 健康检查 =================
 

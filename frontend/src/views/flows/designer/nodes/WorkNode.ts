@@ -70,6 +70,7 @@ class WorkNodeModel extends HtmlNodeModel {
     this.width = 190
     this.height = 112
     this.radius = 8
+    this.textEdit = false // 禁用双击文字编辑
   }
 
   /** 动态边框样式：已配置 = 实线蓝边框，未配置 = 橙色虚线 */
@@ -122,10 +123,10 @@ class WorkNodeView extends HtmlNode {
 
 /** 注册工作节点到 LogicFlow 实例 */
 function registerWorkNode(lf: LogicFlow) {
-  lf.register('work-node', {
+  lf.register('work-node', () => ({
     model: WorkNodeModel,
     view: WorkNodeView,
-  })
+  }))
 }
 
 export { WorkNodeModel, WorkNodeView, registerWorkNode, isConfigured }

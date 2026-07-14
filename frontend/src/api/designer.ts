@@ -23,9 +23,9 @@ export interface DesignerNode {
 
 /** 设计器连线数据 */
 export interface DesignerEdge {
-  id?: number | null        // 已有连线 id（null/undefined 表示新增）
-  source_node_id: number   // 源节点 id
-  target_node_id: number   // 目标节点 id
+  id?: number | null              // 已有连线 id（null/undefined 表示新增）
+  source_node_id: number | string // 源节点 id（新节点可为临时字符串 ID）
+  target_node_id: number | string // 目标节点 id（新节点可为临时字符串 ID）
 }
 
 /** 批量保存请求体 */
@@ -39,5 +39,5 @@ export interface SaveDesignData {
 /** 批量保存设计器内容 */
 export async function saveDesign(templateId: number, data: SaveDesignData) {
   const res = await request.put(`/templates/${templateId}/design`, data)
-  return res.data as { template_id: number; node_count: number; edge_count: number; is_hard_modified: boolean }
+  return res.data as { template_id: number; node_count: number; edge_count: number }
 }

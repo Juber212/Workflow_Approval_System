@@ -14,7 +14,6 @@ class FlowInstance(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False, comment="流程实例名称")
     description: Mapped[str | None] = mapped_column(String(500), comment="补充说明")
     template_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_templates.id"), nullable=False, comment="使用的模板")
-    version_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_versions.id"), nullable=False, comment="基于的版本")
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, comment="所属组织")
     initiator_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="发起人")
     priority: Mapped[str] = mapped_column(String(20), default="normal", comment="优先级")

@@ -19,7 +19,6 @@ class NodeOverride(BaseModel):
 class CreateInstanceRequest(BaseModel):
     """发起流程实例请求"""
     template_id: int = Field(..., description="模板 ID")
-    version_id: int = Field(..., description="版本 ID（必须是已发布版本）")
     name: str = Field(..., min_length=2, max_length=100, description="实例名称")
     description: str | None = Field(None, max_length=500, description="实例描述")
     priority: str = Field("normal", description="优先级：urgent / high / normal / low")
@@ -42,7 +41,6 @@ class InstanceResponse(BaseModel):
     id: int
     name: str
     template_id: int
-    version_id: int
     organization_id: int
     initiator_id: int
     priority: str
@@ -164,8 +162,6 @@ class InstanceDetailResponse(BaseModel):
     description: str | None = None
     template_id: int
     template_name: str = ""
-    version_id: int
-    version_number: int | None = None
     organization_id: int
     organization_name: str = ""
     initiator_id: int
@@ -181,3 +177,32 @@ class InstanceDetailResponse(BaseModel):
     terminated_at: datetime | None = None
     nodes: list[DetailNodeInfo] = []
     logs: dict | None = None  # {"items": [...], "total": N}
+
+
+# ==================== 终止实例 ====================
+
+class TerminateInstanceRequest(BaseModel):
+    """终止流程实例请求"""
+    reason: str = Field(
+        ..., min_length=1, max_length=500,
+        description="终止原因（必填，1-500字符）"
+    )
+
+
+# ==================== 紧急换人 ====================
+
+class ChangePersonnelRequest(BaseModel):
+    """紧急换人请求 —— 所有字段选填，仅更新传入的字段"""
+    assignee_id: int | None = Field(None, description="新负责人 ID")
+    checkers: list[dict] | None = Field(None, description="新校验人列表 [{\"user_id\": N}]")
+    approvers: list[dict] | None = Field(None, description="新审批人列表 [{\"user_id\": N}]")
+
+
+# ==================== 优先级修改 ====================
+
+class ChangePriorityRequest(BaseModel):
+    """修改优先级请求"""
+    priority: str = Field(
+        ..., pattern="^(urgent|high|normal|low)$",
+        description="优先级：urgent / high / normal / low"
+    )

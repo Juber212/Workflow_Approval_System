@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM 模型 —— 17 张表"""
+"""SQLAlchemy ORM 模型"""
 
 from app.models.enums import (
     TemplateStatus, VersionStatus, InstanceStatus, ArchiveStatus, Priority,
@@ -12,7 +12,6 @@ from app.models.system_config import SystemConfig
 from app.models.flow_template import FlowTemplate
 from app.models.template_node import TemplateNode
 from app.models.template_edge import TemplateEdge
-from app.models.flow_version import FlowVersion
 from app.models.flow_instance import FlowInstance
 from app.models.instance_node import InstanceNode
 from app.models.instance_edge import InstanceEdge
@@ -26,7 +25,7 @@ __all__ = [
     "TemplateStatus", "VersionStatus", "InstanceStatus", "ArchiveStatus", "Priority",
     "InstanceNodeStatus", "TaskStatus", "ApprovalStatus", "CheckStatus", "OperatorType", "UploadType",
     "Organization", "User", "Role", "UserRole", "SystemConfig",
-    "FlowTemplate", "TemplateNode", "TemplateEdge", "FlowVersion",
+    "FlowTemplate", "TemplateNode", "TemplateEdge",
     "FlowInstance", "InstanceNode", "InstanceEdge",
     "Task", "CheckRecord", "Approval", "File", "OperationLog",
 ]

@@ -1,0 +1,57 @@
+/** 审批 API */
+import request from './request'
+
+export interface ApprovalListItem {
+  id: number
+  instance_id: number
+  instance_name: string
+  node_id: number
+  node_name: string
+  task_id: number | null
+  approver_id: number
+  status: string
+  is_end_node: boolean
+  created_at: string | null
+}
+
+export interface ApprovalDetail {
+  id: number
+  instance_id: number
+  instance_name: string
+  node_id: number
+  node_name: string
+  node_description: string | null
+  task_id: number | null
+  approver_id: number
+  approver_name: string
+  status: string
+  opinion: string | null
+  is_end_node: boolean
+  files: { id: number; original_name: string; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
+  check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]
+  approval_progress: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]
+  reject_target_nodes: { id: number; name: string; sort_order: number; status: string }[]
+  signature_applied: boolean
+  decided_at: string | null
+  created_at: string | null
+}
+
+export async function getApprovals(params: { status?: string; keyword?: string; page?: number; page_size?: number }) {
+  const res = await request.get('/approvals', { params })
+  return res.data as { items: ApprovalListItem[]; total: number; page: number; page_size: number }
+}
+
+export async function getApprovalDetail(id: number): Promise<ApprovalDetail> {
+  const res = await request.get(`/approvals/${id}`)
+  return res.data
+}
+
+export async function approveApproval(id: number, opinion?: string | null) {
+  const res = await request.post(`/approvals/${id}/approve`, { opinion })
+  return res
+}
+
+export async function rejectApproval(id: number, opinion: string, target_node_id?: number | null) {
+  const res = await request.post(`/approvals/${id}/reject`, { opinion, target_node_id })
+  return res
+}

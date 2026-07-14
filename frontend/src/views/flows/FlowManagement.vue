@@ -1,273 +1,293 @@
 <template>
+  <!-- 流程管理全局视图 —— 组织卡片 + 全部流程实例（PRD P03） -->
   <div class="flow-management">
-    <!-- 面包屑导航 -->
-    <div class="page-breadcrumb">
-      <router-link to="/dashboard">Dashboard</router-link>
-      <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">流程管理</span>
-    </div>
-
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
         <h1 class="page-header__title">流程管理</h1>
-        <p class="page-header__subtitle">管理流程模板与实例，查看各组织流程运行概况</p>
+        <p class="page-header__subtitle">各组织流程运行概览，点击卡片进入对应组织</p>
+      </div>
+      <div class="page-header__actions">
+        <el-button type="primary" @click="showTemplatePicker = true">发起流程</el-button>
       </div>
     </div>
 
-    <!-- Tab 切换 -->
-    <el-tabs v-model="activeTab" class="flow-tabs">
-      <el-tab-pane label="流程模板" name="template" />
-      <el-tab-pane label="流程实例" name="instance" />
-    </el-tabs>
-
-    <!-- 模板 Tab -->
-    <template v-if="activeTab === 'template'">
-      <OrgCardList
-        :orgs="orgs"
-        :active-org-id="selectedOrgId"
-        @select="handleOrgSelect"
-      />
-
-      <el-divider />
-
-      <TemplateTable
-        :items="templates"
-        :loading="loading"
-        :total="total"
-        @search="handleSearch"
-        @create="handleCreate"
-        @detail="handleDetail"
-        @edit="handleEdit"
-        @publish="handlePublish"
-        @disable="handleDisable"
-        @new-version="handleNewVersion"
-        @delete="handleDelete"
-        @start="handleStart"
-        @page-change="handlePageChange"
-      />
-    </template>
-
-    <!-- 实例 Tab（占位） -->
-    <el-empty v-else description="流程实例功能开发中" />
-
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog
-      v-model="formVisible"
-      :title="editingTpl ? '编辑模板' : '新建模板'"
-      width="460px"
-      :close-on-click-modal="false"
-    >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="模板名称" prop="name">
-          <el-input v-model="form.name" maxlength="50" placeholder="请输入模板名称" />
-        </el-form-item>
-        <el-form-item label="所属组织" prop="organization_id">
-          <el-select v-model="form.organization_id" :disabled="!!editingTpl" placeholder="请选择组织" style="width: 100%">
-            <el-option v-for="o in orgs" :key="o.id" :label="o.name" :value="o.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="form.description" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="选填" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">确定</el-button>
-      </template>
+    <!-- 选择模板弹窗 -->
+    <el-dialog v-model="showTemplatePicker" title="选择流程模板" width="560px">
+      <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable class="tpl-search" />
+      <el-table :data="templateList" v-loading="tplLoading" @row-click="handlePickTemplate" style="cursor:pointer;margin-top:12px" max-height="360">
+        <el-table-column prop="name" label="模板名称" min-width="140" />
+        <el-table-column prop="organization_name" label="所属组织" width="100" />
+        <el-table-column prop="node_count" label="节点数" width="70" align="center" />
+        <el-table-column prop="instance_count" label="运行实例" width="80" align="center" />
+        <el-table-column label="操作" width="80" align="center">
+          <template #default>
+            <el-button text type="primary" size="small">选择</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="showTemplatePicker = false">取消</el-button></template>
     </el-dialog>
+
+    <!-- 组织卡片列表（点击跳转 /flows/organization/:id） -->
+    <OrgCardList :orgs="orgs" @select="handleOrgSelect" />
+
+    <!-- 全部流程实例 -->
+    <div class="section-divider">
+      <h3 class="section-label">全部流程实例</h3>
+    </div>
+
+    <!-- 实例操作栏 -->
+    <div class="instance-toolbar">
+      <div class="filter-tabs">
+        <button
+          v-for="f in instanceFilters" :key="f.value"
+          class="filter-tab" :class="{ 'is-active': instanceStatusFilter === f.value }"
+          @click="handleInstanceFilter(f.value)"
+        >
+          <span class="filter-label">{{ f.label }}</span>
+          <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
+        </button>
+      </div>
+      <div class="instance-toolbar__right">
+        <el-input
+          v-model="instanceKeyword" placeholder="搜索实例名称" clearable
+          :prefix-icon="Search" size="default" style="width: 220px"
+          @input="handleInstanceSearch"
+        />
+      </div>
+    </div>
+
+    <!-- 实例列表 -->
+    <div class="card">
+      <div class="card__body" style="padding:0">
+        <el-table :data="instances" stripe v-loading="instanceLoading"
+          @row-click="handleInstanceRowClick" style="cursor:pointer"
+        >
+          <el-table-column prop="name" label="实例名称" min-width="150">
+            <template #default="{ row }">
+              <span class="inst-name">{{ row.name }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="template_name" label="模板来源" min-width="120" />
+          <el-table-column prop="organization_name" label="所属组织" width="100" />
+          <el-table-column label="当前负责人" min-width="100">
+            <template #default="{ row }">
+              <span class="inst-meta">{{ row.current_assignee_name || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="进度" width="70" align="center">
+            <template #default="{ row }">
+              <span class="inst-progress">{{ row.current_node_index }} / {{ row.total_nodes }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="优先级" width="70" align="center">
+            <template #default="{ row }">
+              <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="initiated_at" label="发起时间" width="140">
+            <template #default="{ row }">
+              <span class="num">{{ fmtTime(row.initiated_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="80" align="center">
+            <template #default="{ row }">
+              <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click.stop="goInstanceDetail(row.id)">查看详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="!instanceLoading && instances.length === 0" style="padding:40px 0;text-align:center">
+          <span style="color:var(--el-text-color-secondary);font-size:14px">暂无流程实例</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <div class="list-pagination" v-if="instanceTotal > instancePageSize">
+      <el-pagination
+        v-model:current-page="instancePage" :page-size="instancePageSize"
+        :total="instanceTotal" layout="prev, pager, next"
+        @current-change="fetchInstances"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+/**
+ * 流程管理全局入口页 —— 组织卡片 + 全部流程实例（PRD P03）
+ * 点击组织卡片 → 跳转 /flows/organization/:id
+ */
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
-import {
-  getTemplateOrganizations,
-  getTemplates,
-  createTemplate,
-  updateTemplate,
-  deleteTemplate,
-  publishTemplate,
-  disableTemplate,
-  newVersionTemplate,
-  type OrgCardItem,
-  type TemplateItem,
-} from '@/api/template'
+import { Search } from '@element-plus/icons-vue'
+import { getTemplateOrganizations, getTemplates, type OrgCardItem, type TemplateItem } from '@/api/template'
+import { getInstances, type InstanceListItem } from '@/api/instance'
 import OrgCardList from './components/OrgCardList.vue'
-import TemplateTable from './components/TemplateTable.vue'
 
 const router = useRouter()
 
-// ========== 数据 ==========
-const activeTab = ref('template')
-const orgs = ref<OrgCardItem[]>([])
-const templates = ref<TemplateItem[]>([])
-const loading = ref(false)
-const total = ref(0)
-const selectedOrgId = ref<number | null>(null)
+// ========== 发起流程：模板选择 ==========
+const showTemplatePicker = ref(false)
+const tplLoading = ref(false)
+const tplKeyword = ref('')
+const templateList = ref<TemplateItem[]>([])
 
-const searchParams = reactive({ keyword: '', status: '' })
-const currentPage = ref(1)
+/** 打开模板选择弹窗时加载模板列表 */
+import { watch } from 'vue'
+watch(showTemplatePicker, (val) => { if (val) fetchTemplateList() })
 
-// ========== 表单 ==========
-const formVisible = ref(false)
-const saving = ref(false)
-const editingTpl = ref<TemplateItem | null>(null)
-const formRef = ref<FormInstance>()
-
-const form = reactive({
-  name: '',
-  description: '' as string | null,
-  organization_id: null as number | null,
-})
-
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
-  organization_id: [{ required: true, message: '请选择组织', trigger: 'change' }],
-}
-
-// ========== 初始化 ==========
-onMounted(async () => {
-  await Promise.all([fetchOrgs(), fetchTemplates()])
-})
-
-async function fetchOrgs() {
-  orgs.value = await getTemplateOrganizations()
-}
-
-async function fetchTemplates() {
-  loading.value = true
+async function fetchTemplateList() {
+  tplLoading.value = true
   try {
-    const data = await getTemplates({
-      page: currentPage.value,
-      organization_id: selectedOrgId.value ?? undefined,
-      keyword: searchParams.keyword || undefined,
-      status: searchParams.status || undefined,
-    })
-    templates.value = data.items
-    total.value = data.total
-  } finally {
-    loading.value = false
-  }
+    const res = await getTemplates({ page_size: 100, keyword: tplKeyword.value || undefined })
+    templateList.value = res.items
+  } catch { /* ignore */ }
+  finally { tplLoading.value = false }
+}
+
+/** 选择模板 → 进入设计器（发起模式） */
+function handlePickTemplate(row: TemplateItem) {
+  showTemplatePicker.value = false
+  router.push(`/flows/designer/${row.id}?mode=launch`)
 }
 
 // ========== 组织卡片 ==========
+const orgs = ref<OrgCardItem[]>([])
+
+// ========== 实例列表 ==========
+const instanceLoading = ref(false)
+const instances = ref<InstanceListItem[]>([])
+const instanceTotal = ref(0)
+const instancePage = ref(1)
+const instancePageSize = ref(20)
+const instanceStatusFilter = ref('all')
+const instanceKeyword = ref('')
+/** 各状态实例数量（从 API 获取） */
+const statusCounts = ref<Record<string, number>>({})
+
+const instanceFilters = [
+  { label: '全部', value: 'all' },
+  { label: '运行中', value: 'running' },
+  { label: '已完成', value: 'completed' },
+  { label: '已终止', value: 'terminated' },
+]
+
+// ========== 初始化 ==========
+onMounted(async () => {
+  await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
+})
+
+async function fetchOrgs() {
+  try {
+    const data = await getTemplateOrganizations()
+    orgs.value = data.organizations
+  } catch { /* 拦截器统一处理 */ }
+}
+
+/** 点击组织卡片 → 跳转所内主页 */
 function handleOrgSelect(orgId: number) {
-  selectedOrgId.value = selectedOrgId.value === orgId ? null : orgId
-  fetchTemplates()
+  router.push(`/flows/organization/${orgId}`)
 }
 
-// ========== 搜索 ==========
-function handleSearch(params: { keyword: string; status: string }) {
-  searchParams.keyword = params.keyword
-  searchParams.status = params.status
-  currentPage.value = 1
-  fetchTemplates()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchTemplates()
-}
-
-// ========== 新建/编辑 ==========
-function handleCreate() {
-  editingTpl.value = null
-  form.name = ''
-  form.description = ''
-  form.organization_id = null
-  formVisible.value = true
-}
-
-function handleEdit(row: TemplateItem) {
-  editingTpl.value = row
-  form.name = row.name
-  form.description = row.description
-  form.organization_id = row.organization_id
-  formVisible.value = true
-}
-
-async function handleSave() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
-  saving.value = true
+/** 获取各状态的实例总数 */
+async function fetchStatusCounts() {
   try {
-    if (editingTpl.value) {
-      await updateTemplate(editingTpl.value.id, { name: form.name, description: form.description })
-      ElMessage.success('模板信息已更新')
-    } else {
-      await createTemplate({ name: form.name, description: form.description, organization_id: form.organization_id! })
-      ElMessage.success('模板创建成功')
+    const results = await Promise.all([
+      getInstances({ page_size: 1 }),
+      getInstances({ page_size: 1, status: 'running' }),
+      getInstances({ page_size: 1, status: 'completed' }),
+      getInstances({ page_size: 1, status: 'terminated' }),
+    ])
+    statusCounts.value = {
+      all: results[0].total,
+      running: results[1].total,
+      completed: results[2].total,
+      terminated: results[3].total,
     }
-    formVisible.value = false
-    fetchTemplates()
-  } finally {
-    saving.value = false
-  }
+  } catch { /* ignore */ }
 }
 
-// ========== 删除 ==========
-async function handleDelete(id: number) {
-  await deleteTemplate(id)
-  ElMessage.success('模板已删除')
-  fetchTemplates()
-}
-
-// ========== 发布 ==========
-async function handlePublish(id: number) {
+// ========== 实例列表 ==========
+async function fetchInstances() {
+  instanceLoading.value = true
   try {
-    const result = await publishTemplate(id)
-    ElMessage.success(`模板已发布（v${result.version_number}）`)
-    fetchTemplates()
-  } catch {
-    // 错误已由拦截器统一处理
-  }
+    const data = await getInstances({
+      page: instancePage.value,
+      page_size: instancePageSize.value,
+      status: instanceStatusFilter.value === 'all' ? undefined : instanceStatusFilter.value,
+      keyword: instanceKeyword.value || undefined,
+    })
+    instances.value = data.items
+    instanceTotal.value = data.total
+  } catch { /* 拦截器统一处理 */ }
+  finally { instanceLoading.value = false }
 }
 
-// ========== 停用 ==========
-async function handleDisable(id: number) {
-  try {
-    await disableTemplate(id)
-    ElMessage.success('模板已停用')
-    fetchTemplates()
-  } catch {
-    // 错误已由拦截器统一处理
-  }
+function handleInstanceFilter(status: string) {
+  instanceStatusFilter.value = status
+  instancePage.value = 1
+  fetchInstances()
 }
 
-// ========== 新版本 ==========
-async function handleNewVersion(id: number) {
-  try {
-    await newVersionTemplate(id)
-    ElMessage.success('新版本草稿已创建，请编辑后重新发布')
-    fetchTemplates()
-  } catch {
-    // 错误已由拦截器统一处理
-  }
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function handleInstanceSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    instancePage.value = 1
+    fetchInstances()
+  }, 300)
 }
 
-// ========== 详情 ==========
-function handleDetail(id: number) {
-  router.push(`/flows/detail/${id}`)
-}
+function goInstanceDetail(id: number) { router.push(`/flows/instances/${id}`) }
+function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id) }
 
-// ========== 发起实例 ==========
-function handleStart(_id: number) {
-  router.push('/flows/start')
+// ========== 工具 ==========
+function fmtTime(val: string | null): string {
+  if (!val) return '-'
+  return val.replace('T', ' ').substring(0, 16)
+}
+function priShort(p: string): string {
+  const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }
+  return m[p] || p
+}
+function instStatusClass(s: string): string {
+  const m: Record<string, string> = { created: 'status-tag--draft', running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }
+  return m[(s || '').toLowerCase()] || ''
+}
+function instStatusLabel(s: string): string {
+  const m: Record<string, string> = { created: '已创建', running: '运行中', completed: '已完成', terminated: '已终止' }
+  return m[(s || '').toLowerCase()] || s
 }
 </script>
 
 <style lang="scss" scoped>
-.flow-management {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+.flow-management { max-width: var(--content-max-width, 1200px); margin: 0 auto; }
+.section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
+.section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 
-  .flow-tabs {
-    margin-bottom: 20px;
-  }
-}
+.instance-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
+
+.filter-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-tab { height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff; border-radius: 6px; font-size: 13px; color: var(--el-text-color-regular); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; transition: all 0.2s; &:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); } &.is-active { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; } }
+.filter-label { display: inline-block; min-width: 3em; }
+.filter-count { opacity: 0.7; }
+
+.inst-name { font-weight: 500; color: var(--el-text-color-primary); }
+.inst-meta { font-size: 13px; color: var(--el-text-color-secondary); }
+.inst-progress { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); }
+
+.pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { color: #fff; background: var(--el-color-danger); } &.pri--high { color: #fff; background: var(--el-color-warning); } &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); } &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); } }
+
+.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
+.num { font-variant-numeric: tabular-nums; }
+
+.tpl-search { margin-bottom: 8px; }
 </style>

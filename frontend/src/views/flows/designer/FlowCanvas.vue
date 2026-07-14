@@ -1,22 +1,14 @@
 <template>
   <div class="flow-canvas">
     <!-- LogicFlow 画布容器 -->
-    <div ref="canvasRef" class="canvas-container" />
-    <!-- 缩放工具栏 -->
-    <div class="zoom-toolbar">
-      <el-button-group>
-        <el-button size="small" :icon="ZoomIn" @click="zoomIn" title="放大" />
-        <el-button size="small" :icon="ZoomOut" @click="zoomOut" title="缩小" />
-        <el-button size="small" @click="fitView" title="适应画布">适应</el-button>
-      </el-button-group>
-      <span class="zoom-ratio">{{ Math.round(zoomRatio) }}%</span>
-    </div>
+    <div ref="canvasRef" class="canvas-container" tabindex="0" />
+    <!-- 缩放比例 -->
+    <div class="zoom-badge">{{ Math.round(zoomRatio) }}%</div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, shallowRef } from 'vue'
-import { ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import LogicFlow from '@logicflow/core'
 import { Control } from '@logicflow/extension'
 import '@logicflow/core/dist/index.css'
@@ -25,7 +17,7 @@ import { registerWorkNode } from './nodes/WorkNode'
 import { registerStartNode } from './nodes/StartNode'
 import { registerEndNode } from './nodes/EndNode'
 
-/** 注册 Control 扩展（缩放/平移控件） */
+/** 注册 Control 扩展（右上角缩放控件） */
 LogicFlow.use(Control)
 
 /** 事件定义 */
@@ -35,123 +27,137 @@ const emit = defineEmits<{
 
 /** 画布配置 */
 const DEFAULT_CONFIG = {
-  grid: {
-    size: 20,
-    visible: true,
-    type: 'dot' as const,
-  },
-  keyboard: {
-    enabled: true,  // 快捷键（Delete/Ctrl+Z/Y 等）
-  },
-  background: {
-    backgroundColor: '#fafafa',
-  },
-  history: true,    // 启用撤销/重做
+  grid: { size: 20, visible: true, type: 'dot' as const },
+  keyboard: { enabled: true },  // Delete/Ctrl+Z/Y 快捷键
+  background: { backgroundColor: '#fafafa' },
+  history: true,
   adjustEdge: true,
-  edgeType: 'polyline' as const,
+  edgeType: 'polyline' as const, // 折线连线
   /** 守卫：拦截非法操作 */
   guards: {
-    /** 防止删除系统节点 */
     beforeDelete: (data: any) => {
-      if (data?.properties?.is_start || data?.properties?.is_end) {
-        return false
-      }
+      // 禁止删除开始/结束节点
+      if (data?.properties?.is_start || data?.properties?.is_end) return false
       return true
     },
   },
 }
 
+/** 当前选中的元素 ID（用于删除按钮） */
+let selectedElementId: string | null = null
+let selectedElementType: 'node' | 'edge' | null = null
+
 const canvasRef = ref<HTMLElement>()
 const lf = shallowRef<LogicFlow>()
 const zoomRatio = ref(100)
 
-/** 工作节点序号（用于默认名称） */
+/** 工作节点序号 */
 let workNodeCounter = 1
 
 onMounted(() => {
   if (!canvasRef.value) return
 
-  const logicFlow = new LogicFlow({
-    container: canvasRef.value,
-    ...DEFAULT_CONFIG,
-  })
-
-  // 设置撤销/重做上限 50 步
+  const logicFlow = new LogicFlow({ container: canvasRef.value, ...DEFAULT_CONFIG })
   logicFlow.history.maxSize = 50
 
-  // 注册三种自定义节点
+  // 注册自定义节点
   registerStartNode(logicFlow)
   registerWorkNode(logicFlow)
   registerEndNode(logicFlow)
 
-  // 基础渲染（空白画布）
+  // 基础渲染
   logicFlow.render({ nodes: [], edges: [] })
 
-  // 监听缩放变化
-  logicFlow.on('graph:transform', () => {
-    const transform = logicFlow.getTransform()
-    zoomRatio.value = transform.SCALE_X * 100
-  })
+  // DnD 支持：dragover/drop
+  if (canvasRef.value) {
+    canvasRef.value.addEventListener('dragover', (e: DragEvent) => e.preventDefault())
+    canvasRef.value.addEventListener('drop', (e: DragEvent) => e.preventDefault())
+  }
 
-  // 监听节点点击 —— 通知属性面板
-  logicFlow.on('node:click', ({ data }: any) => {
+  // 双击：阻止 LogicFlow 默认文字编辑
+  logicFlow.on('node:dbclick', ({ data }: any) => {
     emit('node-select', data)
   })
 
-  // 监听画布空白区域点击 —— 取消选中
+  // 点击节点 → 选中
+  logicFlow.on('node:click', ({ data }: any) => {
+    selectedElementId = data.id || null
+    selectedElementType = 'node'
+    canvasRef.value?.focus() // 让画布获得焦点以接收 Delete 键
+    emit('node-select', data)
+  })
+
+  // 点击连线 → 可删除
+  logicFlow.on('edge:click', ({ data }: any) => {
+    selectedElementId = data.id || null
+    selectedElementType = 'edge'
+    canvasRef.value?.focus()
+    emit('node-select', null)
+  })
+
+  // 点击空白 → 取消选中
   logicFlow.on('blank:click', () => {
+    selectedElementId = null
+    selectedElementType = null
+    canvasRef.value?.focus()
     emit('node-select', null)
   })
 
   lf.value = logicFlow
+
+  // 缩放比例更新
+  logicFlow.on('graph:transform', () => {
+    const t = logicFlow.getTransform()
+    zoomRatio.value = t.SCALE_X * 100
+  })
+
+  // 初始聚焦
+  canvasRef.value.focus()
 })
 
+/** 全局键盘监听 —— Delete/Backspace 删除选中元素 */
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // 输入框/文本框/下拉框内不触发删除，避免干扰文字编辑
+    const tag = (e.target as HTMLElement)?.tagName
+    const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    const isEditable = (e.target as HTMLElement)?.isContentEditable
+    if (isInput || isEditable) return
+
+    if (canvasRef.value && canvasRef.value.offsetParent !== null) {
+      e.preventDefault()
+      deleteSelected()
+    }
+  }
+}
+
+onMounted(() => { document.addEventListener('keydown', onGlobalKeydown) })
+
 onUnmounted(() => {
+  document.removeEventListener('keydown', onGlobalKeydown)
   lf.value?.destroy()
 })
 
-/** 放大 */
-function zoomIn() {
-  lf.value?.zoom(true)
-}
-
-/** 缩小 */
-function zoomOut() {
-  lf.value?.zoom(false)
-}
-
-/** 适应画布 */
-function fitView() {
-  lf.value?.fitView()
-}
-
-/** 添加工作节点（在画布中心或指定位置） */
+/** 添加工作节点 */
 function addWorkNode(x?: number, y?: number) {
   const instance = lf.value
   if (!instance) return
 
-  // 默认添加到画布可见区域中心附近
   if (x === undefined || y === undefined) {
     const { SCALE_X, TRANSLATE_X, TRANSLATE_Y } = instance.getTransform()
     const container = canvasRef.value!
     const cx = (container.clientWidth / 2 - TRANSLATE_X) / SCALE_X
     const cy = (container.clientHeight / 2 - TRANSLATE_Y) / SCALE_X
-    // 加一点随机偏移避免完全重叠
     x = cx + (Math.random() - 0.5) * 100
     y = cy + (Math.random() - 0.5) * 100
   }
 
-  const nodeId = `work-${Date.now()}`
   instance.addNode({
-    id: nodeId,
-    type: 'work-node',
-    x,
-    y,
-    text: { value: `节点 ${workNodeCounter++}`, x: 80, y: 32 },
+    id: `work-${Date.now()}`,
+    type: 'work-node', x, y,
     properties: {
-      name: `节点 ${workNodeCounter - 1}`,
-      is_start: false,
-      is_end: false,
+      name: `节点 ${workNodeCounter++}`,
+      is_start: false, is_end: false,
       require_file: true,
       approval_strategy: 'all_approve',
       is_optional: false,
@@ -160,10 +166,51 @@ function addWorkNode(x?: number, y?: number) {
   })
 }
 
-/** 获取 LogicFlow 实例 */
+/** 添加可选节点 */
+function addOptionalNode(x?: number, y?: number) {
+  const instance = lf.value
+  if (!instance) return
+
+  if (x === undefined || y === undefined) {
+    const { SCALE_X, TRANSLATE_X, TRANSLATE_Y } = instance.getTransform()
+    const container = canvasRef.value!
+    const cx = (container.clientWidth / 2 - TRANSLATE_X) / SCALE_X
+    const cy = (container.clientHeight / 2 - TRANSLATE_Y) / SCALE_X
+    x = cx + (Math.random() - 0.5) * 100
+    y = cy + (Math.random() - 0.5) * 100
+  }
+
+  instance.addNode({
+    id: `work-${Date.now()}`,
+    type: 'work-node', x, y,
+    properties: {
+      name: `可选节点 ${workNodeCounter++}`,
+      is_start: false, is_end: false,
+      require_file: true,
+      approval_strategy: 'all_approve',
+      is_optional: true,
+      time_limit_days: 3,
+    },
+  })
+}
+
+/** 删除当前选中元素 */
+function deleteSelected() {
+  const instance = lf.value
+  if (!instance || !selectedElementId || !selectedElementType) return
+
+  if (selectedElementType === 'edge') {
+    instance.deleteEdge(selectedElementId)
+  } else if (selectedElementType === 'node') {
+    instance.deleteNode(selectedElementId)
+  }
+  selectedElementId = null
+  selectedElementType = null
+}
+
 function getLf() { return lf.value }
 
-defineExpose({ getLf, lf, addWorkNode })
+defineExpose({ getLf, lf, addWorkNode, addOptionalNode, deleteSelected })
 </script>
 
 <style lang="scss" scoped>
@@ -177,28 +224,23 @@ defineExpose({ getLf, lf, addWorkNode })
 .canvas-container {
   width: 100%;
   height: 100%;
+  outline: none;
 }
 
-/* 缩放工具栏 —— 右下角浮动 */
-.zoom-toolbar {
+/* 缩放比例徽章 —— 左下角 */
+.zoom-badge {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  bottom: 56px;
+  left: 16px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
   background: #fff;
   border: 1px solid var(--el-border-color-light);
   border-radius: 6px;
-  padding: 4px 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  z-index: 10;
-
-  .zoom-ratio {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    min-width: 36px;
-    text-align: center;
-  }
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  user-select: none;
+  z-index: 5;
 }
 </style>

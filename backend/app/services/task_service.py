@@ -1,0 +1,248 @@
+"""任务服务 —— 待办列表、任务详情、提交、草稿保存"""
+from datetime import datetime
+
+from sqlalchemy import select, func, or_, case
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
+from app.models import (
+    Task,
+    FlowInstance,
+    InstanceNode,
+    Organization,
+    User,
+    File,
+    CheckRecord,
+    Approval,
+    FlowTemplate,
+)
+from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus
+
+
+async def list_tasks(
+    db: AsyncSession,
+    *,
+    assignee_id: int,
+    status: str | None = None,
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """我的待办列表 —— 按 deadline 升序，逾期优先"""
+    conditions = [Task.assignee_id == assignee_id]
+    if status:
+        conditions.append(Task.status == status)
+    else:
+        # 默认排除已完成和已终止
+        conditions.append(Task.status.notin_(["completed", "terminated"]))
+
+    # 实例名模糊搜索
+    if keyword:
+        inst_ids_sub = select(FlowInstance.id).where(FlowInstance.name.like(f"%{keyword}%"))
+        conditions.append(Task.instance_id.in_(inst_ids_sub))
+
+    base_stmt = select(Task).where(*conditions)
+
+    # 总数
+    count_stmt = select(func.count()).select_from(Task).where(*conditions)
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    # 分页 + 逾期优先排序（deadline 在 InstanceNode 上，需 JOIN）
+    now = datetime.now()
+    stmt = (
+        base_stmt
+        .join(InstanceNode, Task.node_id == InstanceNode.id)
+        .order_by(
+            # 逾期排前面：无 deadline 视为不逾期，排在最后
+            case((InstanceNode.deadline < now, 0), else_=1),
+            # MySQL 不支持 NULLS LAST，用 CASE 模拟：NULL deadline 排后面
+            case((InstanceNode.deadline.is_(None), 1), else_=0),
+            InstanceNode.deadline.asc(),
+        )
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    tasks = result.scalars().all()
+
+    if not tasks:
+        return {"items": [], "total": total, "page": page, "page_size": page_size}
+
+    # 批量查询关联数据
+    task_ids = [t.id for t in tasks]
+    node_ids = list(set(t.node_id for t in tasks))
+    inst_ids = list(set(t.instance_id for t in tasks))
+
+    # 节点
+    nodes_result = await db.execute(select(InstanceNode).where(InstanceNode.id.in_(node_ids)))
+    nodes_map = {n.id: n for n in nodes_result.scalars().all()}
+
+    # 实例
+    insts_result = await db.execute(select(FlowInstance).where(FlowInstance.id.in_(inst_ids)))
+    insts_map = {i.id: i for i in insts_result.scalars().all()}
+
+    # 模板
+    tpl_ids = list(set(i.template_id for i in insts_map.values()))
+    tpls_result = await db.execute(select(FlowTemplate).where(FlowTemplate.id.in_(tpl_ids)))
+    tpls_map = {t.id: t for t in tpls_result.scalars().all()}
+
+    # 发起人
+    initiator_ids = list(set(i.initiator_id for i in insts_map.values()))
+    users_result = await db.execute(select(User).where(User.id.in_(initiator_ids)))
+    users_map = {u.id: u for u in users_result.scalars().all()}
+
+    items = []
+    for t in tasks:
+        node = nodes_map.get(t.node_id)
+        inst = insts_map.get(t.instance_id)
+        tpl = tpls_map.get(inst.template_id) if inst else None
+        initiator = users_map.get(inst.initiator_id) if inst else None
+
+        # deadline 来自关联节点
+        dl = node.deadline if node else None
+        is_overdue = dl is not None and dl < now
+        days_remaining = None
+        if dl:
+            delta = (dl - now).days
+            days_remaining = max(0, delta)
+
+        items.append({
+            "id": t.id,
+            "instance_id": t.instance_id,
+            "instance_name": inst.name if inst else "",
+            "node_id": t.node_id,
+            "node_name": node.name if node else "",
+            "template_name": tpl.name if tpl else "",
+            "initiator_name": initiator.real_name if initiator else "",
+            "status": t.status,
+            "deadline": dl.isoformat() if dl else None,
+            "is_overdue": is_overdue,
+            "days_remaining": days_remaining,
+            "priority": inst.priority if inst else "normal",
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) -> dict:
+    """任务详情 —— 含文件/校验/审批进度聚合"""
+    t = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if t is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+
+    # 权限校验：仅任务负责人可查看
+    if t.assignee_id != current_user_id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可查看")
+
+    # 首次打开：pending → processing
+    if t.status == TaskStatus.PENDING:
+        t.status = TaskStatus.PROCESSING
+        await db.flush()
+
+    # 查节点
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == t.node_id))).scalar_one()
+    # 查实例
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == t.instance_id))).scalar_one()
+    # 查负责人
+    assignee = (await db.execute(select(User).where(User.id == t.assignee_id))).scalar_one_or_none()
+
+    # 文件
+    files_result = await db.execute(
+        select(File).where(File.task_id == t.id, File.round == node.round).order_by(File.id.desc())
+    )
+    files = files_result.scalars().all()
+
+    # 校验进度
+    checks_result = await db.execute(
+        select(CheckRecord).where(CheckRecord.task_id == t.id).order_by(CheckRecord.id)
+    )
+    checks = checks_result.scalars().all()
+    checker_ids = [c.checker_id for c in checks]
+    checker_users = {}
+    if checker_ids:
+        cu = await db.execute(select(User).where(User.id.in_(checker_ids)))
+        checker_users = {u.id: u for u in cu.scalars().all()}
+
+    # 审批进度
+    apprs_result = await db.execute(
+        select(Approval).where(Approval.task_id == t.id).order_by(Approval.id)
+    )
+    approvals = apprs_result.scalars().all()
+    approver_ids = [a.approver_id for a in approvals]
+    approver_users = {}
+    if approver_ids:
+        au = await db.execute(select(User).where(User.id.in_(approver_ids)))
+        approver_users = {u.id: u for u in au.scalars().all()}
+
+    return {
+        "id": t.id,
+        "instance_id": t.instance_id,
+        "instance_name": inst.name,
+        "instance_status": inst.status,
+        "node_id": t.node_id,
+        "node_name": node.name,
+        "node_description": node.description,
+        "node_status": node.status,
+        "assignee_id": t.assignee_id,
+        "assignee_name": assignee.real_name if assignee else "",
+        "status": t.status,
+        "assignee_note": t.assignee_note,
+        "require_file": node.require_file,
+        "time_limit_days": node.time_limit_days,
+        "deadline": node.deadline.isoformat() if node.deadline else None,
+        "round": node.round,
+        "files": [
+            {
+                "id": f.id,
+                "original_name": f.original_name,
+                "file_size": f.file_size,
+                "uploader_name": "",
+                "upload_type": f.upload_type,
+                "round": f.round,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            }
+            for f in files
+        ],
+        "checks": [
+            {
+                "id": c.id,
+                "checker_id": c.checker_id,
+                "checker_name": checker_users.get(c.checker_id, "").real_name if checker_users.get(c.checker_id) else "",
+                "status": c.status,
+                "opinion": c.opinion,
+                "decided_at": c.decided_at.isoformat() if c.decided_at else None,
+            }
+            for c in checks
+        ],
+        "approvals": [
+            {
+                "id": a.id,
+                "approver_id": a.approver_id,
+                "approver_name": approver_users.get(a.approver_id, "").real_name if approver_users.get(a.approver_id) else "",
+                "status": a.status,
+                "opinion": a.opinion,
+                "signature_applied": a.signature_applied,
+                "decided_at": a.decided_at.isoformat() if a.decided_at else None,
+            }
+            for a in approvals
+        ],
+        "submitted_at": t.submitted_at.isoformat() if t.submitted_at else None,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+async def save_draft(db: AsyncSession, task_id: int, current_user_id: int, note: str | None) -> None:
+    """保存草稿 —— 仅更新负责人备注"""
+    t = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if t is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if t.assignee_id != current_user_id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可操作")
+    if t.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
+        raise AppException(ErrorCode.FORBIDDEN, "当前任务状态不可编辑")
+
+    t.assignee_note = note
+    await db.flush()

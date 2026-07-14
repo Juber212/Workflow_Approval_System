@@ -1,26 +1,20 @@
-"""流程实例服务 —— 发起实例、配置合并、快照复制、列表查询"""
+"""流程实例服务 —— 发起实例、配置合并、快照复制、列表查询、终止流程"""
 
+import os
 from datetime import datetime
 
-from sqlalchemy import select, func, text, or_
+from sqlalchemy import select, func, text, or_, delete as sql_delete, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import (
-    FlowTemplate,
-    FlowVersion,
-    FlowInstance,
-    InstanceNode,
-    InstanceEdge,
-    OperationLog,
-    User,
-    Organization,
-    Task,
-    CheckRecord,
-    Approval,
-    File,
+    FlowTemplate, TemplateNode, TemplateEdge,
+    FlowInstance, InstanceNode, InstanceEdge,
+    OperationLog, User, Organization,
+    Task, CheckRecord, Approval, File,
 )
 from app.schemas.instance import (
     CreateInstanceRequest,
@@ -30,6 +24,8 @@ from app.schemas.instance import (
     CheckRecordBrief,
     ApprovalBrief,
     LogItemBrief,
+    ChangePersonnelRequest,
+    ChangePriorityRequest,
 )
 from app.api.deps import CurrentUser
 from app.engine.flow_engine import (
@@ -44,60 +40,42 @@ async def create_instance(
     request: CreateInstanceRequest,
     current_user: CurrentUser,
 ) -> dict:
-    """发起流程实例 —— 完整初始化逻辑
+    """发起流程实例 —— 从模板节点/连线直接复制生成实例快照
 
     步骤：
-    1. 验证模板存在且已发布
-    2. 验证版本存在且属于该模板
-    3. 创建 FlowInstance 记录（status=created）
-    4. 从版本快照复制节点 → instance_nodes
-    5. 合并配置：快照默认值 → 软覆盖(soft_config_overrides) → 发起覆盖(node_overrides)
-    6. 从版本快照复制连线 → instance_edges
-    7. 计算每个节点的 incoming_count
-    8. 开始节点自动 finished
-    9. 激活下游第一个工作节点 → running + 生成 Task
-    10. 实例状态 → running
-    11. 记录操作日志
+    1. 验证模板存在
+    2. 从模板节点复制 → instance_nodes（合并 node_overrides）
+    3. 从模板连线复制 → instance_edges
+    4. 计算 incoming_count + 激活开始节点 + 首个工作节点
+    5. 实例状态 → running + 记录日志
     """
 
     # ========== 1. 验证模板 ==========
-    tpl_result = await db.execute(
+    tpl = (await db.execute(
         select(FlowTemplate).where(FlowTemplate.id == request.template_id)
-    )
-    tpl = tpl_result.scalar_one_or_none()
+    )).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
-    if tpl.status != "published":
-        raise AppException(ErrorCode.FORBIDDEN, "仅已发布状态的模板可发起流程实例")
 
-    # ========== 2. 验证版本归属 ==========
-    version_result = await db.execute(
-        select(FlowVersion).where(
-            FlowVersion.id == request.version_id,
-            FlowVersion.template_id == request.template_id,
-        )
-    )
-    version = version_result.scalar_one_or_none()
-    if version is None:
-        raise AppException(ErrorCode.NOT_FOUND, "版本不存在或不属于该模板")
+    # ========== 2. 读取模板节点和连线 ==========
+    tpl_nodes = (await db.execute(
+        select(TemplateNode).where(TemplateNode.template_id == request.template_id).order_by(TemplateNode.sort_order)
+    )).scalars().all()
 
-    nodes_snapshot: list[dict] = version.nodes_snapshot if isinstance(version.nodes_snapshot, list) else []
-    edges_snapshot: list[dict] = version.edges_snapshot if isinstance(version.edges_snapshot, list) else []
+    tpl_edges = (await db.execute(
+        select(TemplateEdge).where(TemplateEdge.template_id == request.template_id)
+    )).scalars().all()
 
-    if not nodes_snapshot:
-        raise AppException(ErrorCode.VALIDATION_ERROR, "版本快照中没有节点数据，无法发起实例")
+    if not tpl_nodes:
+        raise AppException(ErrorCode.VALIDATION_ERROR, "模板没有节点数据，无法发起实例")
 
     # ========== 3. 构建覆盖查找表 ==========
-    # 发起覆盖：按 node_id（模板快照中的 id）索引
     override_map: dict[int, dict] = {}
     if request.node_overrides:
         for override in request.node_overrides:
             override_map[override.node_id] = override.model_dump(
                 exclude_none=True, exclude={"node_id"}
             )
-
-    # 软配置覆盖：{ "node_id_str": { field: value } }
-    soft_overrides: dict[str, dict] = version.soft_config_overrides or {}
 
     # ========== 4. 创建 FlowInstance ==========
     priority = request.priority
@@ -108,148 +86,108 @@ async def create_instance(
         name=request.name.strip(),
         description=request.description,
         template_id=request.template_id,
-        version_id=request.version_id,
         organization_id=tpl.organization_id,
         initiator_id=current_user.id,
         priority=priority,
         status="created",
     )
     db.add(instance)
-    await db.flush()  # 获取 instance.id
+    await db.flush()
 
-    # ========== 5. 复制节点（合并配置） ==========
+    # ========== 5. 复制节点（合并 node_overrides） ==========
     node_id_map: dict[int, int] = {}  # template_node_id → instance_node_id
     instance_nodes: list[InstanceNode] = []
 
-    for sn in nodes_snapshot:
-        sn_id: int = sn["id"]  # 模板节点 ID（快照中的原始 id）
+    for tn in tpl_nodes:
+        node_override: dict = override_map.get(tn.id, {})
 
-        # 获取软配置覆盖
-        node_soft: dict = soft_overrides.get(str(sn_id), {})
-
-        # 获取发起覆盖
-        node_override: dict = override_map.get(sn_id, {})
-
-        # 校验 skip 权限：仅 is_optional=1 的节点可跳过
+        # 校验 skip 权限
         is_skipped = bool(node_override.get("skip"))
-        if is_skipped and not sn.get("is_optional"):
-            raise AppException(
-                ErrorCode.VALIDATION_ERROR,
-                f"节点「{sn['name']}」不是可选节点，不能跳过",
-            )
-        # 开始/结束节点不能被跳过（即使前端没传，后端也兜底校验）
-        if is_skipped and (sn.get("is_start") or sn.get("is_end")):
-            raise AppException(
-                ErrorCode.VALIDATION_ERROR,
-                f"开始/结束节点不能被跳过",
-            )
+        if is_skipped and not tn.is_optional:
+            raise AppException(ErrorCode.VALIDATION_ERROR, f"节点「{tn.name}」不是可选节点，不能跳过")
+        if is_skipped and (tn.is_start or tn.is_end):
+            raise AppException(ErrorCode.VALIDATION_ERROR, "开始/结束节点不能被跳过")
 
-        # 配置合并优先级：发起覆盖 > 软覆盖 > 快照默认值
-        assignee_id = node_override.get("assignee_id") or node_soft.get("assignee_id") or sn.get("assignee_id")
-        time_limit_days = node_override.get("time_limit_days") or node_soft.get("time_limit_days") or sn.get("time_limit_days")
-        approvers = node_override.get("approvers") or node_soft.get("approvers") or sn.get("approvers")
-        checkers = node_override.get("checkers") or node_soft.get("checkers") or sn.get("checkers")
+        # 配置合并：发起覆盖 > 模板默认值
+        assignee_id = node_override.get("assignee_id") or tn.assignee_id
+        time_limit_days = node_override.get("time_limit_days") or tn.time_limit_days
+        approvers = node_override.get("approvers") or tn.approvers
+        checkers = node_override.get("checkers") or tn.checkers
 
-        # deadline 优先使用发起覆盖中的日期，否则在节点激活时根据 time_limit_days 计算
         deadline = None
         if node_override.get("deadline"):
             try:
                 deadline = datetime.fromisoformat(node_override["deadline"])
             except (ValueError, TypeError):
-                raise AppException(
-                    ErrorCode.VALIDATION_ERROR,
-                    f"节点「{sn['name']}」的截止日期格式不正确",
-                )
+                raise AppException(ErrorCode.VALIDATION_ERROR, f"节点「{tn.name}」的截止日期格式不正确")
 
         inode = InstanceNode(
             instance_id=instance.id,
-            name=sn["name"],
-            description=sn.get("description"),
-            is_start=sn.get("is_start", False),
-            is_end=sn.get("is_end", False),
+            name=tn.name,
+            is_start=tn.is_start,
+            is_end=tn.is_end,
             assignee_id=assignee_id,
             time_limit_days=time_limit_days,
             deadline=deadline,
-            require_file=sn.get("require_file", False),
+            require_file=tn.require_file,
             approvers=approvers,
             checkers=checkers,
-            approval_strategy=sn.get("approval_strategy", "all_approve"),
-            is_optional=sn.get("is_optional", False),
+            approval_strategy=tn.approval_strategy,
+            is_optional=tn.is_optional,
             is_skipped=is_skipped,
-            status="waiting",  # 初始状态，后续激活
-            sort_order=sn.get("sort_order", 0),
+            status="waiting",
+            sort_order=tn.sort_order,
         )
         db.add(inode)
         await db.flush()
-        node_id_map[sn_id] = inode.id
+        node_id_map[tn.id] = inode.id
         instance_nodes.append(inode)
 
-    # ========== 6. 复制连线（映射模板节点 ID → 实例节点 ID） ==========
-    for se in edges_snapshot:
-        source_instance_id = node_id_map.get(se["source_node_id"])
-        target_instance_id = node_id_map.get(se["target_node_id"])
-        if source_instance_id and target_instance_id:
-            edge = InstanceEdge(
-                instance_id=instance.id,
-                source_node_id=source_instance_id,
-                target_node_id=target_instance_id,
-            )
-            db.add(edge)
+    # ========== 6. 复制连线 ==========
+    for te in tpl_edges:
+        src = node_id_map.get(te.source_node_id)
+        tgt = node_id_map.get(te.target_node_id)
+        if src and tgt:
+            db.add(InstanceEdge(instance_id=instance.id, source_node_id=src, target_node_id=tgt))
 
     await db.flush()
 
-    # ========== 7. 计算 incoming_count ==========
+    # ========== 7. 计算 incoming_count + 激活 ==========
     await calculate_incoming_counts(db, instance.id)
-
-    # ========== 8. 开始节点自动 finished ==========
     await activate_start_node(db, instance.id)
 
-    # ========== 9. 激活开始节点的下游（第一个工作节点） ==========
     start_node = next((n for n in instance_nodes if n.is_start), None)
     if start_node:
         await propagate_from_node(db, instance.id, start_node.id)
 
-    # ========== 10. 实例状态 → running ==========
+    # ========== 8. 实例状态 → running ==========
     instance.status = "running"
     instance.initiated_at = datetime.now()
 
-    # ========== 11. 记录操作日志 ==========
-    log = OperationLog(
+    # ========== 9. 记录操作日志 ==========
+    db.add(OperationLog(
         instance_id=instance.id,
-        operator_type="user",
-        operator_id=current_user.id,
+        operator_type="user", operator_id=current_user.id,
         operation_type="initiate",
         description=f"发起了流程实例「{instance.name}」",
         detail={
             "template_id": request.template_id,
-            "version_id": request.version_id,
             "priority": priority,
             "node_count": len(instance_nodes),
             "skipped_count": sum(1 for n in instance_nodes if n.is_skipped),
         },
-    )
-    db.add(log)
+    ))
     await db.flush()
 
     return {
-        "id": instance.id,
-        "name": instance.name,
+        "id": instance.id, "name": instance.name,
         "template_id": instance.template_id,
-        "version_id": instance.version_id,
         "organization_id": instance.organization_id,
         "initiator_id": instance.initiator_id,
-        "priority": instance.priority,
-        "status": instance.status,
+        "priority": instance.priority, "status": instance.status,
         "nodes": [
-            {
-                "id": n.id,
-                "name": n.name,
-                "is_start": n.is_start,
-                "is_end": n.is_end,
-                "is_skipped": n.is_skipped,
-                "status": n.status,
-                "sort_order": n.sort_order,
-            }
+            {"id": n.id, "name": n.name, "is_start": n.is_start, "is_end": n.is_end,
+             "is_skipped": n.is_skipped, "status": n.status, "sort_order": n.sort_order}
             for n in instance_nodes
         ],
         "initiated_at": instance.initiated_at,
@@ -395,7 +333,7 @@ async def _get_current_assignee_name(db: AsyncSession, instance_id: int) -> str 
 
 
 async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
-    """查询实例完整详情 —— 基础信息 + 节点列表（含文件/校验/审批/日志） + 操作日志分页
+    """查询实例完整详情 —— 基础信息 + 节点列表（含文件/校验/审批/日志）
 
     Args:
         db: 异步数据库会话
@@ -411,12 +349,10 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             User.real_name.label("initiator_name"),
             Organization.name.label("organization_name"),
             FlowTemplate.name.label("template_name"),
-            FlowVersion.version_number,
         )
         .join(User, FlowInstance.initiator_id == User.id)
         .join(Organization, FlowInstance.organization_id == Organization.id)
         .outerjoin(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
-        .outerjoin(FlowVersion, FlowInstance.version_id == FlowVersion.id)
         .where(FlowInstance.id == instance_id)
     )
     result = await db.execute(stmt)
@@ -431,7 +367,6 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     initiator_name = row[1]
     org_name = row[2]
     template_name = row[3]
-    version_number = row[4]
 
     # ========== 2. 查询所有节点（按 sort_order 排序） ==========
     nodes_stmt = (
@@ -608,29 +543,390 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
 
     # ========== 7. 组装最终结果 ==========
     return {
-        "id": instance.id,
-        "name": instance.name,
-        "description": instance.description,
-        "template_id": instance.template_id,
-        "template_name": template_name or "",
-        "version_id": instance.version_id,
-        "version_number": version_number,
-        "organization_id": instance.organization_id,
-        "organization_name": org_name or "",
-        "initiator_id": instance.initiator_id,
-        "initiator_name": initiator_name or "",
+        "id": instance.id, "name": instance.name, "description": instance.description,
+        "template_id": instance.template_id, "template_name": template_name or "",
+        "organization_id": instance.organization_id, "organization_name": org_name or "",
+        "initiator_id": instance.initiator_id, "initiator_name": initiator_name or "",
         "priority": (instance.priority or "normal").lower(),
         "status": (instance.status or "created").lower(),
         "archive_status": (instance.archive_status or "").lower() if instance.archive_status else None,
         "termination_reason": instance.termination_reason,
-        "current_node_index": processed_count,
-        "total_nodes": total_nodes,
+        "current_node_index": processed_count, "total_nodes": total_nodes,
         "initiated_at": instance.initiated_at,
         "completed_at": instance.completed_at,
         "terminated_at": instance.terminated_at,
         "nodes": nodes,
-        "logs": {
-            "items": log_items,
-            "total": len(log_items),
+        "logs": {"items": log_items, "total": len(log_items)},
+    }
+
+
+async def terminate_instance(
+    db: AsyncSession,
+    instance_id: int,
+    reason: str,
+    current_user: CurrentUser,
+) -> dict:
+    """终止流程实例 —— 级联关闭所有关联记录并物理删除文件
+
+    处理步骤：
+    1. 校验实例存在 + 发起人权限 + 未已终止
+    2. 物理删除磁盘文件 + 删除 files 记录
+    3. 级联关闭：非终态 node/task → terminated, pending check/approval → terminated
+    4. 更新实例状态为 terminated
+    5. 记录操作日志
+    """
+    # ========== 1. 查询实例 ==========
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    result = await db.execute(stmt)
+    instance = result.scalar_one_or_none()
+
+    if not instance:
+        raise AppException(ErrorCode.NOT_FOUND, "实例不存在")
+
+    # ========== 2. 校验发起人权限 ==========
+    if instance.initiator_id != current_user.id:
+        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可终止流程")
+
+    # ========== 3. 校验未已终止 ==========
+    if (instance.status or "").lower() == "terminated":
+        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可重复操作")
+
+    now = datetime.now()
+
+    # ========== 4. 物理删除文件 + 删除 files 记录 ==========
+    file_stmt = select(File).where(File.instance_id == instance_id)
+    file_result = await db.execute(file_stmt)
+    files = file_result.scalars().all()
+
+    # 逐个物理删除磁盘文件
+    for f in files:
+        if f.file_path:
+            # 存储路径：STORAGE_ROOT / file_path
+            full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
+            try:
+                if os.path.exists(full_path):
+                    os.remove(full_path)
+            except OSError:
+                # 文件不存在或无权删除，不阻断流程
+                pass
+
+    # 删除文件记录（物理删除，非软删除）
+    if files:
+        await db.execute(sql_delete(File).where(File.instance_id == instance_id))
+
+    # ========== 5. 关闭非终态 instance_nodes ==========
+    non_terminal_statuses = ["finished", "terminated", "skipped"]
+    await db.execute(
+        sql_update(InstanceNode)
+        .where(
+            InstanceNode.instance_id == instance_id,
+            InstanceNode.status.notin_(non_terminal_statuses),
+        )
+        .values(status="terminated", completed_at=now)
+    )
+
+    # ========== 6. 关闭非终态 tasks ==========
+    task_terminal = ["completed", "terminated"]
+    await db.execute(
+        sql_update(Task)
+        .where(
+            Task.instance_id == instance_id,
+            Task.status.notin_(task_terminal),
+        )
+        .values(status="terminated", completed_at=now)
+    )
+
+    # ========== 7. 关闭 pending check_records ==========
+    await db.execute(
+        sql_update(CheckRecord)
+        .where(
+            CheckRecord.instance_id == instance_id,
+            CheckRecord.status == "pending",
+        )
+        .values(status="terminated", decided_at=now)
+    )
+
+    # ========== 8. 关闭 pending approvals ==========
+    await db.execute(
+        sql_update(Approval)
+        .where(
+            Approval.instance_id == instance_id,
+            Approval.status == "pending",
+        )
+        .values(status="terminated", decided_at=now)
+    )
+
+    # ========== 9. 更新实例状态 ==========
+    instance.status = "terminated"
+    instance.termination_reason = reason
+    instance.terminated_at = now
+
+    # ========== 10. 记录操作日志 ==========
+    log = OperationLog(
+        instance_id=instance_id,
+        operator_type="user",
+        operator_id=current_user.id,
+        operation_type="instance_terminated",
+        description=f"终止流程：「{instance.name}」，原因：{reason}",
+        detail={"reason": reason, "instance_name": instance.name},
+    )
+    db.add(log)
+
+    return {
+        "id": instance.id,
+        "name": instance.name,
+        "status": "terminated",
+        "termination_reason": reason,
+        "terminated_at": now,
+    }
+
+
+async def change_personnel(
+    db: AsyncSession,
+    instance_id: int,
+    node_id: int,
+    body: ChangePersonnelRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """紧急换人 —— 更换运行中实例节点的负责人/校验人/审批人
+
+    处理步骤：
+    1. 校验实例存在 + 发起人权限
+    2. 校验节点存在且未完成
+    3. 对比新旧人员列表，决定增删
+    4. pending 记录不在新列表 → terminated
+    5. 新人员生成 CheckRecord/Approval
+    6. 更新 instance_node 人员字段
+    7. 若仅换负责人且节点 running → 更新 Task.assignee_id
+    8. 记录操作日志
+    """
+    # ========== 辅助函数：从人员列表提取 user_id 集合 ==========
+    def extract_user_ids(personnel: list | None) -> set[int]:
+        if not personnel:
+            return set()
+        result = set()
+        for item in personnel:
+            if isinstance(item, dict):
+                result.add(item.get("user_id", 0))
+            elif isinstance(item, int):
+                result.add(item)
+        return result - {0}  # 排除无效 0
+
+    # ========== 1. 校验实例 ==========
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    result = await db.execute(stmt)
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise AppException(ErrorCode.NOT_FOUND, "实例不存在")
+    if instance.initiator_id != current_user.id:
+        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可更换人员")
+
+    # ========== 2. 校验节点 ==========
+    node_stmt = select(InstanceNode).where(
+        InstanceNode.id == node_id,
+        InstanceNode.instance_id == instance_id,
+    )
+    node_result = await db.execute(node_stmt)
+    node = node_result.scalar_one_or_none()
+    if not node:
+        raise AppException(ErrorCode.NOT_FOUND, "节点不存在")
+    if node.status in ("finished", "terminated", "skipped"):
+        raise AppException(ErrorCode.NOT_RUNNING, "已完成/已终止/已跳过的节点不可更换人员")
+
+    now = datetime.now()
+    changes: list[str] = []  # 记录变更描述
+
+    # ========== 3. 处理校验人变更 ==========
+    if body.checkers is not None:
+        old_ids = extract_user_ids(node.checkers)
+        new_checkers = _normalize_list(body.checkers)
+        new_ids = extract_user_ids(new_checkers)
+
+        removed = old_ids - new_ids
+        added = new_ids - old_ids
+
+        if removed or added:
+            # 不在新列表的 pending CheckRecord → terminated
+            await db.execute(
+                sql_update(CheckRecord)
+                .where(
+                    CheckRecord.instance_id == instance_id,
+                    CheckRecord.node_id == node_id,
+                    CheckRecord.status == "pending",
+                    CheckRecord.checker_id.in_(list(removed)),
+                )
+                .values(status="terminated", decided_at=now)
+            )
+
+            # 新校验人生成 CheckRecord
+            for uid in added:
+                db.add(CheckRecord(
+                    instance_id=instance_id,
+                    node_id=node_id,
+                    task_id=0,  # 换人时可能无 task
+                    checker_id=uid,
+                    status="pending",
+                ))
+
+            changes.append(f"校验人: {_describe_change(old_ids, new_ids)}")
+            node.checkers = new_checkers
+
+    # ========== 4. 处理审批人变更 ==========
+    if body.approvers is not None:
+        old_ids = extract_user_ids(node.approvers)
+        new_approvers = _normalize_list(body.approvers)
+        new_ids = extract_user_ids(new_approvers)
+
+        removed = old_ids - new_ids
+        added = new_ids - old_ids
+
+        if removed or added:
+            # 不在新列表的 pending Approval → terminated
+            await db.execute(
+                sql_update(Approval)
+                .where(
+                    Approval.instance_id == instance_id,
+                    Approval.node_id == node_id,
+                    Approval.status == "pending",
+                    Approval.approver_id.in_(list(removed)),
+                )
+                .values(status="terminated", decided_at=now)
+            )
+
+            # 新审批人生成 Approval
+            for uid in added:
+                db.add(Approval(
+                    instance_id=instance_id,
+                    node_id=node_id,
+                    task_id=None,
+                    approver_id=uid,
+                    status="pending",
+                ))
+
+            changes.append(f"审批人: {_describe_change(old_ids, new_ids)}")
+            node.approvers = new_approvers
+
+    # ========== 5. 处理负责人变更 ==========
+    if body.assignee_id is not None and body.assignee_id != node.assignee_id:
+        old_name = f"ID:{node.assignee_id}" if node.assignee_id else "无"
+        node.assignee_id = body.assignee_id
+        changes.append(f"负责人: {old_name} → ID:{body.assignee_id}")
+
+        # 若节点正运行且只有负责人变更 → 更新 Task.assignee_id
+        node_status = (node.status or "").lower()
+        if node_status in ("arrived", "running"):
+            await db.execute(
+                sql_update(Task)
+                .where(
+                    Task.instance_id == instance_id,
+                    Task.node_id == node_id,
+                    Task.status.in_(["pending", "processing"]),
+                )
+                .values(assignee_id=body.assignee_id)
+            )
+
+    # ========== 6. 无变更时返回 ==========
+    if not changes:
+        return {"id": node_id, "message": "无需变更"}
+
+    # ========== 7. 记录操作日志 ==========
+    log = OperationLog(
+        instance_id=instance_id,
+        node_id=node_id,
+        operator_type="user",
+        operator_id=current_user.id,
+        operation_type="personnel_changed",
+        description=f"节点「{node.name}」人员变更：{'；'.join(changes)}",
+        detail={
+            "node_id": node_id,
+            "node_name": node.name,
+            "changes": changes,
         },
+    )
+    db.add(log)
+
+    return {
+        "id": node_id,
+        "node_name": node.name,
+        "assignee_id": node.assignee_id,
+        "checkers": node.checkers,
+        "approvers": node.approvers,
+        "changes": changes,
+    }
+
+
+def _normalize_list(raw: list | None) -> list[dict] | None:
+    """标准化人员列表：[1,2] → [{'user_id':1},{'user_id':2}]，已是 dict 则保持"""
+    if raw is None:
+        return None
+    result = []
+    for item in raw:
+        if isinstance(item, dict):
+            result.append(item)
+        elif isinstance(item, int):
+            result.append({"user_id": item})
+    return result if result else None
+
+
+def _describe_change(old_ids: set[int], new_ids: set[int]) -> str:
+    """将人员变更描述为可读字符串"""
+    parts = []
+    if old_ids - new_ids:
+        parts.append(f"移除 {_ids_str(old_ids - new_ids)}")
+    if new_ids - old_ids:
+        parts.append(f"新增 {_ids_str(new_ids - old_ids)}")
+    return "、".join(parts)
+
+
+def _ids_str(ids: set[int]) -> str:
+    return "ID:" + ",ID:".join(str(i) for i in sorted(ids))
+
+
+async def change_priority(
+    db: AsyncSession,
+    instance_id: int,
+    priority: str,
+    current_user: CurrentUser,
+) -> dict:
+    """修改流程实例优先级 —— 仅发起人 + running 状态可操作
+
+    返回更新后的优先级和实例基本信息。
+    """
+    # 1. 查询实例
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    result = await db.execute(stmt)
+    instance = result.scalar_one_or_none()
+    if not instance:
+        raise AppException(ErrorCode.NOT_FOUND, "实例不存在")
+
+    # 2. 仅发起人
+    if instance.initiator_id != current_user.id:
+        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可修改优先级")
+
+    # 3. 仅 running 状态
+    if (instance.status or "").lower() != "running":
+        raise AppException(ErrorCode.PRIORITY_ONLY_RUNNING, "仅运行中的流程可修改优先级")
+
+    old_priority = instance.priority
+    instance.priority = priority
+
+    # 4. 操作日志
+    priority_names = {"urgent": "紧急", "high": "高", "normal": "普通", "low": "低"}
+    old_label = priority_names.get(old_priority, old_priority)
+    new_label = priority_names.get(priority, priority)
+
+    log = OperationLog(
+        instance_id=instance_id,
+        operator_type="user",
+        operator_id=current_user.id,
+        operation_type="priority_changed",
+        description=f"优先级变更：{old_label} → {new_label}",
+        detail={"old_priority": old_priority, "new_priority": priority},
+    )
+    db.add(log)
+
+    return {
+        "id": instance.id,
+        "priority": priority,
+        "old_priority": old_priority,
     }

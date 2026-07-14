@@ -2,46 +2,47 @@
   <div class="flow-designer">
     <!-- 顶部工具栏 -->
     <div class="designer-header">
-      <el-page-header @back="$router.push('/flows')" content="流程设计器" />
+      <el-page-header @back="handleBack">
+        <template #content>
+          <span v-if="isLaunchMode">发起流程 · {{ templateName }}</span>
+          <span v-else>流程设计器 · {{ templateName }}</span>
+        </template>
+      </el-page-header>
       <div class="header-actions">
-        <span class="template-name" v-if="templateName">{{ templateName }}</span>
-        <el-tooltip content="Ctrl+Z 撤销 · Ctrl+Y 重做（上限50步）" placement="bottom">
-          <el-button text @click="undo" :disabled="!undoable">↩ 撤销</el-button>
-        </el-tooltip>
-        <el-tooltip content="Ctrl+Y 重做" placement="bottom">
-          <el-button text @click="redo" :disabled="!redoable">↪ 重做</el-button>
-        </el-tooltip>
-        <el-divider direction="vertical" />
-        <el-tooltip content="Ctrl+S 保存草稿到服务器" placement="bottom">
-          <el-button type="primary" :disabled="saving" :loading="saving" @click="handleSave">保存</el-button>
-        </el-tooltip>
-        <el-button
-          type="success"
-          :disabled="saving || publishing"
-          :loading="publishing"
-          @click="handlePublish"
-        >
-          发布
-        </el-button>
+        <!-- 编辑模式工具栏 -->
+        <template v-if="!isLaunchMode">
+          <el-tooltip content="Ctrl+Z 撤销" placement="bottom">
+            <el-button text @click="undo" :disabled="!undoable">↩ 撤销</el-button>
+          </el-tooltip>
+          <el-tooltip content="Ctrl+Y 重做" placement="bottom">
+            <el-button text @click="redo" :disabled="!redoable">↪ 重做</el-button>
+          </el-tooltip>
+          <el-tooltip content="Delete 键删除选中" placement="bottom">
+            <el-button text type="danger" @click="handleDelete">🗑 删除</el-button>
+          </el-tooltip>
+          <el-divider direction="vertical" />
+          <el-tooltip content="Ctrl+S 保存" placement="bottom">
+            <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+          </el-tooltip>
+        </template>
+        <!-- 发起模式工具栏 -->
+        <template v-else>
+          <el-button @click="handleCancelLaunch">取消</el-button>
+          <el-button type="primary" :loading="launching" @click="showLaunchDialog = true">发起流程</el-button>
+        </template>
       </div>
     </div>
 
-    <!-- 主体区域：视图切换 + 节点列表 -->
+    <!-- 主体区域：画布 + 面板 -->
     <div class="designer-body" v-loading="loading">
-      <template v-if="viewMode === 'canvas'">
-        <NodePanel :lf="canvasRef?.getLf() ?? null" @add="handleAddNode" />
+      <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
+        <NodePanel :lf="canvasRef?.getLf() ?? null" @add="handleAddNode" @add-optional="handleAddOptionalNode" />
         <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
         <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" />
-      </template>
-      <template v-else>
-        <NodeListView
-          :nodes="getCanvasNodes()"
-          @select-node="handleListNodeSelect"
-        />
-      </template>
+      </div>
+      <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
     </div>
 
-    <!-- 视图切换按钮 -->
     <div class="view-mode-toggle">
       <el-radio-group v-model="viewMode" size="small">
         <el-radio-button value="canvas">画布</el-radio-button>
@@ -49,348 +50,255 @@
       </el-radio-group>
     </div>
 
-    <!-- 发布对话框 -->
-    <PublishDialog
-      ref="publishDialogRef"
-      v-model="showPublishDialog"
-      :lf="canvasRef?.getLf() ?? null"
-    />
+    <!-- 发起流程弹窗 -->
+    <el-dialog v-model="showLaunchDialog" title="发起流程实例" width="480px" @close="launchFormRef?.resetFields()">
+      <el-form ref="launchFormRef" :model="launchForm" :rules="launchRules" label-width="80px" @submit.prevent>
+        <el-form-item label="实例名称" prop="name">
+          <el-input v-model="launchForm.name" placeholder="请输入流程实例名称" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="优先级" prop="priority">
+          <el-select v-model="launchForm.priority" style="width:100%">
+            <el-option label="普通" value="normal" />
+            <el-option label="高" value="high" />
+            <el-option label="紧急" value="urgent" />
+            <el-option label="低" value="low" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="补充说明">
+          <el-input v-model="launchForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="500" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showLaunchDialog = false">取消</el-button>
+        <el-button type="primary" :loading="launching" @click="handleLaunch">确认发起</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { getTemplateDetail, publishTemplate, type TemplateDetail } from '@/api/template'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { getTemplateDetail, type TemplateDetail } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
+import { createInstance } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
 import NodePanel from './designer/NodePanel.vue'
 import PropertyPanel from './designer/PropertyPanel.vue'
 import NodeListView from './designer/NodeListView.vue'
-import PublishDialog from './designer/PublishDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const saving = ref(false)
-const publishing = ref(false)
-const showPublishDialog = ref(false)
-const publishDialogRef = ref<InstanceType<typeof PublishDialog>>()
+const launching = ref(false)
+const showLaunchDialog = ref(false)
+const launchFormRef = ref<FormInstance>()
 const templateName = ref('')
 const canvasRef = ref<InstanceType<typeof FlowCanvas>>()
 const undoable = ref(false)
 const redoable = ref(false)
-
-/** 视图模式：canvas（画布）/ list（列表） */
 const viewMode = ref<'canvas' | 'list'>('canvas')
-
-/** 当前选中节点（LogicFlow 格式） */
 const selectedNodeData = ref<any>(null)
 
-/** 节点选中事件回调 —— 从画布传过来 */
-function handleNodeSelect(nodeData: any | null) {
-  selectedNodeData.value = nodeData
+/** 是否为发起流程模式（路由参数 mode=launch） */
+const isLaunchMode = computed(() => route.query.mode === 'launch')
+
+/** 发起流程表单 */
+const launchForm = ref({ name: '', priority: 'normal' as string, description: '' })
+const launchRules: FormRules = {
+  name: [{ required: true, message: '请输入实例名称', trigger: 'blur' }, { min: 2, max: 100, message: '2-100字符', trigger: 'blur' }],
 }
 
-/** 从画布提取节点列表数据（供 NodeListView 使用） */
+/** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
+const systemNodeDbIds = ref<{ start?: number; end?: number }>({})
+
+/** 构建系统节点 UUID → 数据库 ID 的映射表 */
+function buildSystemIdMapping(graphData: { nodes: any[]; edges: any[] }): Record<string, number> {
+  const mapping: Record<string, number> = {}
+  for (const n of graphData.nodes) {
+    if (n.properties?.is_start && systemNodeDbIds.value.start) mapping[String(n.id)] = systemNodeDbIds.value.start
+    if (n.properties?.is_end && systemNodeDbIds.value.end) mapping[String(n.id)] = systemNodeDbIds.value.end
+  }
+  // 属性丢失时用图结构兜底
+  if ((!systemNodeDbIds.value.start || !systemNodeDbIds.value.end) && graphData.edges.length > 0) {
+    const sourceIds = new Set(graphData.edges.map((e: any) => String(e.sourceNodeId)))
+    const targetIds = new Set(graphData.edges.map((e: any) => String(e.targetNodeId)))
+    for (const n of graphData.nodes) {
+      const nid = String(n.id)
+      if (mapping[nid] !== undefined) continue
+      const isOnlySource = sourceIds.has(nid) && !targetIds.has(nid)
+      const isOnlyTarget = targetIds.has(nid) && !sourceIds.has(nid)
+      if (isOnlySource && systemNodeDbIds.value.start) mapping[nid] = systemNodeDbIds.value.start
+      else if (isOnlyTarget && systemNodeDbIds.value.end) mapping[nid] = systemNodeDbIds.value.end
+    }
+  }
+  return mapping
+}
+
+function resolveNodeId(lfId: string | number, mapping: Record<string, number>): number | null {
+  if (mapping[String(lfId)] !== undefined) return mapping[String(lfId)]
+  const num = Number(lfId)
+  return Number.isNaN(num) ? null : num
+}
+
+function handleNodeSelect(nodeData: any | null) { selectedNodeData.value = nodeData }
 function getCanvasNodes(): any[] {
   const lf = canvasRef.value?.getLf()
   if (!lf) return []
-  const graphData = lf.getGraphData()
-  return (graphData.nodes || []).map((n: any) => ({
-    id: n.id,
-    name: n.properties?.name || n.text?.value || '',
-    is_start: n.properties?.is_start ?? false,
-    is_end: n.properties?.is_end ?? false,
-    assignee_id: n.properties?.assignee_id ?? null,
-    assignee_name: n.properties?.assignee_name || '',
-    checkers: n.properties?.checkers ?? null,
-    checkers_names: n.properties?.checkers_names || [],
-    approvers: n.properties?.approvers ?? null,
-    approvers_names: n.properties?.approvers_names || [],
+  return (lf.getGraphData().nodes || []).map((n: any) => ({
+    id: n.id, name: n.properties?.name || n.text?.value || '',
+    is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
+    assignee_id: n.properties?.assignee_id ?? null, assignee_name: n.properties?.assignee_name || '',
+    checkers: n.properties?.checkers ?? null, approvers: n.properties?.approvers ?? null,
     time_limit_days: n.properties?.time_limit_days ?? null,
   }))
 }
 
-/** 列表视图中点击行 → 切换到画布并选中/居中节点 */
 function handleListNodeSelect(nodeId: string | number) {
   viewMode.value = 'canvas'
   const lf = canvasRef.value?.getLf()
   if (!lf) return
-
-  // 选中节点
   lf.selectNodeById(String(nodeId))
-  // 居中到节点
-  const nodeData = lf.getNodeModelById(String(nodeId))
-  if (nodeData) {
-    lf.focusOn({ coordinate: { x: nodeData.x, y: nodeData.y } })
-  }
+  const nd = lf.getNodeModelById(String(nodeId))
+  if (nd) lf.focusOn({ coordinate: { x: nd.x, y: nd.y } })
 }
 
-/** Ctrl+S 快捷键保存 */
 function handleKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-    e.preventDefault()
-    handleSave()
-  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave() }
 }
 
 onMounted(async () => {
   const id = Number(route.params.id)
   if (!id) return
-
   loading.value = true
   try {
     const detail: TemplateDetail = await getTemplateDetail(id)
     templateName.value = detail.name
+    const startNode = detail.nodes.find(n => n.is_start)
+    const endNode = detail.nodes.find(n => n.is_end)
+    systemNodeDbIds.value = { start: startNode?.id, end: endNode?.id }
 
-    // 加载节点和连线到画布
     const lf = canvasRef.value?.getLf()
-    if (lf && (detail.nodes.length > 0 || detail.edges.length > 0)) {
-      // 根据节点属性映射到对应类型
+    if (lf && detail.nodes.length > 0) {
       function mapNodeType(n: typeof detail.nodes[number]): string {
         if (n.is_start) return 'start-node'
         if (n.is_end) return 'end-node'
         return 'work-node'
       }
-
       lf.renderRawData({
-        nodes: detail.nodes.map(n => ({
-          id: String(n.id),
-          type: mapNodeType(n),
-          x: n.position_x,
-          y: n.position_y,
-          properties: {
-            name: n.name,
-            is_start: n.is_start,
-            is_end: n.is_end,
-            assignee_id: n.assignee_id,
-            time_limit_days: n.time_limit_days,
-            require_file: n.require_file,
-            approvers: n.approvers,
-            checkers: n.checkers,
-            approval_strategy: n.approval_strategy,
-            is_optional: n.is_optional,
-          },
-        })),
-        edges: detail.edges.map(e => ({
-          id: String(e.id),
-          type: 'polyline',
-          sourceNodeId: String(e.source_node_id),
-          targetNodeId: String(e.target_node_id),
-        })),
+        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, checkers: n.checkers, approval_strategy: n.approval_strategy, is_optional: n.is_optional } })),
+        edges: detail.edges.map(e => ({ id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) })),
       })
-
-      // 更新撤销/重做状态
       updateUndoRedoState(lf)
     }
-  } catch {
-    ElMessage.error('加载模板数据失败')
-  } finally {
-    loading.value = false
-  }
-
-  // 注册键盘快捷键
+  } catch { ElMessage.error('加载模板数据失败') }
+  finally { loading.value = false }
   window.addEventListener('keydown', handleKeydown)
 })
 
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
-})
+onUnmounted(() => { window.removeEventListener('keydown', handleKeydown) })
 
-/** 更新撤销/重做状态 */
-function updateUndoRedoState(lf?: InstanceType<typeof FlowCanvas>['getLf'] extends () => infer R ? R : never) {
+function updateUndoRedoState(lf?: any) {
   const instance = lf || canvasRef.value?.getLf()
   if (!instance) return
   undoable.value = instance.history.undoAble()
   redoable.value = instance.history.redoAble()
 }
 
-/** 从面板添加工作节点 */
-function handleAddNode() {
-  canvasRef.value?.addWorkNode()
-  updateUndoRedoState()
+function handleAddNode() { canvasRef.value?.addWorkNode(); updateUndoRedoState() }
+function handleAddOptionalNode() { canvasRef.value?.addOptionalNode(); updateUndoRedoState() }
+function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }
+function undo() { canvasRef.value?.getLf()?.undo(); updateUndoRedoState() }
+function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
+
+/** 返回 —— 编辑模式回到上一页，发起模式直接回流程管理 */
+function handleBack() {
+  if (isLaunchMode.value) router.push('/flows')
+  else router.back()
 }
 
-/** 撤销 */
-function undo() {
-  canvasRef.value?.getLf()?.undo()
-  updateUndoRedoState()
-}
+function handleCancelLaunch() { router.push('/flows') }
 
-/** 重做 */
-function redo() {
-  canvasRef.value?.getLf()?.redo()
-  updateUndoRedoState()
-}
-
-/** 保存 —— 从画布收集节点坐标和连线，批量提交后端 */
+/** 保存模板设计 */
 async function handleSave() {
   const lf = canvasRef.value?.getLf()
   if (!lf) return
-
   const templateId = Number(route.params.id)
   if (!templateId) return
-
   saving.value = true
   try {
-    // 获取画布完整数据（含当前坐标）
     const graphData = lf.getGraphData()
-
-    // 映射节点：LogicFlow 格式 → 后端格式
+    const idMapping = buildSystemIdMapping(graphData)
     const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
-      id: Number(n.id) || null,  // 字符串 ID 还原为数字
-      name: n.properties?.name || n.text?.value || n.type,
-      is_start: n.properties?.is_start ?? false,
-      is_end: n.properties?.is_end ?? false,
-      assignee_id: n.properties?.assignee_id ?? null,
-      time_limit_days: n.properties?.time_limit_days ?? null,
-      require_file: n.properties?.require_file ?? false,
-      approvers: n.properties?.approvers ?? null,
-      checkers: n.properties?.checkers ?? null,
-      approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      is_optional: n.properties?.is_optional ?? false,
-      position_x: Math.round(n.x),   // 当前坐标
-      position_y: Math.round(n.y),
+      id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,
+      is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
+      assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
+      require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
+      checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
+      is_optional: n.properties?.is_optional ?? false, position_x: Math.round(n.x), position_y: Math.round(n.y),
       sort_order: n.properties?.sort_order ?? 0,
     }))
-
-    // 映射连线
-    const edges: DesignerEdge[] = graphData.edges.map((e: any) => ({
-      id: Number(e.id) || null,
-      source_node_id: Number(e.sourceNodeId),
-      target_node_id: Number(e.targetNodeId),
-    }))
-
-    const result = await saveDesign(templateId, { nodes, edges })
-    ElMessage.success(result.is_hard_modified
-      ? '已发布模板硬修改，版本已递增并回到草稿'
-      : `保存成功（${result.node_count} 节点 · ${result.edge_count} 连线）`,
-    )
+    const edges: DesignerEdge[] = graphData.edges
+      .filter((e: any) => e.sourceNodeId && e.targetNodeId)
+      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping), target_node_id: resolveNodeId(e.targetNodeId, idMapping) }))
+    await saveDesign(templateId, { nodes, edges })
+    ElMessage.success(`保存成功（${nodes.length} 节点 · ${edges.length} 连线）`)
   } catch (err: any) {
-    // 网络/权限等底层错误由拦截器处理；此处兜底业务错误
-    if (err?.response?.data?.message) {
-      ElMessage.error(`保存失败：${err.response.data.message}`)
-    }
-  } finally {
-    saving.value = false
-  }
+    if (err?.response?.data?.message) ElMessage.error(`保存失败：${err.response.data.message}`)
+  } finally { saving.value = false }
 }
 
-/** 发布流程：先保存 → 校验 → 发布 */
-async function handlePublish() {
+/** 发起模式：先保存模板，再创建实例，跳转详情页 */
+async function handleLaunch() {
+  const valid = await launchFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  const lf = canvasRef.value?.getLf()
+  if (!lf) return
   const templateId = Number(route.params.id)
   if (!templateId) return
 
-  // 先保存，确保提交最新内容
-  if (canvasRef.value?.getLf()) {
-    saving.value = true
-    try {
-      const lf = canvasRef.value.getLf()
-      const graphData = lf.getGraphData()
-      const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
-        id: Number(n.id) || null,
-        name: n.properties?.name || n.text?.value || n.type,
-        is_start: n.properties?.is_start ?? false,
-        is_end: n.properties?.is_end ?? false,
-        assignee_id: n.properties?.assignee_id ?? null,
-        time_limit_days: n.properties?.time_limit_days ?? null,
-        require_file: n.properties?.require_file ?? false,
-        approvers: n.properties?.approvers ?? null,
-        checkers: n.properties?.checkers ?? null,
-        approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-        is_optional: n.properties?.is_optional ?? false,
-        position_x: Math.round(n.x),
-        position_y: Math.round(n.y),
-        sort_order: n.properties?.sort_order ?? 0,
-      }))
-      const edges: DesignerEdge[] = graphData.edges.map((e: any) => ({
-        id: Number(e.id) || null,
-        source_node_id: Number(e.sourceNodeId),
-        target_node_id: Number(e.targetNodeId),
-      }))
-      await saveDesign(templateId, { nodes, edges })
-    } catch {
-      ElMessage.error('保存失败，无法继续发布')
-      return
-    } finally {
-      saving.value = false
-    }
-  }
-
-  // 打开发布弹窗
-  showPublishDialog.value = true
-  publishDialogRef.value?.reset()
-  publishDialogRef.value?.setPublishing(true)
-  publishing.value = true
-
+  launching.value = true
   try {
-    const result = await publishTemplate(templateId)
-    publishDialogRef.value?.setPublishing(false)
-    publishDialogRef.value?.setResult(result)
-    ElMessage.success(`模板已发布（V${result.version_number}）`)
+    // 1. 先保存模板最新设计
+    const graphData = lf.getGraphData()
+    const idMapping = buildSystemIdMapping(graphData)
+    const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
+      id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,
+      is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
+      assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
+      require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
+      checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
+      is_optional: n.properties?.is_optional ?? false, position_x: Math.round(n.x), position_y: Math.round(n.y),
+      sort_order: n.properties?.sort_order ?? 0,
+    }))
+    const edges: DesignerEdge[] = graphData.edges
+      .filter((e: any) => e.sourceNodeId && e.targetNodeId)
+      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping), target_node_id: resolveNodeId(e.targetNodeId, idMapping) }))
+    await saveDesign(templateId, { nodes, edges })
+
+    // 2. 发起流程实例
+    const result = await createInstance({
+      template_id: templateId,
+      name: launchForm.value.name.trim(),
+      priority: launchForm.value.priority,
+      description: launchForm.value.description || undefined,
+    })
+    ElMessage.success('流程发起成功')
+    showLaunchDialog.value = false
+    router.push(`/instances/${result.id}`)
   } catch (err: any) {
-    publishDialogRef.value?.setPublishing(false)
-    const errorData = err?.response?.data?.data
-    if (errorData?.errors && Array.isArray(errorData.errors)) {
-      publishDialogRef.value?.setErrors(errorData.errors)
-    } else {
-      ElMessage.error(err?.response?.data?.message || '发布失败')
-      showPublishDialog.value = false
-    }
-  } finally {
-    publishing.value = false
-  }
+    if (err?.response?.data?.message) ElMessage.error(err.response.data.message)
+    else ElMessage.error('发起流程失败')
+  } finally { launching.value = false }
 }
 </script>
 
 <style lang="scss" scoped>
-.flow-designer {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 60px);
-  position: relative;
-}
-
-.designer-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 20px;
-  background: #fff;
-  border-bottom: 1px solid var(--el-border-color-light);
-  flex-shrink: 0;
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .template-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--el-text-color-primary);
-    margin-right: 12px;
-  }
-}
-
-.designer-body {
-  flex: 1;
-  overflow: hidden;
-  display: flex;
-}
-
-/* 视图切换按钮 —— 左下角浮动 */
-.view-mode-toggle {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  z-index: 10;
-  background: #fff;
-  border-radius: 6px;
-  padding: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
+.flow-designer { display: flex; flex-direction: column; height: calc(100vh - 60px); position: relative; }
+.designer-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--el-border-color-light); flex-shrink: 0; .header-actions { display: flex; align-items: center; gap: 4px; } }
+.designer-body { flex: 1; overflow: hidden; display: flex; }
+.view-mode-toggle { position: absolute; bottom: 16px; left: 16px; z-index: 10; background: #fff; border-radius: 6px; padding: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 </style>
