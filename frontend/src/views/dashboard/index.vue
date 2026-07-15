@@ -31,55 +31,6 @@
       </div>
     </div>
 
-    <!-- ====== 饼图 + 卡点追踪 ====== -->
-    <div class="dash-row">
-      <div class="card dash-pie">
-        <div class="card__header"><span class="card__title">任务状态分布</span></div>
-        <div class="card__body" style="display:flex;justify-content:center;padding:24px 20px">
-          <PieChart :items="data.task_distribution" @click="handlePieClick" />
-        </div>
-      </div>
-
-      <div class="card dash-bn">
-        <div class="card__header">
-          <span class="card__title">流程卡点追踪</span>
-          <el-select v-model="bottleneckOrgFilter" placeholder="全部组织" clearable size="small" style="width:120px">
-            <el-option v-for="o in orgNames" :key="o" :label="o" :value="o" />
-          </el-select>
-        </div>
-        <div class="card__body" style="padding:0">
-          <el-table :data="filteredBottleneck" size="small" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass">
-            <el-table-column prop="instance_name" label="流程实例" min-width="130" show-overflow-tooltip />
-            <el-table-column prop="organization_name" label="所属组织" min-width="90" />
-            <el-table-column label="节点进度" min-width="250">
-              <template #default="{ row }">
-                <div class="chain-row">
-                  <template v-for="(seg, i) in row.progress_chain" :key="i">
-                    <span class="chain-arr" v-if="i > 0">→</span>
-                    <span class="chain-seg" :class="{ 'chain-seg--cur': seg.includes('🔵') }">{{ seg }}</span>
-                  </template>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="耗时" min-width="55" align="center">
-              <template #default="{ row }">{{ row.days_elapsed }}天</template>
-            </el-table-column>
-            <el-table-column label="状态" min-width="68" align="center">
-              <template #default="{ row }">
-                <span class="od-tag" :class="odClass(row.overdue_status)">{{ row.overdue_status }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" min-width="55" align="center">
-              <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="$router.push(`/flows/instances/${row.instance_id}`)">详情</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div v-else style="text-align:center;padding:36px 0;color:var(--el-text-color-secondary);font-size:13px">暂无运行中流程</div>
-        </div>
-      </div>
-    </div>
-
     <!-- ====== 超期预警 ====== -->
     <div class="card">
       <div class="card__header"><span class="card__title">⚠️ 超期预警</span></div>
@@ -106,13 +57,65 @@
       </div>
     </div>
 
+    <!-- ====== 饼图 + 卡点追踪 ====== -->
+    <div class="dash-row">
+      <div class="card dash-pie">
+        <div class="card__header"><span class="card__title">各所运行中实例分布</span></div>
+        <div class="card__body" style="display:flex;align-items:center;justify-content:center;padding:24px 20px;flex:1">
+          <PieChart :items="orgPieItems" @click="handlePieClick" />
+        </div>
+      </div>
+
+      <div class="card dash-bn">
+        <div class="card__header">
+          <span class="card__title">流程卡点追踪</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <el-button size="small" text @click="toggleAllExpand">{{ allExpanded ? '收起全部' : '展开全部' }}</el-button>
+            <el-select v-model="bottleneckOrgFilter" placeholder="全部组织" clearable size="small" style="width:120px">
+              <el-option v-for="o in orgNames" :key="o" :label="o" :value="o" />
+            </el-select>
+          </div>
+        </div>
+        <div class="card__body" style="padding:0">
+          <el-table :data="filteredBottleneck" size="small" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id" :expand-row-keys="expandedRows" @expand-change="onExpandChange">
+            <el-table-column type="expand">
+              <template #default="{ row }">
+                <div class="bt-chain">
+                  <template v-for="(seg, i) in row.progress_chain" :key="i">
+                    <span v-if="i > 0" class="bt-arr">→</span>
+                    <span class="bt-node" :class="chainNodeClass(seg)">{{ chainNodeLabel(seg) }}</span>
+                  </template>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="instance_name" label="流程实例" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="organization_name" label="所属组织" min-width="90" />
+            <el-table-column label="耗时" min-width="55" align="center">
+              <template #default="{ row }">{{ row.days_elapsed }}天</template>
+            </el-table-column>
+            <el-table-column label="状态" min-width="68" align="center">
+              <template #default="{ row }">
+                <span class="od-tag" :class="odClass(row.overdue_status)">{{ row.overdue_status }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" min-width="55" align="center">
+              <template #default="{ row }">
+                <el-button text type="primary" size="small" @click="$router.push(`/flows/instances/${row.instance_id}`)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-else style="text-align:center;padding:36px 0;color:var(--el-text-color-secondary);font-size:13px">暂无运行中流程</div>
+        </div>
+      </div>
+    </div>
+
     <!-- ====== 各所概览 ====== -->
     <div class="card">
       <div class="card__header"><span class="card__title">各所流程概览</span></div>
       <div class="card__body" style="padding:0">
         <template v-if="data.org_overview.length > 0">
-          <el-collapse>
-            <el-collapse-item v-for="org in data.org_overview" :key="org.org_id">
+          <el-collapse v-model="activeOrgs">
+            <el-collapse-item v-for="org in data.org_overview" :key="org.org_id" :name="org.org_id">
               <template #title>
                 <span class="ov-title">{{ org.org_name }}</span>
                 <el-tag size="small" effect="plain" style="margin-left:8px">运行中 {{ org.running_count }}</el-tag>
@@ -141,6 +144,13 @@ import PieChart from './components/PieChart.vue'
 
 const loading = ref(false)
 const bottleneckOrgFilter = ref('')
+/** el-collapse 当前展开的组织 ID 列表（饼图点击联动） */
+const activeOrgs = ref<number[]>([])
+/** 卡点追踪表格当前展开的行 ID 列表 */
+const expandedRows = ref<number[]>([])
+
+/** 组织饼图色板（最多支持 10 个组织） */
+const ORG_COLORS = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC', '#6E7074']
 
 const data = reactive<DashboardData>({
   stats: { running_instances: 0, archived_total: 0, archived_this_month: 0, overdue_warnings: 0 },
@@ -165,12 +175,67 @@ const filteredBottleneck = computed(() =>
   bottleneckOrgFilter.value ? data.bottleneck.filter(b => b.organization_name === bottleneckOrgFilter.value) : data.bottleneck
 )
 
+/** 是否所有行已展开 */
+const allExpanded = computed(() => {
+  const ids = filteredBottleneck.value.map(b => b.instance_id)
+  return ids.length > 0 && ids.every(id => expandedRows.value.includes(id))
+})
+
+/** 一键展开/收起全部 */
+function toggleAllExpand() {
+  if (allExpanded.value) {
+    expandedRows.value = []
+  } else {
+    expandedRows.value = filteredBottleneck.value.map(b => b.instance_id)
+  }
+}
+
+/** 同步用户手动点击展开/收起 */
+function onExpandChange(row: any, rows: any[]) {
+  expandedRows.value = rows.map((r: any) => r.instance_id)
+}
+
+/** 饼图数据源：各所运行中实例分布（仅 running_count > 0 的组织） */
+const orgPieItems = computed(() => {
+  return data.org_overview
+    .filter(o => o.running_count > 0)
+    .map((o, i) => ({
+      status: String(o.org_id),           // 扇区标识 → 组织 ID
+      label: o.org_name,                   // 扇区名称 → 组织名称
+      color: ORG_COLORS[i % ORG_COLORS.length],
+      count: o.running_count,
+    }))
+})
+
 // ─── helpers ───
-function handlePieClick(_s: string) { window.location.hash = '#/profile' }
+/** 饼图点击扇区 → 展开/收起下方"各所概览"中对应组织 */
+function handlePieClick(orgId: string) {
+  const id = Number(orgId)
+  const idx = activeOrgs.value.indexOf(id)
+  if (idx >= 0) {
+    activeOrgs.value.splice(idx, 1)       // 已展开 → 收起
+  } else {
+    activeOrgs.value.push(id)             // 未展开 → 展开
+  }
+}
 function tableRowClass({ row }: any) { return row.overdue_status === '已逾期' ? 'r--red' : row.overdue_status === '即将逾期' ? 'r--yel' : '' }
 function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将逾期' ? 'od--y' : 'od--g' }
 function fmt(d: string | null) { return d ? d.substring(0, 10) : '—' }
 function pri(p: string) { const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }; return m[p] || p }
+
+/** 提取进度链片段的节点名称（去掉 emoji 图标前缀） */
+function chainNodeLabel(seg: string): string {
+  if (seg.startsWith('✅') || seg.startsWith('🔵') || seg.startsWith('⚪') || seg.startsWith('⏭️')) return seg.slice(2)
+  return seg
+}
+
+/** 返回进度链片段的 CSS 类 */
+function chainNodeClass(seg: string): string {
+  if (seg.startsWith('🔵')) return 'bt-node--active'        // 当前节点高亮
+  if (seg.startsWith('✅')) return 'bt-node--done'           // 已完成
+  if (seg.startsWith('⏭️')) return 'bt-node--skip'           // 已跳过
+  return 'bt-node--wait'                                     // 待开始
+}
 </script>
 
 <style lang="scss" scoped>
@@ -194,14 +259,21 @@ function pri(p: string) { const m: Record<string, string> = { urgent: '紧急', 
 
 /* ─── 双栏 ─── */
 .dash-row { display: grid; grid-template-columns: 380px 1fr; gap: 16px; margin-bottom: 16px; }
-.dash-pie { min-width: 0; }
+.dash-pie { min-width: 0; display: flex; flex-direction: column; }
 .dash-bn { min-width: 0; overflow: hidden; }
 
-/* ─── 卡点追踪节点链 ─── */
-.chain-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1px 0; font-size: 11px; line-height: 1.6; padding: 2px 0; }
-.chain-arr { color: var(--el-text-color-placeholder); margin: 0 2px; flex-shrink: 0; }
-.chain-seg { white-space: nowrap; }
-.chain-seg--cur { font-weight: 600; color: var(--el-color-primary); }
+/* ─── 卡点追踪：可展开进度链 ─── */
+.bt-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 12px; line-height: 1.8; padding: 8px 0; justify-content: center; }
+.bt-arr { color: var(--el-text-color-placeholder); margin: 0 6px; flex-shrink: 0; font-size: 11px; }
+
+.bt-node {
+  display: inline-block; padding: 2px 10px; border-radius: 4px;
+  font-size: 12px; white-space: nowrap; border: 1px solid var(--el-border-color);
+  &--done { background: #eafaf1; color: #1e8449; border-color: #a3d9b1; }
+  &--active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); border-color: var(--el-color-primary); font-weight: 600; }
+  &--skip { background: #f5f5f5; color: var(--el-text-color-placeholder); border-color: #e0e0e0; text-decoration: line-through; }
+  &--wait { background: #fafafa; color: var(--el-text-color-placeholder); border-color: #eee; }
+}
 
 /* ─── 逾期 --- */
 .od-tag { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500; }
