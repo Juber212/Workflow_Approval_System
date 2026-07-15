@@ -35,6 +35,16 @@
 
     <!-- 卡片内容（可折叠） -->
     <div class="node-card__body" v-show="expanded">
+      <!-- 阶段进度指示（非开始/结束/跳过节点显示） -->
+      <div v-if="!node.is_start && !node.is_end && !node.is_skipped" class="stage-progress">
+        <div class="stage-steps">
+          <template v-for="(label, idx) in ['处理', '校验', '审批', '完成']" :key="label">
+            <div class="stage-step" :class="stageClass(idx)">{{ label }}</div>
+            <div v-if="idx < 3" class="stage-line" :class="stageLineClass(idx)"></div>
+          </template>
+        </div>
+      </div>
+
       <!-- 节点配置信息 -->
       <div class="info-grid" v-if="!node.is_start && !node.is_end">
         <div class="info-grid__item">
@@ -73,6 +83,8 @@
             <span class="file-name">{{ f.original_name }}</span>
             <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
             <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
+            <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+            <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
           </div>
         </div>
       </div>
@@ -137,6 +149,7 @@
 import { ref, computed } from 'vue'
 import { ArrowDown, Document } from '@element-plus/icons-vue'
 import type { DetailNodeInfo } from '@/api/instance'
+import { previewFile, downloadFile } from '@/api/task'
 
 const props = defineProps<{
   node: DetailNodeInfo
@@ -222,6 +235,30 @@ const isDone = computed(() => {
 })
 
 // ========== 人员名称 ==========
+/** 当前节点所处的阶段序号：-1=未到达, 0=处理, 1=校验, 2=审批, 3=完成 */
+const currentStep = computed(() => {
+  const s = (props.node.status || '').toLowerCase()
+  if (s === 'finish' || s === 'finished') return 3
+  if (s === 'waiting_approval') return 2
+  if (s === 'waiting_check') return 1
+  if (s === 'arrived' || s === 'running') return 0
+  // waiting / terminated / rejected 等 → 不亮任何阶段
+  return -1
+})
+
+/** 阶段步骤样式 */
+function stageClass(step: number): string {
+  const cur = currentStep.value
+  if (step < cur) return 'stage-step--done'
+  if (step === cur) return 'stage-step--active'
+  return ''
+}
+
+/** 阶段连接线样式 */
+function stageLineClass(step: number): string {
+  return step < currentStep.value ? 'stage-line--done' : ''
+}
+
 const checkerNames = computed(() => {
   if (!props.node.checkers || props.node.checkers.length === 0) return '未设置'
   return props.node.checkers.map(c => c.user_name || `ID:${c.user_id}`).join('、')
@@ -393,6 +430,51 @@ function formatFileSize(bytes: number | null): string {
 .node-card__body {
   padding: 16px;
   border-top: 1px solid var(--el-border-color-lighter);
+}
+
+/* 阶段进度指示 */
+.stage-progress {
+  margin-bottom: 14px;
+}
+
+.stage-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.stage-step {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--el-text-color-placeholder);
+  background: var(--el-fill-color);
+  transition: all 0.2s;
+  flex-shrink: 0;
+
+  &--active {
+    color: #fff;
+    background: var(--el-color-primary);
+  }
+
+  &--done {
+    color: var(--el-color-success);
+    background: var(--el-color-success-light-9);
+  }
+}
+
+.stage-line {
+  flex: 1;
+  height: 2px;
+  margin: 0 4px;
+  background: var(--el-border-color);
+  border-radius: 1px;
+  transition: background 0.2s;
+
+  &--done {
+    background: var(--el-color-success);
+  }
 }
 
 .node-desc {

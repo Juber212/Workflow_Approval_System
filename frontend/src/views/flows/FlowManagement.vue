@@ -7,27 +7,7 @@
         <h1 class="page-header__title">流程管理</h1>
         <p class="page-header__subtitle">各组织流程运行概览，点击卡片进入对应组织</p>
       </div>
-      <div class="page-header__actions">
-        <el-button type="primary" @click="showTemplatePicker = true">发起流程</el-button>
-      </div>
     </div>
-
-    <!-- 选择模板弹窗 -->
-    <el-dialog v-model="showTemplatePicker" title="选择流程模板" width="560px">
-      <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable class="tpl-search" />
-      <el-table :data="templateList" v-loading="tplLoading" @row-click="handlePickTemplate" style="cursor:pointer;margin-top:12px" max-height="360">
-        <el-table-column prop="name" label="模板名称" min-width="140" />
-        <el-table-column prop="organization_name" label="所属组织" width="100" />
-        <el-table-column prop="node_count" label="节点数" width="70" align="center" />
-        <el-table-column prop="instance_count" label="运行实例" width="80" align="center" />
-        <el-table-column label="操作" width="80" align="center">
-          <template #default>
-            <el-button text type="primary" size="small">选择</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <template #footer><el-button @click="showTemplatePicker = false">取消</el-button></template>
-    </el-dialog>
 
     <!-- 组织卡片列表（点击跳转 /flows/organization/:id） -->
     <OrgCardList :orgs="orgs" @select="handleOrgSelect" />
@@ -64,39 +44,38 @@
         <el-table :data="instances" stripe v-loading="instanceLoading"
           @row-click="handleInstanceRowClick" style="cursor:pointer"
         >
-          <el-table-column prop="name" label="实例名称" min-width="150">
+          <el-table-column prop="name" label="实例名称" min-width="140">
             <template #default="{ row }">
               <span class="inst-name">{{ row.name }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="template_name" label="模板来源" min-width="120" />
-          <el-table-column prop="organization_name" label="所属组织" width="100" />
+          <el-table-column prop="organization_name" label="所属组织" min-width="100" />
           <el-table-column label="当前负责人" min-width="100">
             <template #default="{ row }">
               <span class="inst-meta">{{ row.current_assignee_name || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="进度" width="70" align="center">
+          <el-table-column label="进度" min-width="64" align="center">
             <template #default="{ row }">
               <span class="inst-progress">{{ row.current_node_index }} / {{ row.total_nodes }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="优先级" width="70" align="center">
+          <el-table-column label="优先级" min-width="64" align="center">
             <template #default="{ row }">
               <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="initiated_at" label="发起时间" width="140">
+          <el-table-column prop="initiated_at" label="发起时间" min-width="140">
             <template #default="{ row }">
               <span class="num">{{ fmtTime(row.initiated_at) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="80" align="center">
+          <el-table-column label="状态" min-width="64" align="center">
             <template #default="{ row }">
               <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" min-width="60" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click.stop="goInstanceDetail(row.id)">查看详情</el-button>
             </template>
@@ -128,36 +107,11 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
-import { getTemplateOrganizations, getTemplates, type OrgCardItem, type TemplateItem } from '@/api/template'
+import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, type InstanceListItem } from '@/api/instance'
 import OrgCardList from './components/OrgCardList.vue'
 
 const router = useRouter()
-
-// ========== 发起流程：模板选择 ==========
-const showTemplatePicker = ref(false)
-const tplLoading = ref(false)
-const tplKeyword = ref('')
-const templateList = ref<TemplateItem[]>([])
-
-/** 打开模板选择弹窗时加载模板列表 */
-import { watch } from 'vue'
-watch(showTemplatePicker, (val) => { if (val) fetchTemplateList() })
-
-async function fetchTemplateList() {
-  tplLoading.value = true
-  try {
-    const res = await getTemplates({ page_size: 100, keyword: tplKeyword.value || undefined })
-    templateList.value = res.items
-  } catch { /* ignore */ }
-  finally { tplLoading.value = false }
-}
-
-/** 选择模板 → 进入设计器（发起模式） */
-function handlePickTemplate(row: TemplateItem) {
-  showTemplatePicker.value = false
-  router.push(`/flows/designer/${row.id}?mode=launch`)
-}
 
 // ========== 组织卡片 ==========
 const orgs = ref<OrgCardItem[]>([])
@@ -288,6 +242,4 @@ function instStatusLabel(s: string): string {
 
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
-
-.tpl-search { margin-bottom: 8px; }
 </style>

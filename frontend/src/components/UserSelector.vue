@@ -15,7 +15,7 @@
     <el-option
       v-for="user in options"
       :key="user.id"
-      :label="`${user.real_name} (${user.username})`"
+      :label="user.username ? `${user.real_name} (${user.username})` : user.real_name"
       :value="user.id"
     >
       <span>{{ user.real_name }}</span>
@@ -31,12 +31,15 @@ import { searchUsers, type UserSearchItem } from '@/api/admin'
 /** Props */
 const props = withDefaults(defineProps<{
   modelValue?: number | number[]
+  /** 初始选项 —— 用于预填已选用户的显示名称，避免显示裸 ID */
+  initialOptions?: UserSearchItem[]
   multiple?: boolean
   placeholder?: string
   disabled?: boolean
   clearable?: boolean
 }>(), {
   modelValue: undefined,
+  initialOptions: () => [],
   multiple: false,
   placeholder: '请搜索并选择用户',
   disabled: false,
@@ -56,6 +59,15 @@ const selected = ref<number | number[] | undefined>(props.modelValue)
 
 // 双向绑定
 watch(() => props.modelValue, (v) => { selected.value = v })
+
+/** 初始选项：用于预填已选用户的名称，避免 el-select 显示裸 ID */
+watch(() => props.initialOptions, (users) => {
+  if (users && users.length > 0) {
+    options.value = users
+    emit('options-loaded', users)
+  }
+}, { immediate: true })
+
 function handleChange(val: number | number[] | undefined) {
   emit('update:modelValue', val)
 }

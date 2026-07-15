@@ -202,7 +202,7 @@ async def create_template(db: AsyncSession, data: TemplateCreate, user_id: int) 
 
 
 async def get_template_detail(db: AsyncSession, template_id: int) -> TemplateDetail:
-    """获取模板详情 —— 含节点和连线"""
+    """获取模板详情 —— 含节点和连线，附带用户名称"""
     tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == template_id))).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
@@ -215,6 +215,23 @@ async def get_template_detail(db: AsyncSession, template_id: int) -> TemplateDet
     edges_result = await db.execute(select(TemplateEdge).where(TemplateEdge.template_id == template_id))
     edges = edges_result.scalars().all()
 
+    # 收集所有涉及的用户 ID，批量查询名称
+    user_ids: set[int] = set()
+    for n in nodes:
+        if n.assignee_id:
+            user_ids.add(n.assignee_id)
+        for uid in _extract_ids(n.approvers):
+            user_ids.add(uid)
+        for uid in _extract_ids(n.checkers):
+            user_ids.add(uid)
+
+    # 批量查询用户名称
+    user_name_map: dict[int, str] = {}
+    if user_ids:
+        users_result = await db.execute(select(User.id, User.real_name).where(User.id.in_(list(user_ids))))
+        for row in users_result:
+            user_name_map[row[0]] = row[1]
+
     org_name = (await db.execute(select(Organization.name).where(Organization.id == tpl.organization_id))).scalar_one_or_none()
     creator_name = (await db.execute(select(User.real_name).where(User.id == tpl.created_by))).scalar_one_or_none()
 
@@ -226,7 +243,7 @@ async def get_template_detail(db: AsyncSession, template_id: int) -> TemplateDet
         id=tpl.id, name=tpl.name, description=tpl.description,
         organization_id=tpl.organization_id, organization_name=org_name,
         node_count=len(nodes), instance_count=inst_count,
-        nodes=[_node_to_dict(n) for n in nodes],
+        nodes=[_node_to_dict(n, user_name_map) for n in nodes],
         edges=[{"id": e.id, "source_node_id": e.source_node_id, "target_node_id": e.target_node_id} for e in edges],
         created_by=tpl.created_by, created_by_name=creator_name,
         created_at=tpl.created_at, updated_at=tpl.updated_at,
@@ -254,13 +271,47 @@ async def delete_template(db: AsyncSession, template_id: int) -> None:
     await db.flush()
 
 
-def _node_to_dict(node: TemplateNode) -> dict:
+def _extract_ids(raw: any) -> list[int]:
+    """从 approvers/checkers JSON 字段中提取用户 ID 列表"""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        ids = []
+        for item in raw:
+            if isinstance(item, dict):
+                uid = item.get("user_id") or item.get("id")
+                if isinstance(uid, int):
+                    ids.append(uid)
+            elif isinstance(item, int):
+                ids.append(item)
+        return ids
+    return []
+
+
+def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = None) -> dict:
+    """将模板节点转为字典，附带用户名称"""
+    name_map = user_name_map or {}
+
+    # 解析负责人名称
+    assignee_name = name_map.get(node.assignee_id) if node.assignee_id else None
+
+    # 解析校验人名称列表
+    checker_ids = _extract_ids(node.checkers)
+    checkers_names = [name_map[uid] for uid in checker_ids if uid in name_map]
+
+    # 解析审批人名称列表
+    approver_ids = _extract_ids(node.approvers)
+    approvers_names = [name_map[uid] for uid in approver_ids if uid in name_map]
+
     return {
         "id": node.id, "name": node.name,
         "is_start": node.is_start, "is_end": node.is_end,
-        "assignee_id": node.assignee_id, "time_limit_days": node.time_limit_days,
+        "assignee_id": node.assignee_id, "assignee_name": assignee_name,
+        "time_limit_days": node.time_limit_days,
         "require_file": node.require_file, "approvers": node.approvers,
-        "checkers": node.checkers, "approval_strategy": node.approval_strategy,
+        "approvers_names": approvers_names,
+        "checkers": node.checkers, "checkers_names": checkers_names,
+        "approval_strategy": node.approval_strategy,
         "is_optional": node.is_optional,
         "position_x": node.position_x, "position_y": node.position_y,
         "sort_order": node.sort_order,

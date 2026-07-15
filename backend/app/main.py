@@ -24,7 +24,7 @@ from app.api.tasks import router as tasks_router
 from app.api.checks import router as checks_router
 from app.api.approvals import router as approvals_router
 from app.api.dashboard import router as dashboard_router
-from app.core.database import async_session_factory
+from app.core.database import async_session_factory, engine
 from app.services.config_service import config_service
 
 
@@ -35,6 +35,8 @@ async def lifespan(app: FastAPI):
     # 启动时加载系统配置到内存缓存
     await config_service.load(async_session_factory)
     yield
+    # 关闭时主动释放数据库连接池，避免事件循环关闭后 aiomysql 清理报错
+    await engine.dispose()
 
 
 app = FastAPI(

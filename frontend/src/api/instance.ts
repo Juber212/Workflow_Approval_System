@@ -26,7 +26,6 @@ export interface CreateInstanceData {
 export interface InstanceCreated {
   id: number
   name: string
-  template_id: number
   organization_id: number
   initiator_id: number
   priority: string
@@ -59,8 +58,6 @@ export interface InstanceListParams {
 export interface InstanceListItem {
   id: number
   name: string
-  template_id: number
-  template_name: string
   organization_id: number
   organization_name: string
   initiator_id: number
@@ -164,8 +161,6 @@ export interface InstanceDetailResponse {
   id: number
   name: string
   description: string | null
-  template_id: number
-  template_name: string
   organization_id: number
   organization_name: string
   initiator_id: number
@@ -220,7 +215,6 @@ export async function terminateInstance(id: number, reason: string): Promise<{
 export interface MyInitiatedItem {
   id: number
   name: string
-  template_id: number
   status: string
   archive_status: string
   priority: string
@@ -240,5 +234,26 @@ export async function changePriority(id: number, priority: string): Promise<{
   old_priority: string
 }> {
   const res = await request.put(`/instances/${id}/priority`, { priority })
+  return res.data
+}
+
+/** 紧急换人 —— 更换运行中节点的负责人/校验人/审批人 */
+export async function changePersonnel(
+  instanceId: number,
+  nodeId: number,
+  data: {
+    assignee_id?: number | null
+    checkers?: { user_id: number }[]
+    approvers?: { user_id: number }[]
+  }
+): Promise<{
+  id: number
+  node_name: string
+  assignee_id: number | null
+  checkers: { user_id: number }[] | null
+  approvers: { user_id: number }[] | null
+  changes: string[]
+}> {
+  const res = await request.put(`/instances/${instanceId}/nodes/${nodeId}/personnel`, data)
   return res.data
 }

@@ -53,10 +53,13 @@ export interface TemplateNodeItem {
   is_start: boolean
   is_end: boolean
   assignee_id: number | null
+  assignee_name: string | null
   time_limit_days: number | null
   require_file: boolean
   approvers: any
+  approvers_names: string[] | null
   checkers: any
+  checkers_names: string[] | null
   approval_strategy: string
   is_optional: boolean
   position_x: number

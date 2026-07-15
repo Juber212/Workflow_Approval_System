@@ -109,9 +109,35 @@ async def propagate_from_node(
                 queue.append(se.target_node_id)
 
         elif node.is_end:
-            # 结束节点：进入 waiting_approval，等待发起人终审，不生成 Task
+            # 结束节点：进入 waiting_approval，按 approvers 创建审批记录，不生成 Task
             node.status = "waiting_approval"
             node.started_at = datetime.now()
+
+            # 为结束节点创建审批记录（发起人终审）
+            approvers = node.approvers or []
+            if not approvers:
+                # 兜底：结束节点未配置审批人时，默认由发起人终审
+                from app.models import FlowInstance
+                inst = (
+                    await db.execute(
+                        select(FlowInstance).where(FlowInstance.id == instance_id)
+                    )
+                ).scalar_one_or_none()
+                if inst:
+                    approvers = [{"user_id": inst.initiator_id}]
+
+            if approvers:
+                from app.models import Approval
+                for approver in approvers:
+                    approver_id = approver.get("user_id") if isinstance(approver, dict) else approver
+                    db.add(Approval(
+                        instance_id=instance_id,
+                        node_id=node.id,
+                        task_id=None,  # 结束节点无 Task
+                        approver_id=approver_id,
+                        status="pending",
+                    ))
+
             activated_ids.append(node.id)
 
         else:

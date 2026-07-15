@@ -1,5 +1,6 @@
 """流程设计器服务 —— 保存/加载画布数据（节点 + 连线）"""
 import logging
+from collections import deque
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +41,7 @@ async def save_design_data(
         select(TemplateEdge).where(TemplateEdge.template_id == template_id)
     )).scalars().all()
 
-    logger.debug(f"[designer] 模板状态={tpl.status} 现有节点={len(existing_nodes)} 现有连线={len(existing_edges)}")
+    logger.debug(f"[designer] 现有节点={len(existing_nodes)} 现有连线={len(existing_edges)}")
 
     existing_node_ids = {n.id for n in existing_nodes}
     existing_edge_ids = {e.id for e in existing_edges}
@@ -136,6 +137,13 @@ async def save_design_data(
         )
 
     await db.flush()
+
+    logger.debug(f"[designer] 保存完成: 节点={len(submitted_node_ids)} 连线={len(submitted_edge_ids)} "
+                 f"删除节点={len(nodes_to_delete)} 删除连线={len(edges_to_delete) if edges_to_delete else 0}")
+
+    # 拓扑排序：根据边的关系自动计算所有节点的 sort_order
+    await _topological_sort(db, template_id)
+    await db.flush()  # 确保 sort_order 变更持久化
 
     return {
         "template_id": template_id,
@@ -331,3 +339,108 @@ async def delete_edge(db: AsyncSession, edge_id: int, template_id: int) -> dict:
 
     await db.delete(edge)
     return {"id": edge_id}
+
+
+# ==================== 拓扑排序：根据边计算节点层级 ====================
+
+
+async def _topological_sort(db: AsyncSession, template_id: int) -> None:
+    """BFS 遍历边，按拓扑深度自动计算所有节点的 sort_order
+
+    算法：
+    - 从开始节点出发，沿有向边做最长路径深度计算
+    - 同一深度的并行节点赋相同 sort_order（它们将并排显示）
+    - 同级内按 position_y 升序排列（贴合画布视觉布局）
+    - 未被边连通的孤立节点放在末尾
+    """
+    # 查询所有节点和边
+    nodes_result = await db.execute(
+        select(TemplateNode).where(TemplateNode.template_id == template_id)
+    )
+    all_nodes = list(nodes_result.scalars().all())
+
+    edges_result = await db.execute(
+        select(TemplateEdge).where(TemplateEdge.template_id == template_id)
+    )
+    all_edges = list(edges_result.scalars().all())
+
+    if not all_nodes:
+        return
+
+    # 找到开始节点
+    start_nodes = [n for n in all_nodes if n.is_start]
+    if not start_nodes:
+        logger.warning(f"[designer] 模板 {template_id} 无开始节点，跳过拓扑排序")
+        return
+
+    start_id = start_nodes[0].id
+    node_map = {n.id: n for n in all_nodes}
+
+    # 构建邻接表 → 和反向邻接表 ←
+    adjacency: dict[int, list[int]] = {n.id: [] for n in all_nodes}
+    reverse_adj: dict[int, list[int]] = {n.id: [] for n in all_nodes}
+    for edge in all_edges:
+        if edge.source_node_id in adjacency:
+            adjacency[edge.source_node_id].append(edge.target_node_id)
+        if edge.target_node_id in reverse_adj:
+            reverse_adj[edge.target_node_id].append(edge.source_node_id)
+
+    # 递归计算每个节点的最长路径深度（带记忆化，防环）
+    depth_cache: dict[int, int] = {}
+    # BFS 标记从开始节点可达的节点
+    reachable: set[int] = set()
+    q = deque([start_id])
+    reachable.add(start_id)
+    while q:
+        cur = q.popleft()
+        for nxt in adjacency.get(cur, []):
+            if nxt not in reachable:
+                reachable.add(nxt)
+                q.append(nxt)
+
+    def compute_depth(node_id: int, visited: set[int]) -> int:
+        """计算从开始节点到 node_id 的最长路径长度"""
+        if node_id not in reachable:
+            # 不可达节点返回极大值，放在末尾
+            return 999
+        if node_id == start_id:
+            depth_cache[start_id] = 0
+            return 0
+        if node_id in depth_cache:
+            return depth_cache[node_id]
+        if node_id in visited:
+            # 检测到环，使用 0 作为默认深度
+            return 0
+        visited.add(node_id)
+        max_pred = 0
+        for pred_id in reverse_adj.get(node_id, []):
+            pred_depth = compute_depth(pred_id, visited.copy())
+            max_pred = max(max_pred, pred_depth + 1)
+        depth_cache[node_id] = max_pred
+        return max_pred
+
+    # 计算所有节点的深度
+    for node in all_nodes:
+        compute_depth(node.id, set())
+
+    # 按深度分组，同深度内按 Y 坐标排序
+    depth_groups: dict[int, list[TemplateNode]] = {}
+    for node in all_nodes:
+        d = depth_cache.get(node.id, 999)
+        if d not in depth_groups:
+            depth_groups[d] = []
+        depth_groups[d].append(node)
+
+    # 分配 sort_order：每层一个值，同层节点共享
+    for depth in sorted(depth_groups.keys()):
+        nodes_at_depth = depth_groups[depth]
+        # 同深度内按 Y 坐标从上到下排列
+        nodes_at_depth.sort(key=lambda n: n.position_y or 0)
+        for node in nodes_at_depth:
+            node.sort_order = depth
+
+    logger.debug(
+        f"[designer] 拓扑排序完成 template_id={template_id} "
+        f"节点={len(all_nodes)} 边={len(all_edges)} 层级={len(depth_groups)} "
+        f"深度映射={dict(sorted((k, [n.name for n in v]) for k, v in depth_groups.items()))}"
+    )

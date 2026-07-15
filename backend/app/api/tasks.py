@@ -1,9 +1,12 @@
-"""任务 API —— 待办列表、任务详情、提交、草稿保存、文件上传"""
+"""任务 API —— 待办列表、任务详情、提交、草稿保存、文件上传、文件下载"""
 import asyncio
+import os
 from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
@@ -139,7 +142,7 @@ async def submit_task(
     checkers = node.checkers or []
     if checkers:
         for ch in checkers:
-            checker_id = ch.get("user_id") if isinstance(ch, dict) else ch.user_id
+            checker_id = ch.get("user_id") if isinstance(ch, dict) else ch  # ch 是 int 时即为 user_id
             check_rec = CheckRecord(
                 instance_id=task.instance_id,
                 node_id=task.node_id,
@@ -177,3 +180,44 @@ async def delete_task_file(
     await file_service.delete_file(db, task_id, file_id, current_user.id)
     await db.commit()
     return ApiResponse.ok(message="文件已删除")
+
+
+@router.get("/files/{file_id}/download")
+async def download_file(
+    file_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """下载/预览文件 —— 返回文件流，支持 PDF 内联预览和其他格式下载"""
+    from urllib.parse import quote
+
+    f = (await db.execute(select(File).where(File.id == file_id))).scalar_one_or_none()
+    if f is None:
+        raise AppException(ErrorCode.NOT_FOUND, "文件不存在")
+
+    # 拼接完整路径
+    full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
+    if not os.path.exists(full_path):
+        raise AppException(ErrorCode.NOT_FOUND, "文件已被删除或不存在于磁盘")
+
+    # 确定 MIME 类型和预览模式
+    mime = f.mime_type or "application/octet-stream"
+    inline_types = ("application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp")
+
+    # RFC 5987 编码文件名：只编码名称部分，保留扩展名点号
+    name_part, ext = os.path.splitext(f.original_name)
+    encoded = quote(name_part, safe='') + ext  # 例: %E6%8A%A5%E5%91%8A.pdf
+    ascii_fallback = f"file{ext}"              # ASCII 兜底: file.pdf
+
+    disp = "inline" if mime in inline_types else "attachment"
+    return FileResponse(
+        path=full_path,
+        media_type=mime,
+        filename=f.original_name,
+        headers={
+            "Content-Disposition": (
+                f'{disp}; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{encoded}"
+            ),
+        },
+    )

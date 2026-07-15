@@ -10,7 +10,6 @@ from app.models import (
     Task,
     Organization,
     User,
-    FlowTemplate,
 )
 
 
@@ -158,13 +157,6 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
     for n in all_nodes:
         nodes_by_inst.setdefault(n.instance_id, []).append(n)
 
-    # 批量查模板
-    tpl_ids = list(set(i.template_id for i in instances))
-    tpls = {}
-    if tpl_ids:
-        tpls_result = await db.execute(select(FlowTemplate).where(FlowTemplate.id.in_(tpl_ids)))
-        tpls = {t.id: t.name for t in tpls_result.scalars().all()}
-
     # 批量查组织
     org_ids = list(set(i.organization_id for i in instances))
     orgs = {}
@@ -233,7 +225,6 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
         items.append({
             "instance_id": inst.id,
             "instance_name": inst.name,
-            "template_name": tpls.get(inst.template_id, ""),
             "organization_name": orgs.get(inst.organization_id, ""),
             "progress_chain": progress_chain,
             "current_node_name": current_node_name,
@@ -369,7 +360,6 @@ async def _get_org_overview(db: AsyncSession) -> list[dict]:
             items.append({
                 "id": inst.id,
                 "name": inst.name,
-                "template_name": "",
                 "priority": inst.priority,
                 "current_node_name": cn.name if cn else "—",
                 "current_assignee_name": users_map.get(cn.assignee_id, "") if cn and cn.assignee_id else "",

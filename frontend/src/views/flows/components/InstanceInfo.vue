@@ -1,5 +1,5 @@
 <template>
-  <!-- 实例基本信息卡片（粘性头部）—— 名称/状态/归档/优先级 + 5列信息网格 + 进度条 -->
+  <!-- 实例基本信息卡片 —— 名称/状态/归档/优先级 + 5列信息网格 + 进度条 -->
   <div class="sticky-head">
     <!-- 第一行：标题 + 标签 + 操作按钮 -->
     <div class="sticky-head__top">
@@ -35,10 +35,6 @@
     <!-- 第二行：信息网格（5列） -->
     <div class="info-grid">
       <div class="info-grid__item">
-        <div class="k">所属模板</div>
-        <div class="v">{{ detail.template_name }} V{{ detail.version_number }}</div>
-      </div>
-      <div class="info-grid__item">
         <div class="k">所属组织</div>
         <div class="v">{{ detail.organization_name }}</div>
       </div>
@@ -65,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-/** 实例基本信息粘性头部 —— 组合标题/标签/操作/信息网格/进度条 */
+/** 实例基本信息头部 —— 组合标题/标签/操作/信息网格/进度条 */
 import { computed } from 'vue'
 import ProgressBar from './ProgressBar.vue'
 import type { InstanceDetailResponse } from '@/api/instance'
@@ -151,14 +147,10 @@ function formatTime(val: string | null): string {
 
 <style lang="scss" scoped>
 .sticky-head {
-  position: sticky;
-  top: 56px;
   background: var(--el-bg-color);
   border: 1px solid var(--el-border-color-light);
   border-radius: 10px;
   padding: 16px 20px;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   margin-bottom: 20px;
 }
 

@@ -68,6 +68,7 @@
         >
           <UserSelector
             v-model="form.assignee_id"
+            :initial-options="assigneeInitialOptions"
             placeholder="搜索并选择负责人"
             @update:model-value="handleAssigneeChange"
             @options-loaded="handleOptionsLoaded"
@@ -83,6 +84,7 @@
           <UserSelector
             v-model="form.checkers"
             :multiple="true"
+            :initial-options="checkerInitialOptions"
             placeholder="搜索并选择校验人（可多选）"
             @update:model-value="handleCheckersChange"
             @options-loaded="handleOptionsLoaded"
@@ -98,6 +100,7 @@
           <UserSelector
             v-model="form.approvers"
             :multiple="true"
+            :initial-options="approverInitialOptions"
             placeholder="搜索并选择审批人（可多选）"
             @update:model-value="handleApproversChange"
             @options-loaded="handleOptionsLoaded"
@@ -154,6 +157,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { InfoFilled, Setting } from '@element-plus/icons-vue'
 import UserSelector from '@/components/UserSelector.vue'
+import type { UserSearchItem } from '@/api/admin'
 
 /** Props */
 const props = defineProps<{
@@ -200,6 +204,30 @@ const isConfigured = computed(() => {
     form.time_limit_days &&
     form.time_limit_days >= 1
   )
+})
+
+/** 预填选项 —— 从已保存节点属性构造初始选项，避免 UserSelector 显示裸 ID */
+const assigneeInitialOptions = computed<UserSearchItem[]>(() => {
+  if (form.assignee_id && form.assignee_name) {
+    return [{ id: form.assignee_id, username: '', real_name: form.assignee_name, organization_id: null, organization_name: null }]
+  }
+  return []
+})
+
+const checkerInitialOptions = computed<UserSearchItem[]>(() => {
+  const ids = form.checkers || []
+  const names = form.checkers_names || []
+  return ids.map((id, i) => ({
+    id, username: '', real_name: names[i] || `用户${id}`, organization_id: null, organization_name: null,
+  }))
+})
+
+const approverInitialOptions = computed<UserSearchItem[]>(() => {
+  const ids = form.approvers || []
+  const names = form.approvers_names || []
+  return ids.map((id, i) => ({
+    id, username: '', real_name: names[i] || `用户${id}`, organization_id: null, organization_name: null,
+  }))
 })
 
 /** 上次加载的节点 ID（用于检测切换） */

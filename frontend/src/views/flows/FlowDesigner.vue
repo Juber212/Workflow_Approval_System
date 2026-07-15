@@ -80,7 +80,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { getTemplateDetail, type TemplateDetail } from '@/api/template'
+import { createTemplate, getTemplateDetail, type TemplateDetail } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
@@ -104,6 +104,8 @@ const selectedNodeData = ref<any>(null)
 
 /** 是否为发起流程模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
+/** 是否为新建模板模式（还未入库，首次保存时才创建） */
+const isNewTemplate = computed(() => route.query.new === '1')
 
 /** 发起流程表单 */
 const launchForm = ref({ name: '', priority: 'normal' as string, description: '' })
@@ -114,46 +116,40 @@ const launchRules: FormRules = {
 /** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
 const systemNodeDbIds = ref<{ start?: number; end?: number }>({})
 
-/** 构建系统节点 UUID → 数据库 ID 的映射表 */
+/** 构建节点 LF UUID → 数据库 ID 的映射（通过 properties.db_id） */
 function buildSystemIdMapping(graphData: { nodes: any[]; edges: any[] }): Record<string, number> {
   const mapping: Record<string, number> = {}
   for (const n of graphData.nodes) {
-    if (n.properties?.is_start && systemNodeDbIds.value.start) mapping[String(n.id)] = systemNodeDbIds.value.start
-    if (n.properties?.is_end && systemNodeDbIds.value.end) mapping[String(n.id)] = systemNodeDbIds.value.end
-  }
-  // 属性丢失时用图结构兜底
-  if ((!systemNodeDbIds.value.start || !systemNodeDbIds.value.end) && graphData.edges.length > 0) {
-    const sourceIds = new Set(graphData.edges.map((e: any) => String(e.sourceNodeId)))
-    const targetIds = new Set(graphData.edges.map((e: any) => String(e.targetNodeId)))
-    for (const n of graphData.nodes) {
-      const nid = String(n.id)
-      if (mapping[nid] !== undefined) continue
-      const isOnlySource = sourceIds.has(nid) && !targetIds.has(nid)
-      const isOnlyTarget = targetIds.has(nid) && !sourceIds.has(nid)
-      if (isOnlySource && systemNodeDbIds.value.start) mapping[nid] = systemNodeDbIds.value.start
-      else if (isOnlyTarget && systemNodeDbIds.value.end) mapping[nid] = systemNodeDbIds.value.end
+    if (n.properties?.db_id != null) {
+      mapping[String(n.id)] = Number(n.properties.db_id)
     }
   }
   return mapping
 }
 
-function resolveNodeId(lfId: string | number, mapping: Record<string, number>): number | null {
+function resolveNodeId(lfId: string | number, mapping: Record<string, number>): number | string | null {
   if (mapping[String(lfId)] !== undefined) return mapping[String(lfId)]
   const num = Number(lfId)
-  return Number.isNaN(num) ? null : num
+  // 能转数字 → 返回数字（DB ID）；否则返回原始字符串（新节点临时 ID，由后端 new_node_id_map 解析）
+  return Number.isNaN(num) ? String(lfId) : num
 }
 
 function handleNodeSelect(nodeData: any | null) { selectedNodeData.value = nodeData }
 function getCanvasNodes(): any[] {
   const lf = canvasRef.value?.getLf()
   if (!lf) return []
-  return (lf.getGraphData().nodes || []).map((n: any) => ({
+  const nodes = (lf.getGraphData().nodes || []).map((n: any) => ({
     id: n.id, name: n.properties?.name || n.text?.value || '',
     is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
     assignee_id: n.properties?.assignee_id ?? null, assignee_name: n.properties?.assignee_name || '',
-    checkers: n.properties?.checkers ?? null, approvers: n.properties?.approvers ?? null,
+    checkers: n.properties?.checkers ?? null, checkers_names: n.properties?.checkers_names || null,
+    approvers: n.properties?.approvers ?? null, approvers_names: n.properties?.approvers_names || null,
     time_limit_days: n.properties?.time_limit_days ?? null,
+    sort_order: n.properties?.sort_order ?? 0,
   }))
+  // 按 sort_order 排序，并行同级节点保持稳定序
+  nodes.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  return nodes
 }
 
 function handleListNodeSelect(nodeId: string | number) {
@@ -170,6 +166,23 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
+
+  if (isNewTemplate.value) {
+    // 新建模板：从 query 读取名称，画布预置开始+结束节点
+    templateName.value = (route.query.name as string) || '新建模板'
+    const lf = canvasRef.value?.getLf()
+    if (lf) {
+      // 等待 LogicFlow 初始化完成
+      await new Promise(r => setTimeout(r, 100))
+      lf.addNode({ id: 'start', type: 'start-node', x: 100, y: 300, properties: { db_id: null, name: '开始', is_start: true, is_end: false, require_file: false, approval_strategy: 'all_approve', is_optional: false } })
+      lf.addNode({ id: 'end', type: 'end-node', x: 700, y: 300, properties: { db_id: null, name: '结束', is_start: false, is_end: true, require_file: false, approval_strategy: 'all_approve', is_optional: false } })
+      updateUndoRedoState(lf)
+    }
+    loading.value = false
+    return
+  }
+
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true
@@ -188,14 +201,13 @@ onMounted(async () => {
         return 'work-node'
       }
       lf.renderRawData({
-        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, checkers: n.checkers, approval_strategy: n.approval_strategy, is_optional: n.is_optional } })),
+        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy, is_optional: n.is_optional } })),
         edges: detail.edges.map(e => ({ id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) })),
       })
       updateUndoRedoState(lf)
     }
   } catch { ElMessage.error('加载模板数据失败') }
   finally { loading.value = false }
-  window.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => { window.removeEventListener('keydown', handleKeydown) })
@@ -225,8 +237,6 @@ function handleCancelLaunch() { router.push('/flows') }
 async function handleSave() {
   const lf = canvasRef.value?.getLf()
   if (!lf) return
-  const templateId = Number(route.params.id)
-  if (!templateId) return
   saving.value = true
   try {
     const graphData = lf.getGraphData()
@@ -242,7 +252,20 @@ async function handleSave() {
     }))
     const edges: DesignerEdge[] = graphData.edges
       .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping), target_node_id: resolveNodeId(e.targetNodeId, idMapping) }))
+      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId) }))
+
+    let templateId = Number(route.params.id)
+    if (isNewTemplate.value) {
+      // 新建模板：先创建模板（入库），再保存设计数据
+      const name = (route.query.name as string) || '新建模板'
+      const orgId = Number(route.query.org_id) || 0
+      const desc = (route.query.desc as string) || undefined
+      const tpl = await createTemplate({ name, description: desc, organization_id: orgId })
+      templateId = tpl.id
+      // 更新 URL 为真实模板 ID，后续保存即为更新模式
+      router.replace({ path: `/flows/designer/${templateId}`, query: { mode: route.query.mode as string } })
+    }
+
     await saveDesign(templateId, { nodes, edges })
     ElMessage.success(`保存成功（${nodes.length} 节点 · ${edges.length} 连线）`)
   } catch (err: any) {
@@ -276,7 +299,7 @@ async function handleLaunch() {
     }))
     const edges: DesignerEdge[] = graphData.edges
       .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping), target_node_id: resolveNodeId(e.targetNodeId, idMapping) }))
+      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId) }))
     await saveDesign(templateId, { nodes, edges })
 
     // 2. 发起流程实例
@@ -288,7 +311,7 @@ async function handleLaunch() {
     })
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false
-    router.push(`/instances/${result.id}`)
+    router.push(`/flows/instances/${result.id}`)
   } catch (err: any) {
     if (err?.response?.data?.message) ElMessage.error(err.response.data.message)
     else ElMessage.error('发起流程失败')

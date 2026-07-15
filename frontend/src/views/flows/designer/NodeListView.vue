@@ -134,6 +134,7 @@ interface NodeItem {
   approvers?: number[] | null
   approvers_names?: string[]
   time_limit_days?: number | null
+  sort_order?: number
 }
 
 const props = defineProps<{

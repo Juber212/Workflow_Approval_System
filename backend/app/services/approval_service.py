@@ -102,12 +102,41 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
     approver_user = (await db.execute(select(User).where(User.id == a.approver_id))).scalar_one_or_none()
+    # 查发起人
+    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
 
-    # 文件
-    files_result = await db.execute(
-        select(File).where(File.node_id == a.node_id).order_by(File.id.desc())
+    # 查询实例所有节点（供 ProgressBar 流程进度条使用）
+    all_nodes_result = await db.execute(
+        select(InstanceNode)
+        .where(InstanceNode.instance_id == a.instance_id)
+        .order_by(InstanceNode.sort_order)
     )
+    all_nodes = all_nodes_result.scalars().all()
+    total_nodes = len(all_nodes)
+    current_node_index = sum(
+        1 for n in all_nodes
+        if (n.status or "").lower() in ("finished", "skipped")
+    )
+
+    # 文件（终审节点查看流程全部文件，普通节点只看本节点文件）
+    if node.is_end:
+        files_result = await db.execute(
+            select(File).where(File.instance_id == a.instance_id).order_by(File.id.desc())
+        )
+    else:
+        files_result = await db.execute(
+            select(File).where(File.node_id == a.node_id).order_by(File.id.desc())
+        )
     files = files_result.scalars().all()
+
+    # 批量查询文件所属节点名称
+    file_node_ids = [f.node_id for f in files if f.node_id]
+    file_node_names: dict[int, str] = {}
+    if file_node_ids:
+        fn_result = await db.execute(
+            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
+        )
+        file_node_names = {row[0]: row[1] for row in fn_result.all()}
 
     # 校验进度
     if a.task_id:
@@ -174,6 +203,10 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         "id": a.id,
         "instance_id": a.instance_id,
         "instance_name": inst.name,
+        "instance_status": inst.status,
+        "initiator_id": inst.initiator_id,
+        "initiator_name": initiator.real_name if initiator else "",
+        "priority": (inst.priority or "normal").lower(),
         "node_id": a.node_id,
         "node_name": node.name,
         "node_description": node.description,
@@ -183,10 +216,24 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         "status": a.status,
         "opinion": a.opinion,
         "is_end_node": node.is_end,
+        "total_nodes": total_nodes,
+        "current_node_index": current_node_index,
+        "nodes": [
+            {
+                "id": n.id, "name": n.name,
+                "is_start": n.is_start, "is_end": n.is_end,
+                "is_skipped": n.is_skipped,
+                "status": (n.status or "waiting").lower(),
+                "sort_order": n.sort_order,
+            }
+            for n in all_nodes
+        ],
         "files": [
             {
                 "id": f.id, "original_name": f.original_name,
                 "file_size": f.file_size,
+                "node_id": f.node_id,
+                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
                 "uploader_name": "", "upload_type": f.upload_type,
                 "round": f.round,
                 "created_at": f.created_at.isoformat() if f.created_at else None,
@@ -240,6 +287,14 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     if pending_apprs.scalars().all():
         return {"all_approved": False, "message": "审批通过，等待其他审批人"}
 
+    # 全部审批通过 → 标记当前节点的 Task 为 completed
+    if a.task_id:
+        await db.execute(
+            update(Task)
+            .where(Task.id == a.task_id)
+            .values(status=TaskStatus.COMPLETED, completed_at=now)
+        )
+
     # 全部审批通过 → 签名上 PDF → 推进流程
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
 
@@ -256,12 +311,14 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     await db.flush()
 
     if node.is_end:
-        # 结束节点 → 流程完成
+        # 结束节点 → 流程完成，同步归档（V1 完成即归档）
         node.status = InstanceNodeStatus.FINISHED
         node.completed_at = now
         inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
         inst.status = InstanceStatus.COMPLETED
         inst.completed_at = now
+        inst.archive_status = "archived"
+        inst.archived_at = now
         return {"all_approved": True, "instance_completed": True, "message": "流程已完成"}
 
     # 普通节点 → finished → 传播到下游
@@ -369,6 +426,13 @@ async def reject(
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
 
+        # 终止全部校验记录（新轮次重新生成）
+        await db.execute(
+            update(CheckRecord)
+            .where(CheckRecord.task_id == a.task_id)
+            .values(status=CheckStatus.TERMINATED, decided_at=now)
+        )
+
         # 删除当前轮文件
         curr_files = await db.execute(
             select(File).where(File.node_id == a.node_id, File.round == node.round)
@@ -379,12 +443,14 @@ async def reject(
                 os.remove(abs_path)
             await db.delete(f)
 
-        # Node → running, Task → processing
+        # Node → running, Task → processing，轮次 +1
         node.status = InstanceNodeStatus.RUNNING
+        node.round += 1
         if a.task_id:
             task = (await db.execute(select(Task).where(Task.id == a.task_id))).scalar_one_or_none()
             if task:
                 task.status = TaskStatus.PROCESSING
+                task.submitted_at = None  # 清除提交时间，标记为退回重做
 
         log = OperationLog(
             instance_id=a.instance_id,

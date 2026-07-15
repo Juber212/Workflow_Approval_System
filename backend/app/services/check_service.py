@@ -103,6 +103,22 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == c.instance_id))).scalar_one()
     checker_user = (await db.execute(select(User).where(User.id == c.checker_id))).scalar_one_or_none()
+    # 查发起人 + 提交人（负责人）
+    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
+    submitter = (await db.execute(select(User).where(User.id == task.assignee_id))).scalar_one_or_none()
+
+    # 查询实例所有节点（供 ProgressBar 流程进度条使用）
+    all_nodes_result = await db.execute(
+        select(InstanceNode)
+        .where(InstanceNode.instance_id == c.instance_id)
+        .order_by(InstanceNode.sort_order)
+    )
+    all_nodes = all_nodes_result.scalars().all()
+    total_nodes = len(all_nodes)
+    current_node_index = sum(
+        1 for n in all_nodes
+        if (n.status or "").lower() in ("finished", "skipped")
+    )
 
     # 文件
     files_result = await db.execute(
@@ -125,6 +141,12 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         "id": c.id,
         "instance_id": c.instance_id,
         "instance_name": inst.name,
+        "instance_status": inst.status,
+        "initiator_id": inst.initiator_id,
+        "initiator_name": initiator.real_name if initiator else "",
+        "submitter_id": task.assignee_id,
+        "submitter_name": submitter.real_name if submitter else "",
+        "priority": (inst.priority or "normal").lower(),
         "node_id": c.node_id,
         "node_name": node.name,
         "task_id": c.task_id,
@@ -132,6 +154,18 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         "checker_name": checker_user.real_name if checker_user else "",
         "status": c.status,
         "opinion": c.opinion,
+        "total_nodes": total_nodes,
+        "current_node_index": current_node_index,
+        "nodes": [
+            {
+                "id": n.id, "name": n.name,
+                "is_start": n.is_start, "is_end": n.is_end,
+                "is_skipped": n.is_skipped,
+                "status": (n.status or "waiting").lower(),
+                "sort_order": n.sort_order,
+            }
+            for n in all_nodes
+        ],
         "files": [
             {
                 "id": f.id,
@@ -214,7 +248,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     instance_id=c.instance_id,
                     node_id=c.node_id,
                     task_id=c.task_id,
-                    approver_id=a.get("user_id") if isinstance(a, dict) else a.user_id,
+                    approver_id=a.get("user_id") if isinstance(a, dict) else a,  # a 是 int 时即为 user_id
                     status=ApprovalStatus.PENDING,
                 )
                 db.add(approval)
@@ -243,12 +277,16 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     c.opinion = opinion
     c.decided_at = now
 
-    # 其余 pending CheckRecord → terminated
+    # 终止当前 task 的全部校验记录（新轮次重新生成）
     await db.execute(
         update(CheckRecord)
-        .where(CheckRecord.task_id == c.task_id, CheckRecord.status == CheckStatus.PENDING)
+        .where(CheckRecord.task_id == c.task_id)
         .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
+    # 当前这条保持 returned（不被覆盖）
+    c.status = CheckStatus.RETURNED
+    c.opinion = opinion
+    c.decided_at = now
 
     # 删除当前轮文件
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
@@ -258,10 +296,12 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     for f in files:
         await db.delete(f)
 
-    # Task → processing，Node → running
+    # Task → processing，Node → running，轮次 +1
     task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
     task.status = TaskStatus.PROCESSING
+    task.submitted_at = None  # 清除提交时间，标记为退回重做
     node.status = InstanceNodeStatus.RUNNING
+    node.round += 1
 
     # 操作日志
     log = OperationLog(

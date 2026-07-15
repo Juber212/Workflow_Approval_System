@@ -18,9 +18,25 @@
         </p>
       </div>
       <div class="page-header__actions" v-if="isManager">
-        <el-button @click="handleCreate">+ 创建流程</el-button>
+        <el-button type="primary" @click="showTemplatePicker = true">发起流程</el-button>
       </div>
     </div>
+
+    <!-- 选择模板弹窗（发起流程） -->
+    <el-dialog v-model="showTemplatePicker" title="选择流程模板" width="520px">
+      <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px" />
+      <el-table :data="templateList" v-loading="pickerLoading" @row-click="handlePickTemplate" style="cursor:pointer" max-height="360">
+        <el-table-column prop="name" label="模板名称" min-width="160" />
+        <el-table-column prop="node_count" label="节点数" width="80" align="center" />
+        <el-table-column prop="instance_count" label="运行实例" width="80" align="center" />
+        <el-table-column label="操作" width="80" align="center">
+          <template #default>
+            <el-button text type="primary" size="small">选择</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="showTemplatePicker = false">取消</el-button></template>
+    </el-dialog>
 
     <!-- Tab 切换 -->
     <el-tabs v-model="activeTab" class="org-tabs">
@@ -62,36 +78,35 @@
             @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)"
             style="cursor:pointer"
           >
-            <el-table-column prop="name" label="实例名称" min-width="150">
+            <el-table-column prop="name" label="实例名称" min-width="140">
               <template #default="{ row }">
                 <span class="inst-name">{{ row.name }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="template_name" label="模板来源" min-width="120" />
             <el-table-column label="当前负责人" min-width="100">
               <template #default="{ row }">
                 <span class="inst-meta">{{ row.current_assignee_name || '-' }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="进度" width="70" align="center">
+            <el-table-column label="进度" min-width="64" align="center">
               <template #default="{ row }">
                 <span class="inst-progress">{{ row.current_node_index }} / {{ row.total_nodes }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="优先级" width="70" align="center">
+            <el-table-column label="优先级" min-width="64" align="center">
               <template #default="{ row }">
                 <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="80" align="center">
+            <el-table-column label="状态" min-width="64" align="center">
               <template #default="{ row }">
                 <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="initiated_at" label="发起时间" width="140">
+            <el-table-column prop="initiated_at" label="发起时间" min-width="140">
               <template #default="{ row }">{{ fmtTime(row.initiated_at) }}</template>
             </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right">
+            <el-table-column label="操作" min-width="60" fixed="right">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
               </template>
@@ -165,7 +180,6 @@ import type { FormInstance, FormRules } from 'element-plus'
 import {
   getTemplateOrganizations,
   getTemplates,
-  createTemplate,
   updateTemplate,
   deleteTemplate,
   type OrgCardItem,
@@ -181,6 +195,30 @@ const userStore = useUserStore()
 
 const isManager = computed(() => userStore.isManager)
 const activeTab = ref('instance')
+
+// ========== 发起流程：模板选择弹窗 ==========
+const showTemplatePicker = ref(false)
+const pickerLoading = ref(false)
+const tplKeyword = ref('')
+const templateList = ref<TemplateItem[]>([])
+
+watch(showTemplatePicker, (val) => { if (val) fetchTemplateList() })
+
+/** 加载模板列表（限定当前所） */
+async function fetchTemplateList() {
+  pickerLoading.value = true
+  try {
+    const res = await getTemplates({ page_size: 100, keyword: tplKeyword.value || undefined, organization_id: orgId.value })
+    templateList.value = res.items
+  } catch { /* ignore */ }
+  finally { pickerLoading.value = false }
+}
+
+/** 选择模板 → 进入设计器（发起模式） */
+function handlePickTemplate(row: TemplateItem) {
+  showTemplatePicker.value = false
+  router.push(`/flows/designer/${row.id}?mode=launch`)
+}
 
 // ========== 组织信息 ==========
 const orgId = computed(() => Number(route.params.orgId))
@@ -349,10 +387,11 @@ async function handleSave() {
       formVisible.value = false
       fetchTemplates()
     } else {
-      const result = await createTemplate({ name: form.name, description: form.description, organization_id: orgId.value })
-      ElMessage.success('模板创建成功，即将跳转到流程设计器')
+      // 新建模板：不在此时入库，直接跳设计器；设计器首次保存时才真正创建模板
       formVisible.value = false
-      router.push(`/flows/designer/${result.id}`)
+      const params = new URLSearchParams({ new: '1', name: form.name, org_id: String(orgId.value) })
+      if (form.description) params.set('desc', form.description)
+      router.push(`/flows/designer/0?${params.toString()}`)
     }
   } finally { saving.value = false }
 }

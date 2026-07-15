@@ -73,6 +73,46 @@ async def get_instances(
     return ApiResponse.ok(result)
 
 
+@router.get("/instances/my-initiated")
+async def my_initiated_instances(
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """我发起的流程 —— 所长查看自己发起的所有实例（PRD §7.5）"""
+    from app.models import FlowInstance
+    from sqlalchemy import select, func
+
+    # 直接用简单查询，按发起时间倒序
+    count_stmt = select(func.count()).select_from(FlowInstance).where(
+        FlowInstance.initiator_id == current_user.id
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = (
+        select(FlowInstance)
+        .where(FlowInstance.initiator_id == current_user.id)
+        .order_by(FlowInstance.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    result = await db.execute(stmt)
+    instances = result.scalars().all()
+
+    items = [
+        {
+            "id": i.id, "name": i.name,
+            "status": i.status, "archive_status": i.archive_status,
+            "priority": i.priority, "initiated_at": i.initiated_at.isoformat() if i.initiated_at else None,
+            "completed_at": i.completed_at.isoformat() if i.completed_at else None,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+        }
+        for i in instances
+    ]
+    return ApiResponse.ok({"items": items, "total": total, "page": page, "page_size": page_size})
+
+
 @router.get("/instances/{instance_id}")
 async def get_instance(
     instance_id: int,
@@ -139,43 +179,3 @@ async def change_instance_priority(
     await db.commit()
 
     return ApiResponse.ok(result, message="优先级修改成功")
-
-
-@router.get("/instances/my-initiated")
-async def my_initiated_instances(
-    current_user: CurrentUser = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_db),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-):
-    """我发起的流程 —— 所长查看自己发起的所有实例（PRD §7.5）"""
-    from app.models import FlowInstance
-    from sqlalchemy import select, func
-
-    # 直接用简单查询，按发起时间倒序
-    count_stmt = select(func.count()).select_from(FlowInstance).where(
-        FlowInstance.initiator_id == current_user.id
-    )
-    total = (await db.execute(count_stmt)).scalar() or 0
-
-    stmt = (
-        select(FlowInstance)
-        .where(FlowInstance.initiator_id == current_user.id)
-        .order_by(FlowInstance.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    result = await db.execute(stmt)
-    instances = result.scalars().all()
-
-    items = [
-        {
-            "id": i.id, "name": i.name, "template_id": i.template_id,
-            "status": i.status, "archive_status": i.archive_status,
-            "priority": i.priority, "initiated_at": i.initiated_at.isoformat() if i.initiated_at else None,
-            "completed_at": i.completed_at.isoformat() if i.completed_at else None,
-            "created_at": i.created_at.isoformat() if i.created_at else None,
-        }
-        for i in instances
-    ]
-    return ApiResponse.ok({"items": items, "total": total, "page": page, "page_size": page_size})

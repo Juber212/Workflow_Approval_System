@@ -16,9 +16,8 @@ from app.models import (
     File,
     CheckRecord,
     Approval,
-    FlowTemplate,
 )
-from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus
+from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
 
 
 async def list_tasks(
@@ -83,11 +82,6 @@ async def list_tasks(
     insts_result = await db.execute(select(FlowInstance).where(FlowInstance.id.in_(inst_ids)))
     insts_map = {i.id: i for i in insts_result.scalars().all()}
 
-    # 模板
-    tpl_ids = list(set(i.template_id for i in insts_map.values()))
-    tpls_result = await db.execute(select(FlowTemplate).where(FlowTemplate.id.in_(tpl_ids)))
-    tpls_map = {t.id: t for t in tpls_result.scalars().all()}
-
     # 发起人
     initiator_ids = list(set(i.initiator_id for i in insts_map.values()))
     users_result = await db.execute(select(User).where(User.id.in_(initiator_ids)))
@@ -97,7 +91,6 @@ async def list_tasks(
     for t in tasks:
         node = nodes_map.get(t.node_id)
         inst = insts_map.get(t.instance_id)
-        tpl = tpls_map.get(inst.template_id) if inst else None
         initiator = users_map.get(inst.initiator_id) if inst else None
 
         # deadline 来自关联节点
@@ -114,7 +107,6 @@ async def list_tasks(
             "instance_name": inst.name if inst else "",
             "node_id": t.node_id,
             "node_name": node.name if node else "",
-            "template_name": tpl.name if tpl else "",
             "initiator_name": initiator.real_name if initiator else "",
             "status": t.status,
             "deadline": dl.isoformat() if dl else None,
@@ -148,6 +140,21 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == t.instance_id))).scalar_one()
     # 查负责人
     assignee = (await db.execute(select(User).where(User.id == t.assignee_id))).scalar_one_or_none()
+    # 查发起人
+    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
+
+    # 查询实例所有节点（供 ProgressBar 流程进度条使用）
+    all_nodes_result = await db.execute(
+        select(InstanceNode)
+        .where(InstanceNode.instance_id == t.instance_id)
+        .order_by(InstanceNode.sort_order)
+    )
+    all_nodes = all_nodes_result.scalars().all()
+    total_nodes = len(all_nodes)
+    current_node_index = sum(
+        1 for n in all_nodes
+        if (n.status or "").lower() in ("finished", "skipped")
+    )
 
     # 文件
     files_result = await db.execute(
@@ -177,11 +184,44 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         au = await db.execute(select(User).where(User.id.in_(approver_ids)))
         approver_users = {u.id: u for u in au.scalars().all()}
 
+    # 退回信息：当 Task 被退回重做时，返回最近一次退回原因
+    rejected_type: str | None = None
+    rejected_reason: str | None = None
+    if t.submitted_at is None and t.status == TaskStatus.PROCESSING:
+        # 优先查审批退回
+        rejected_appr = (
+            await db.execute(
+                select(Approval)
+                .where(Approval.task_id == t.id, Approval.status == ApprovalStatus.REJECTED)
+                .order_by(Approval.decided_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if rejected_appr:
+            rejected_type = "approval"
+            rejected_reason = rejected_appr.opinion
+        else:
+            # 查校验退回
+            returned_check = (
+                await db.execute(
+                    select(CheckRecord)
+                    .where(CheckRecord.task_id == t.id, CheckRecord.status == CheckStatus.RETURNED)
+                    .order_by(CheckRecord.decided_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if returned_check:
+                rejected_type = "check"
+                rejected_reason = returned_check.opinion
+
     return {
         "id": t.id,
         "instance_id": t.instance_id,
         "instance_name": inst.name,
         "instance_status": inst.status,
+        "initiator_id": inst.initiator_id,
+        "initiator_name": initiator.real_name if initiator else "",
+        "priority": (inst.priority or "normal").lower(),
         "node_id": t.node_id,
         "node_name": node.name,
         "node_description": node.description,
@@ -194,6 +234,18 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         "time_limit_days": node.time_limit_days,
         "deadline": node.deadline.isoformat() if node.deadline else None,
         "round": node.round,
+        "total_nodes": total_nodes,
+        "current_node_index": current_node_index,
+        "nodes": [
+            {
+                "id": n.id, "name": n.name,
+                "is_start": n.is_start, "is_end": n.is_end,
+                "is_skipped": n.is_skipped,
+                "status": (n.status or "waiting").lower(),
+                "sort_order": n.sort_order,
+            }
+            for n in all_nodes
+        ],
         "files": [
             {
                 "id": f.id,
@@ -229,6 +281,8 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             }
             for a in approvals
         ],
+        "rejected_type": rejected_type,
+        "rejected_reason": rejected_reason,
         "submitted_at": t.submitted_at.isoformat() if t.submitted_at else None,
         "created_at": t.created_at.isoformat() if t.created_at else None,
     }

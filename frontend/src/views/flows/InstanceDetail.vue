@@ -28,6 +28,7 @@
         :key="node.id"
         :node="node"
         :is-initiator="isInitiator"
+        @change-personnel="handleChangePersonnel"
       />
 
       <!-- 实例补充说明 -->
@@ -64,6 +65,15 @@
         :current-priority="detail.priority"
         @changed="handlePriorityChanged"
       />
+
+      <!-- 修改人员弹窗 -->
+      <ChangePersonnelDialog
+        v-if="detail"
+        v-model="showPersonnelDialog"
+        :instance-id="detail.id"
+        :node="selectedNode"
+        @success="handlePersonnelChanged"
+      />
     </template>
   </div>
 </template>
@@ -80,6 +90,8 @@ import NodeCard from './components/NodeCard.vue'
 import OperationTimeline from './components/OperationTimeline.vue'
 import TerminateDialog from './components/TerminateDialog.vue'
 import PriorityEditDialog from './components/PriorityEditDialog.vue'
+import ChangePersonnelDialog from './components/ChangePersonnelDialog.vue'
+import type { DetailNodeInfo } from '@/api/instance'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -89,6 +101,8 @@ const loading = ref(false)
 const detail = ref<InstanceDetailResponse | null>(null)
 const showTerminateDialog = ref(false)
 const showPriorityDialog = ref(false)
+const showPersonnelDialog = ref(false)
+const selectedNode = ref<DetailNodeInfo | null>(null)
 
 /** 当前用户是否为发起人 */
 const isInitiator = computed(() => {
@@ -139,6 +153,21 @@ function handleTerminate() {
 
 /** 终止成功后刷新详情 */
 function handleTerminated() {
+  fetchDetail()
+}
+
+/** 打开修改人员弹窗 */
+function handleChangePersonnel(nodeId: number) {
+  if (!detail.value) return
+  const node = detail.value.nodes.find(n => n.id === nodeId)
+  if (node) {
+    selectedNode.value = node
+    showPersonnelDialog.value = true
+  }
+}
+
+/** 人员修改成功后刷新详情 */
+function handlePersonnelChanged() {
   fetchDetail()
 }
 </script>

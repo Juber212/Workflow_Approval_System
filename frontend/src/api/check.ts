@@ -17,6 +17,12 @@ export interface CheckDetail {
   id: number
   instance_id: number
   instance_name: string
+  instance_status: string
+  initiator_id: number
+  initiator_name: string
+  submitter_id: number
+  submitter_name: string
+  priority: string
   node_id: number
   node_name: string
   task_id: number
@@ -24,6 +30,9 @@ export interface CheckDetail {
   checker_name: string
   status: string
   opinion: string | null
+  total_nodes: number
+  current_node_index: number
+  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; is_skipped: boolean; status: string; sort_order: number }[]
   files: { id: number; original_name: string; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   assignee_note: string | null
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]

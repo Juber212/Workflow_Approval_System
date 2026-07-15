@@ -49,9 +49,9 @@
         </div>
         <div class="card__body" style="padding:0">
           <el-table :data="filteredBottleneck" size="small" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass">
-            <el-table-column prop="instance_name" label="流程实例" min-width="110" show-overflow-tooltip />
-            <el-table-column prop="organization_name" label="所属组织" width="70" />
-            <el-table-column label="节点进度" min-width="240">
+            <el-table-column prop="instance_name" label="流程实例" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="organization_name" label="所属组织" min-width="90" />
+            <el-table-column label="节点进度" min-width="250">
               <template #default="{ row }">
                 <div class="chain-row">
                   <template v-for="(seg, i) in row.progress_chain" :key="i">
@@ -61,15 +61,15 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="耗时" width="55" align="center">
+            <el-table-column label="耗时" min-width="55" align="center">
               <template #default="{ row }">{{ row.days_elapsed }}天</template>
             </el-table-column>
-            <el-table-column label="状态" width="80" align="center">
+            <el-table-column label="状态" min-width="68" align="center">
               <template #default="{ row }">
                 <span class="od-tag" :class="odClass(row.overdue_status)">{{ row.overdue_status }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="60" align="center">
+            <el-table-column label="操作" min-width="55" align="center">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click="$router.push(`/flows/instances/${row.instance_id}`)">详情</el-button>
               </template>
@@ -85,18 +85,18 @@
       <div class="card__header"><span class="card__title">⚠️ 超期预警</span></div>
       <div class="card__body" style="padding:0">
         <el-table :data="data.overdue_list" size="small" stripe v-if="data.overdue_list.length > 0">
-          <el-table-column prop="instance_name" label="流程实例" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="instance_name" label="流程实例" min-width="150" show-overflow-tooltip />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
-          <el-table-column prop="assignee_name" label="负责人" width="70" />
-          <el-table-column label="截止时间" width="100">
+          <el-table-column prop="assignee_name" label="负责人" min-width="68" />
+          <el-table-column label="截止时间" min-width="96">
             <template #default="{ row }">{{ fmt(row.deadline) }}</template>
           </el-table-column>
-          <el-table-column label="剩余天数" width="120">
+          <el-table-column label="剩余天数" min-width="108">
             <template #default="{ row }">
               <span :class="row.is_overdue ? 'c-red' : 'c-ora'">{{ row.days_label }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="60" align="center">
+          <el-table-column label="操作" min-width="55" align="center">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click="$router.push(`/flows/instances/${row.instance_id}`)">详情</el-button>
             </template>

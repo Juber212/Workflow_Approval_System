@@ -50,27 +50,26 @@
       </div>
 
       <el-table :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="150" />
+        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
         <el-table-column prop="node_name" label="当前节点" min-width="100" />
-        <el-table-column prop="initiator_name" label="发起人" width="70" />
-        <el-table-column prop="template_name" label="模板" width="120" />
-        <el-table-column label="截止时间" width="160">
+        <el-table-column prop="initiator_name" label="发起人" min-width="72" />
+        <el-table-column label="截止时间" min-width="140">
           <template #default="{ row }">
             <span :class="{ 'text-danger': row.is_overdue }">{{ formatTime(row.deadline) }}</span>
             <el-tag v-if="row.is_overdue" type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="优先级" width="70" align="center">
+        <el-table-column label="优先级" min-width="64" align="center">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" min-width="64" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="taskStatusClass(row.status)">{{ taskStatusLabel(row.status) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column label="操作" min-width="60">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click.stop="router.push(`/profile/task/${row.id}`)">处理</el-button>
           </template>
@@ -86,16 +85,16 @@
       </div>
 
       <el-table :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push(`/profile/check/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="150" />
-        <el-table-column prop="node_name" label="节点" width="100" />
-        <el-table-column prop="submitter_name" label="提交人" width="80" />
-        <el-table-column prop="created_at" label="提交时间" width="160" :formatter="(r: any) => formatTime(r.created_at)" />
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
+        <el-table-column prop="node_name" label="节点" min-width="100" />
+        <el-table-column prop="submitter_name" label="提交人" min-width="72" />
+        <el-table-column prop="created_at" label="提交时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
+        <el-table-column label="状态" min-width="64" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="checkStatusClass(row.status)">{{ checkStatusLabel(row.status) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column label="操作" min-width="60">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click.stop="router.push(`/profile/check/${row.id}`)">校验</el-button>
           </template>
@@ -111,20 +110,20 @@
       </div>
 
       <el-table :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="150" />
+        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
         <el-table-column prop="node_name" label="节点" min-width="100">
           <template #default="{ row }">
             {{ row.node_name }}
             <el-tag v-if="row.is_end_node" size="small" type="warning" effect="plain">终审</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="160" :formatter="(r: any) => formatTime(r.created_at)" />
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
+        <el-table-column label="状态" min-width="64" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="approvalStatusClass(row.status)">{{ approvalStatusLabel(row.status) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column label="操作" min-width="60">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click.stop="router.push(`/profile/approval/${row.id}`)">审批</el-button>
           </template>
@@ -136,22 +135,22 @@
     <!-- ========== 我发起的流程（仅所长） ========== -->
     <template v-if="activeTab === 'initiated'">
       <el-table :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="name" label="流程实例" min-width="150" />
-        <el-table-column label="优先级" width="70" align="center">
+        <el-table-column prop="name" label="流程实例" min-width="140" />
+        <el-table-column label="优先级" min-width="64" align="center">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="发起时间" width="140">
+        <el-table-column label="发起时间" min-width="140">
           <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" min-width="64" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             <el-tag v-if="row.archive_status === 'archived'" size="small" type="info" effect="plain" style="margin-left:4px">已归档</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140">
+        <el-table-column label="操作" min-width="60">
           <template #default="{ row }">
             <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
           </template>

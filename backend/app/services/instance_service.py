@@ -86,6 +86,7 @@ async def create_instance(
         name=request.name.strip(),
         description=request.description,
         template_id=request.template_id,
+        template_name=tpl.name,
         organization_id=tpl.organization_id,
         initiator_id=current_user.id,
         priority=priority,
@@ -113,6 +114,10 @@ async def create_instance(
         time_limit_days = node_override.get("time_limit_days") or tn.time_limit_days
         approvers = node_override.get("approvers") or tn.approvers
         checkers = node_override.get("checkers") or tn.checkers
+
+        # 结束节点：审批人默认设为发起人（发起人终审）
+        if tn.is_end and not approvers:
+            approvers = [{"user_id": current_user.id}]
 
         deadline = None
         if node_override.get("deadline"):
@@ -181,7 +186,6 @@ async def create_instance(
 
     return {
         "id": instance.id, "name": instance.name,
-        "template_id": instance.template_id,
         "organization_id": instance.organization_id,
         "initiator_id": instance.initiator_id,
         "priority": instance.priority, "status": instance.status,
@@ -212,7 +216,7 @@ async def list_instances(
     - current_assignee_name: 当前活跃节点的负责人姓名
     """
 
-    # ========== 基础查询（联表获取名称字段） ==========
+    # ========== 基础查询（联表获取名称字段；template_name 已冗余在实例表） ==========
     Initiator = aliased(User)
     Org = aliased(Organization)
 
@@ -221,11 +225,9 @@ async def list_instances(
             FlowInstance,
             Initiator.real_name.label("initiator_name"),
             Org.name.label("organization_name"),
-            FlowTemplate.name.label("template_name"),
         )
         .join(Initiator, FlowInstance.initiator_id == Initiator.id)
         .join(Org, FlowInstance.organization_id == Org.id)
-        .outerjoin(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
     )
 
     # ========== 筛选条件 ==========
@@ -261,7 +263,6 @@ async def list_instances(
         instance = row[0]  # FlowInstance 对象（元组第一项）
         initiator_name = row[1]
         org_name = row[2]
-        template_name = row[3]
 
         # 批量查询节点数据（为每个实例单独查 — 后续可优化为批量查询）
         node_stats = await _get_instance_node_stats(db, instance.id)
@@ -270,8 +271,6 @@ async def list_instances(
         items.append(InstanceListItem(
             id=instance.id,
             name=instance.name,
-            template_id=instance.template_id,
-            template_name=template_name or "",
             organization_id=instance.organization_id,
             organization_name=org_name or "",
             initiator_id=instance.initiator_id,
@@ -342,17 +341,15 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     Returns:
         完整实例详情字典，含嵌套节点信息
     """
-    # ========== 1. 查询实例基本信息（联表获取名称） ==========
+    # ========== 1. 查询实例基本信息（template_name 已冗余在实例表，无需 JOIN） ==========
     stmt = (
         select(
             FlowInstance,
             User.real_name.label("initiator_name"),
             Organization.name.label("organization_name"),
-            FlowTemplate.name.label("template_name"),
         )
         .join(User, FlowInstance.initiator_id == User.id)
         .join(Organization, FlowInstance.organization_id == Organization.id)
-        .outerjoin(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
         .where(FlowInstance.id == instance_id)
     )
     result = await db.execute(stmt)
@@ -366,7 +363,6 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     instance = row[0]
     initiator_name = row[1]
     org_name = row[2]
-    template_name = row[3]
 
     # ========== 2. 查询所有节点（按 sort_order 排序） ==========
     nodes_stmt = (
@@ -378,11 +374,19 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     node_models = nodes_result.scalars().all()
 
     # 获取节点相关人员名称（批量查询，避免 N+1）
-    user_ids: set[int | None] = set()
+    # 收集负责人 ID + 校验人/审批人 ID
+    user_ids: set[int] = set()
     for n in node_models:
         if n.assignee_id:
             user_ids.add(n.assignee_id)
-    user_ids.discard(None)
+        # 从 checkers/approvers JSON 中提取 user_id
+        for raw in (n.checkers, n.approvers):
+            if raw and isinstance(raw, list):
+                for item in raw:
+                    if isinstance(item, dict) and item.get("user_id"):
+                        user_ids.add(item["user_id"])
+                    elif isinstance(item, int):
+                        user_ids.add(item)
 
     user_name_map: dict[int, str] = {}
     if user_ids:
@@ -480,16 +484,23 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     nodes: list[DetailNodeInfo] = []
     for n in node_models:
         # 标准化 checkers/approvers 为 dict 列表格式
-        def _normalize_personnel(raw: list | None) -> list[dict] | None:
-            """将 [1, 2] 转为 [{\"user_id\": 1}, {\"user_id\": 2}]，已是正确格式则不变"""
+        def _normalize_personnel(raw: list | None, name_map: dict[int, str]) -> list[dict] | None:
+            """标准化人员列表并补全 user_name —— [1,2] → [{"user_id":1,"user_name":"张三"}]"""
             if raw is None:
                 return None
             result = []
             for item in raw:
                 if isinstance(item, dict):
-                    result.append(item)
+                    uid = item.get("user_id")
+                    result.append({
+                        "user_id": uid,
+                        "user_name": name_map.get(uid) if uid else None,
+                    })
                 elif isinstance(item, int):
-                    result.append({"user_id": item})
+                    result.append({
+                        "user_id": item,
+                        "user_name": name_map.get(item),
+                    })
             return result if result else None
 
         nodes.append(DetailNodeInfo(
@@ -506,8 +517,8 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             assignee_name=user_name_map.get(n.assignee_id) if n.assignee_id else None,
             deadline=n.deadline,
             time_limit_days=n.time_limit_days,
-            checkers=_normalize_personnel(n.checkers),
-            approvers=_normalize_personnel(n.approvers),
+            checkers=_normalize_personnel(n.checkers, user_name_map),
+            approvers=_normalize_personnel(n.approvers, user_name_map),
             require_file=n.require_file,
             approval_strategy=n.approval_strategy,
             started_at=n.started_at,
@@ -544,7 +555,6 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     # ========== 7. 组装最终结果 ==========
     return {
         "id": instance.id, "name": instance.name, "description": instance.description,
-        "template_id": instance.template_id, "template_name": template_name or "",
         "organization_id": instance.organization_id, "organization_name": org_name or "",
         "initiator_id": instance.initiator_id, "initiator_name": initiator_name or "",
         "priority": (instance.priority or "normal").lower(),

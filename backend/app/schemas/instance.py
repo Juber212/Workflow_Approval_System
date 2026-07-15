@@ -39,8 +39,6 @@ class InstanceNodeBrief(BaseModel):
 class InstanceResponse(BaseModel):
     """发起实例成功响应"""
     id: int
-    name: str
-    template_id: int
     organization_id: int
     initiator_id: int
     priority: str
@@ -55,8 +53,6 @@ class InstanceListItem(BaseModel):
     """实例列表项（列表视图字段）"""
     id: int
     name: str
-    template_id: int
-    template_name: str = ""
     organization_id: int
     organization_name: str = ""
     initiator_id: int
@@ -160,8 +156,6 @@ class InstanceDetailResponse(BaseModel):
     id: int
     name: str
     description: str | None = None
-    template_id: int
-    template_name: str = ""
     organization_id: int
     organization_name: str = ""
     initiator_id: int
