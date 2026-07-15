@@ -2,7 +2,7 @@
 @forward 'element-plus/theme-chalk/src/common/var.scss' with (
   $colors: (
     'primary': (
-      'base': #1a6fb5,
+      'base': #3370FF,
     ),
     'success': (
       'base': #3da36a,
@@ -15,6 +15,6 @@
     ),
   ),
   $border-radius: (
-    'base': 6px,
+    'base': 8px,
   ),
 );

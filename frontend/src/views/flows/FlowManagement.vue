@@ -242,7 +242,7 @@ function instStatusLabel(s: string): string {
 <style lang="scss" scoped>
 .page-header__subtitle { margin-left: 12px; font-weight: 400; }
 
-.flow-management { max-width: var(--content-max-width, 1200px); margin: 0 auto; }
+.flow-management { /* max-width 由 AppLayout 内容区统一控制 */ }
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 

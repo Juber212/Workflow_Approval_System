@@ -61,8 +61,7 @@ function handleTabChange(tab: string) {
 
 <style lang="scss" scoped>
 .admin-page {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+  /* max-width 由 AppLayout 内容区统一控制 */
 
   .admin-tabs {
     margin-bottom: 20px;

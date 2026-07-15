@@ -320,7 +320,7 @@ async function handleLaunch() {
 </script>
 
 <style lang="scss" scoped>
-.flow-designer { display: flex; flex-direction: column; height: calc(100vh - 60px); position: relative; }
+.flow-designer { display: flex; flex-direction: column; height: 100%; position: relative; }
 .designer-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--el-border-color-light); flex-shrink: 0; .header-actions { display: flex; align-items: center; gap: 4px; } }
 .designer-body { flex: 1; overflow: hidden; display: flex; }
 .view-mode-toggle { position: absolute; bottom: 16px; left: 16px; z-index: 10; background: #fff; border-radius: 6px; padding: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }

@@ -1,13 +1,6 @@
 <template>
   <!-- 流程实例详情页 —— 基本信息 + 进度条 + 节点卡片 + 操作日志 -->
   <div class="instance-detail" v-loading="loading">
-    <!-- 面包屑导航 -->
-    <div class="page-breadcrumb">
-      <router-link to="/flows">流程管理</router-link>
-      <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">实例详情{{ detail ? ' · ' + detail.name : '' }}</span>
-    </div>
-
     <!-- 空数据 -->
     <el-empty v-if="!loading && !detail" description="实例不存在或无权访问" :image-size="60" />
 
@@ -174,8 +167,7 @@ function handlePersonnelChanged() {
 
 <style lang="scss" scoped>
 .instance-detail {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+  /* max-width 由 AppLayout 内容区统一控制 */
 }
 
 .section-title {

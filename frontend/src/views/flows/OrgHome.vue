@@ -1,13 +1,6 @@
 <template>
   <!-- 所内主页 —— 实例 Tab + 模板 Tab（PRD P04） -->
   <div class="org-home">
-    <!-- 面包屑：流程管理 / 所名称 -->
-    <div class="page-breadcrumb">
-      <router-link to="/flows">流程管理</router-link>
-      <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">{{ orgName }}</span>
-    </div>
-
     <!-- 页面头部 —— 所信息 + 操作按钮 -->
     <div class="page-header">
       <div class="page-header__info">
@@ -188,6 +181,7 @@ import {
 } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
+import { provideBreadcrumb } from '@/composables/useBreadcrumb'
 import TemplateTable from './components/TemplateTable.vue'
 
 const route = useRoute()
@@ -281,11 +275,15 @@ async function fetchOrgInfo() {
     if (org) {
       orgInfo.value = org
       orgName.value = org.name
+      // 动态设置面包屑为实际组织名称
+      provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: org.name }])
     } else {
       orgName.value = '未知组织'
+      provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: '未知组织' }])
     }
   } catch {
     orgName.value = '加载失败'
+    provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: '加载失败' }])
   }
 }
 
@@ -441,8 +439,7 @@ function instStatusLabel(s: string): string {
 
 <style lang="scss" scoped>
 .org-home {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+  /* max-width 由 AppLayout 内容区统一控制 */
 }
 
 .org-tabs {

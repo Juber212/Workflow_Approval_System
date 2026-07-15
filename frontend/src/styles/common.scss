@@ -96,7 +96,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 14px 20px;
-    background: #e9eaed;
+    background: #fff;
     border-bottom: 1px solid var(--el-border-color-lighter);
     gap: 12px;
   }
@@ -176,7 +176,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: #e9eaed;
+    background: #f5f6f8;
     cursor: pointer;
     user-select: none;
 
@@ -201,17 +201,29 @@
   margin-top: 24px;
 }
 
-// ========== 顶部导航增强 ==========
-.topnav-logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: var(--el-color-primary);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  flex-shrink: 0;
+// (侧边栏 logo 已迁移至 AppLayout.sidebar-brand)
+
+// ========== 全局 Element Plus 风格微调（飞书方向） ==========
+
+// 表格：覆盖斑马纹为纯白底 + 行底细分割线
+.el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: #fff !important;
+}
+.el-table__body tr {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+// 主按钮：去阴影渐变，更扁平
+.el-button--primary {
+  box-shadow: none !important;
+}
+
+// 输入框/下拉框：focus 去外发光，仅 1px 蓝边
+.el-input__wrapper,
+.el-select__wrapper {
+  box-shadow: none !important;
+}
+.el-input.is-focus .el-input__wrapper,
+.el-select.is-focus .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--el-color-primary) inset !important;
 }

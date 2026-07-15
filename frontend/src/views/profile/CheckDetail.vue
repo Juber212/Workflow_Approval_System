@@ -1,11 +1,6 @@
 <template>
   <!-- 校验处理页 —— 两栏：左栏校验表单 / 右栏流程上下文 -->
   <div class="check-detail" v-loading="loading">
-    <div class="page-breadcrumb">
-      <router-link to="/profile">个人中心</router-link><span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">校验处理{{ detail ? ' · ' + detail.instance_name : '' }}</span>
-    </div>
-
     <el-empty v-if="!loading && !detail" description="校验记录不存在" />
 
     <template v-if="detail">
@@ -162,7 +157,7 @@ function checkStatusLabel(s: string) { const m: Record<string, string> = { pendi
 </script>
 
 <style lang="scss" scoped>
-.check-detail { max-width: 1280px; margin: 0 auto; }
+.check-detail { /* max-width 由 AppLayout 内容区统一控制 */ }
 
 /* 两栏布局 */
 .detail-layout {

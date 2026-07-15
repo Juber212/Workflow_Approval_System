@@ -274,8 +274,7 @@ function instStatusLabel(s: string) { const m: Record<string, string> = { runnin
 
 <style lang="scss" scoped>
 .profile-page {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+  // max-width 由 AppLayout 内容区统一控制
 }
 
 .user-info-card {

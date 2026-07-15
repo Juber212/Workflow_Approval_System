@@ -149,14 +149,14 @@ async function handleLogin() {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #EFF4FF 0%, #F5F6F8 60%);
+  background: #f5f6f8;  /* 与主应用背景统一 */
 }
 
 .login-card {
   width: 420px;
   background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;  /* 更大的圆角，更现代 */
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);  /* 更克制的阴影 */
   padding: 40px 36px;
 }
 
@@ -175,7 +175,7 @@ async function handleLogin() {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: var(--el-color-primary);
+  background: var(--color-primary);
   color: #fff;
   font-size: 22px;
   font-weight: 700;
@@ -217,7 +217,7 @@ async function handleLogin() {
   margin-top: 20px;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
-  border-radius: 6px;
+  border-radius: 8px;  /* 统一圆角 */
   padding: 12px 14px;
   font-size: 12px;
   line-height: 20px;

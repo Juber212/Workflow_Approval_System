@@ -1,11 +1,6 @@
 <template>
   <!-- 任务处理页 —— 两栏：左栏处理表单 / 右栏流程上下文 -->
   <div class="task-detail" v-loading="loading">
-    <div class="page-breadcrumb">
-      <router-link to="/profile">个人中心</router-link><span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">任务处理{{ detail ? ' · ' + detail.instance_name : '' }}</span>
-    </div>
-
     <el-empty v-if="!loading && !detail" description="任务不存在" :image-size="50" />
 
     <template v-if="detail">
@@ -213,7 +208,7 @@ function checkStatusLabel(s: string) { const m: Record<string, string> = { pendi
 </script>
 
 <style lang="scss" scoped>
-.task-detail { max-width: 1280px; margin: 0 auto; }
+.task-detail { /* max-width 由 AppLayout 内容区统一控制 */ }
 
 /* 两栏布局 */
 .detail-layout {

@@ -1,12 +1,5 @@
 <template>
   <div class="start-instance">
-    <!-- 面包屑导航 -->
-    <div class="page-breadcrumb">
-      <router-link to="/flows">流程管理</router-link>
-      <span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">发起流程{{ selectedTemplate ? ' · ' + selectedTemplate.name : '' }}</span>
-    </div>
-
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
@@ -345,8 +338,7 @@ async function handleSubmit() {
 
 <style lang="scss" scoped>
 .start-instance {
-  max-width: var(--content-max-width, 1200px);
-  margin: 0 auto;
+  /* max-width 由 AppLayout 内容区统一控制 */
 
   // 模板卡片网格
   .template-grid {

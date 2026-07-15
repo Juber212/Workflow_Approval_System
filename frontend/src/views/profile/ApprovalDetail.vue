@@ -1,11 +1,6 @@
 <template>
   <!-- 审批处理页 —— 两栏：左栏审批表单 / 右栏流程上下文 -->
   <div class="approval-detail" v-loading="loading">
-    <div class="page-breadcrumb">
-      <router-link to="/profile">个人中心</router-link><span class="breadcrumb-sep">/</span>
-      <span class="breadcrumb-current">审批处理{{ detail ? ' · ' + detail.instance_name : '' }}</span>
-    </div>
-
     <el-empty v-if="!loading && !detail" description="审批记录不存在" />
 
     <template v-if="detail">
@@ -222,7 +217,7 @@ function approvalStatusLabel(s: string) { const m: Record<string, string> = { pe
 </script>
 
 <style lang="scss" scoped>
-.approval-detail { max-width: 1280px; margin: 0 auto; }
+.approval-detail { /* max-width 由 AppLayout 内容区统一控制 */ }
 
 /* 两栏布局 */
 .detail-layout {
