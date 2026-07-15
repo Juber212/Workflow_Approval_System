@@ -940,3 +940,64 @@ async def change_priority(
         "priority": priority,
         "old_priority": old_priority,
     }
+
+
+async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
+    """永久删除流程实例 —— 级联清除所有关联数据（仅管理员可操作，仅已终止实例可删）
+
+    删除顺序（避免外键约束冲突）：
+    approval → check_record → file → task → instance_edge → operation_log → instance_node → flow_instance
+    """
+    # 查询实例
+    result = await db.execute(select(FlowInstance).where(FlowInstance.id == instance_id))
+    instance = result.scalar_one_or_none()
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "实例不存在")
+    if instance.status != "terminated":
+        raise AppException(ErrorCode.FORBIDDEN, "仅已终止的实例可永久删除")
+
+    # 先获取所有关联 node ID（用于后续查询）
+    node_ids_result = await db.execute(
+        select(InstanceNode.id).where(InstanceNode.instance_id == instance_id)
+    )
+    node_ids = [row[0] for row in node_ids_result.all()]
+
+    # 获取所有关联 task ID
+    task_ids: list[int] = []
+    if node_ids:
+        task_ids_result = await db.execute(
+            select(Task.id).where(Task.instance_id == instance_id)
+        )
+        task_ids = [row[0] for row in task_ids_result.all()]
+
+    # 1. 删除审批记录
+    await db.execute(sql_delete(Approval).where(Approval.instance_id == instance_id))
+
+    # 2. 删除校验记录
+    await db.execute(sql_delete(CheckRecord).where(CheckRecord.instance_id == instance_id))
+
+    # 3. 删除文件（物理文件 + DB 记录）
+    files_result = await db.execute(select(File).where(File.instance_id == instance_id))
+    files = files_result.scalars().all()
+    for f in files:
+        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+        await db.delete(f)
+
+    # 4. 删除任务
+    if task_ids:
+        await db.execute(sql_delete(Task).where(Task.instance_id == instance_id))
+
+    # 5. 删除实例连线
+    await db.execute(sql_delete(InstanceEdge).where(InstanceEdge.instance_id == instance_id))
+
+    # 6. 删除操作日志
+    await db.execute(sql_delete(OperationLog).where(OperationLog.instance_id == instance_id))
+
+    # 7. 删除实例节点
+    await db.execute(sql_delete(InstanceNode).where(InstanceNode.instance_id == instance_id))
+
+    # 8. 删除实例本身
+    await db.delete(instance)
+    await db.flush()

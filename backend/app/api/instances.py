@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
 from app.api.deps import get_current_active_user, CurrentUser
 from app.schemas.common import ApiResponse
 from app.schemas.instance import (
@@ -21,6 +23,7 @@ from app.services.instance_service import (
     terminate_instance,
     change_personnel,
     change_priority,
+    permanent_delete_instance,
 )
 
 router = APIRouter(prefix="/api/v1", tags=["流程实例"])
@@ -179,3 +182,21 @@ async def change_instance_priority(
     await db.commit()
 
     return ApiResponse.ok(result, message="优先级修改成功")
+
+
+@router.delete("/instances/{instance_id}/permanent")
+async def delete_instance_permanent(
+    instance_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """永久删除流程实例
+
+    权限：仅系统管理员。仅已终止(terminated)实例可删除。
+    级联清除：审批记录、校验记录、文件(物理+DB)、任务、连线、操作日志、节点、实例。
+    """
+    if not current_user.is_admin():
+        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可永久删除实例")
+    await permanent_delete_instance(db, instance_id)
+    await db.commit()
+    return ApiResponse.ok(message="实例已永久删除")

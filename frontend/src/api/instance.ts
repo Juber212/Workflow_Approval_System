@@ -257,3 +257,8 @@ export async function changePersonnel(
   const res = await request.put(`/instances/${instanceId}/nodes/${nodeId}/personnel`, data)
   return res.data
 }
+
+/** 永久删除流程实例（仅系统管理员，仅已终止） */
+export async function permanentDeleteInstance(instanceId: number): Promise<void> {
+  await request.delete(`/instances/${instanceId}/permanent`)
+}

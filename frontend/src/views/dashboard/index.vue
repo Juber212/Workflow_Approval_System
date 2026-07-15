@@ -1,10 +1,9 @@
 <template>
-  <!-- 首页看板 —— 全局统计 + 饼图 + 卡点追踪 + 超期预警 + 各所概览（PRD §4） -->
+  <!-- 首页 —— 全局统计 + 饼图 + 卡点追踪 + 超期预警 + 各所概览（PRD §4） -->
   <div class="page-container" v-loading="loading">
     <div class="page-header">
       <div class="page-header__info">
-        <h1 class="page-header__title">首页看板</h1>
-        <p class="page-header__subtitle">全局运行概况 · 所有角色内容一致</p>
+        <h1 class="page-header__title">首页<span class="page-header__subtitle">全局运行概况</span></h1>
       </div>
       <div class="page-header__actions">
         <el-button :icon="Refresh" circle @click="fetchData" :loading="loading" />
@@ -35,7 +34,7 @@
     <div class="card">
       <div class="card__header"><span class="card__title">⚠️ 超期预警</span></div>
       <div class="card__body" style="padding:0">
-        <el-table :data="data.overdue_list" size="small" stripe v-if="data.overdue_list.length > 0">
+        <el-table :data="data.overdue_list" stripe v-if="data.overdue_list.length > 0">
           <el-table-column prop="instance_name" label="流程实例" min-width="150" show-overflow-tooltip />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
           <el-table-column prop="assignee_name" label="负责人" min-width="68" />
@@ -77,7 +76,7 @@
           </div>
         </div>
         <div class="card__body" style="padding:0">
-          <el-table :data="filteredBottleneck" size="small" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id" :expand-row-keys="expandedRows" @expand-change="onExpandChange">
+          <el-table :data="filteredBottleneck" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id" :expand-row-keys="expandedRows" @expand-change="onExpandChange">
             <el-table-column type="expand">
               <template #default="{ row }">
                 <div class="bt-chain">
@@ -88,17 +87,19 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="instance_name" label="流程实例" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="organization_name" label="所属组织" min-width="90" />
-            <el-table-column label="耗时" min-width="55" align="center">
+            <el-table-column prop="instance_name" label="流程实例" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="organization_name" label="所属组织" min-width="80" />
+            <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
+            <el-table-column prop="current_assignee_name" label="负责人" min-width="64" />
+            <el-table-column label="耗时" min-width="50" align="center">
               <template #default="{ row }">{{ row.days_elapsed }}天</template>
             </el-table-column>
-            <el-table-column label="状态" min-width="68" align="center">
+            <el-table-column label="状态" min-width="72" align="center">
               <template #default="{ row }">
                 <span class="od-tag" :class="odClass(row.overdue_status)">{{ row.overdue_status }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="操作" min-width="55" align="center">
+            <el-table-column label="操作" min-width="50" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click="$router.push(`/flows/instances/${row.instance_id}`)">详情</el-button>
               </template>
@@ -121,12 +122,21 @@
                 <el-tag size="small" effect="plain" style="margin-left:8px">运行中 {{ org.running_count }}</el-tag>
               </template>
               <div v-if="org.instances.length === 0" class="ov-empty">暂无运行中实例</div>
-              <div v-for="inst in org.instances" :key="inst.id" class="ov-row" @click="$router.push(`/flows/instances/${inst.id}`)">
-                <span class="ov-name">{{ inst.name }}</span>
-                <span class="pri-sm" :class="'pri--' + inst.priority">{{ pri(inst.priority) }}</span>
-                <span class="ov-cur">当前：{{ inst.current_assignee_name || '—' }}</span>
-                <span class="ov-go">→</span>
-              </div>
+              <el-table v-else :data="org.instances" size="small" stripe @row-click="(row: any) => $router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
+                <el-table-column prop="name" label="实例名称" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="current_node_name" label="当前节点" min-width="100" />
+                <el-table-column prop="current_assignee_name" label="负责人" min-width="72" />
+                <el-table-column label="优先级" min-width="64" align="center">
+                  <template #default="{ row }">
+                    <span class="pri-sm" :class="'pri--' + row.priority">{{ pri(row.priority) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" min-width="64" align="center">
+                  <template #default="{ row }">
+                    <span class="status-tag" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
+                  </template>
+                </el-table-column>
+              </el-table>
             </el-collapse-item>
           </el-collapse>
         </template>
@@ -222,6 +232,8 @@ function tableRowClass({ row }: any) { return row.overdue_status === '已逾期'
 function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将逾期' ? 'od--y' : 'od--g' }
 function fmt(d: string | null) { return d ? d.substring(0, 10) : '—' }
 function pri(p: string) { const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }; return m[p] || p }
+function statusClass(s: string) { return s === 'running' ? 'status-tag--running' : s === 'completed' ? 'status-tag--completed' : s === 'terminated' ? 'status-tag--terminated' : '' }
+function statusLabel(s: string) { const m: Record<string, string> = { running: '运行中', completed: '已完成', terminated: '已终止' }; return m[s] || s }
 
 /** 提取进度链片段的节点名称（去掉 emoji 图标前缀） */
 function chainNodeLabel(seg: string): string {
@@ -239,36 +251,38 @@ function chainNodeClass(seg: string): string {
 </script>
 
 <style lang="scss" scoped>
+/* ─── 页面标题 ─── */
+.page-header__subtitle { margin-left: 12px; font-weight: 400; }
 /* ─── 统计卡片 ─── */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 20px; }
 
 .stat-card {
-  background: var(--el-bg-color); border: 1px solid var(--el-border-color-light);
-  border-radius: 8px; padding: 20px 16px; text-align: center; cursor: default;
-  transition: box-shadow .15s;
-  &:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  background: #fff; border: 1px solid var(--el-border-color-light);
+  border-radius: 10px; padding: 24px 20px; text-align: center; cursor: default;
+  transition: box-shadow .2s, transform .2s;
+  &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); transform: translateY(-1px); }
 
-  &__num { font-size: 32px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  &__num { font-size: 34px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
   &__num--primary { color: var(--el-color-primary); }
   &__num--success { color: var(--el-color-success); }
   &__num--info    { color: #409EFF; }
   &__num--danger  { color: var(--el-color-danger); }
 
-  &__label { font-size: 14px; color: var(--el-text-color-secondary); margin-top: 4px; }
+  &__label { font-size: 14px; color: var(--el-text-color-secondary); margin-top: 6px; }
 }
 
 /* ─── 双栏 ─── */
-.dash-row { display: grid; grid-template-columns: 380px 1fr; gap: 16px; margin-bottom: 16px; }
+.dash-row { display: grid; grid-template-columns: 400px 1fr; gap: 20px; margin-bottom: 20px; }
 .dash-pie { min-width: 0; display: flex; flex-direction: column; }
-.dash-bn { min-width: 0; overflow: hidden; }
+.dash-bn { min-width: 0; overflow: hidden; :deep(.el-table__cell) { padding: 10px 0; } }
 
 /* ─── 卡点追踪：可展开进度链 ─── */
-.bt-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 12px; line-height: 1.8; padding: 8px 0; justify-content: center; }
-.bt-arr { color: var(--el-text-color-placeholder); margin: 0 6px; flex-shrink: 0; font-size: 11px; }
+.bt-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 13px; line-height: 1.8; padding: 10px 0; justify-content: center; }
+.bt-arr { color: var(--el-text-color-placeholder); margin: 0 6px; flex-shrink: 0; font-size: 12px; }
 
 .bt-node {
-  display: inline-block; padding: 2px 10px; border-radius: 4px;
-  font-size: 12px; white-space: nowrap; border: 1px solid var(--el-border-color);
+  display: inline-block; padding: 3px 12px; border-radius: 5px;
+  font-size: 13px; white-space: nowrap; border: 1px solid var(--el-border-color);
   &--done { background: #eafaf1; color: #1e8449; border-color: #a3d9b1; }
   &--active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); border-color: var(--el-color-primary); font-weight: 600; }
   &--skip { background: #f5f5f5; color: var(--el-text-color-placeholder); border-color: #e0e0e0; text-decoration: line-through; }
@@ -276,7 +290,7 @@ function chainNodeClass(seg: string): string {
 }
 
 /* ─── 逾期 --- */
-.od-tag { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500; }
+.od-tag { font-size: 12px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
 .od--r { background: #fde2e2; color: #c0392b; }
 .od--y { background: #fef5e7; color: #d68910; }
 .od--g { background: #eafaf1; color: #1e8449; }
@@ -285,19 +299,13 @@ function chainNodeClass(seg: string): string {
 .c-ora { color: var(--el-color-warning); font-weight: 500; }
 
 /* ─── 各所概览 ─── */
+:deep(.el-collapse-item__header) { padding-left: 20px !important; padding-right: 20px !important; }
+:deep(.el-collapse-item__content) { padding-left: 20px; padding-right: 20px; }
 .ov-title { font-weight: 500; font-size: 14px; }
 .ov-empty { padding: 6px 0; color: var(--el-text-color-secondary); font-size: 12px; }
-.ov-row {
-  display: flex; align-items: center; gap: 10px; padding: 7px 16px;
-  cursor: pointer; border-bottom: 1px solid var(--el-border-color-lighter); font-size: 13px;
-  &:hover { background: var(--el-fill-color-light); }
-}
-.ov-name { font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-cur { color: var(--el-text-color-secondary); font-size: 12px; }
-.ov-go { color: var(--el-text-color-placeholder); }
 
 .pri-sm {
-  font-size: 11px; padding: 1px 6px; border-radius: 8px; font-weight: 500;
+  font-size: 12px; padding: 2px 8px; border-radius: 8px; font-weight: 500;
   &.pri--urgent  { color: #fff; background: var(--el-color-danger); }
   &.pri--high    { color: #fff; background: var(--el-color-warning); }
   &.pri--normal  { color: var(--el-text-color-secondary); background: var(--el-fill-color); }

@@ -24,14 +24,14 @@
       <el-table-column label="更新时间" width="170">
         <template #default="{ row }">{{ row.updated_at ? new Date(row.updated_at).toLocaleString('zh-CN') : '-' }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" min-width="200" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="$emit('detail', row.id)">详情</el-button>
-          <el-button size="small" type="primary" @click="$emit('design', row.id)">设计</el-button>
-          <el-button size="small" @click="$emit('edit', row)">编辑</el-button>
+          <el-button size="small" text type="primary" @click="$emit('detail', row.id)">详情</el-button>
+          <el-button size="small" text type="primary" @click="$emit('design', row.id)">设计</el-button>
+          <el-button size="small" text type="primary" @click="$emit('edit', row)">编辑</el-button>
           <el-popconfirm title="确认删除？" @confirm="$emit('delete', row.id)">
             <template #reference>
-              <el-button size="small" type="danger">删除</el-button>
+              <el-button size="small" text type="danger">删除</el-button>
             </template>
           </el-popconfirm>
         </template>

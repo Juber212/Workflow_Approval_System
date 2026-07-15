@@ -1,7 +1,11 @@
 <template>
   <!-- 个人中心 —— 卡片分区，一页展示：待办/校验/审批/个人信息（PRD §10） -->
   <div class="profile-page">
-    <h1 class="page-title">个人中心</h1>
+    <div class="page-header">
+      <div class="page-header__info">
+        <h1 class="page-header__title">个人中心</h1>
+      </div>
+    </div>
 
     <!-- 用户信息卡片 -->
     <div class="user-info-card" v-if="userStore.userInfo">
@@ -273,8 +277,6 @@ function instStatusLabel(s: string) { const m: Record<string, string> = { runnin
   max-width: var(--content-max-width, 1200px);
   margin: 0 auto;
 }
-
-.page-title { font-size: 20px; font-weight: 600; margin: 12px 0 16px; }
 
 .user-info-card {
   display: flex; align-items: center; gap: 16px;

@@ -11,7 +11,7 @@
 
         <!-- 主导航 —— 纯 router-link，三个独立模块无层级 -->
         <nav class="app-nav">
-          <router-link to="/dashboard" class="app-nav__item" :class="{ 'is-active': isActive('/dashboard') }">首页看板</router-link>
+          <router-link to="/dashboard" class="app-nav__item" :class="{ 'is-active': isActive('/dashboard') }">首页</router-link>
           <router-link to="/flows"     class="app-nav__item" :class="{ 'is-active': isActive('/flows') }">流程管理</router-link>
           <router-link v-if="!isAdmin" to="/profile" class="app-nav__item" :class="{ 'is-active': isActive('/profile') }">个人中心</router-link>
           <router-link v-if="isAdmin"  to="/admin/users" class="app-nav__item" :class="{ 'is-active': isActive('/admin') }">系统管理</router-link>

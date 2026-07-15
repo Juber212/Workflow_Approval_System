@@ -4,8 +4,7 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
-        <h1 class="page-header__title">流程管理</h1>
-        <p class="page-header__subtitle">各组织流程运行概览，点击卡片进入对应组织</p>
+        <h1 class="page-header__title">流程管理<span class="page-header__subtitle">各组织流程运行概览，点击卡片进入对应组织</span></h1>
       </div>
     </div>
 
@@ -75,9 +74,10 @@
               <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="60" fixed="right">
+          <el-table-column label="操作" min-width="120" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click.stop="goInstanceDetail(row.id)">查看详情</el-button>
+              <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -104,14 +104,18 @@
  * 流程管理全局入口页 —— 组织卡片 + 全部流程实例（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
-import { getInstances, type InstanceListItem } from '@/api/instance'
+import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import OrgCardList from './components/OrgCardList.vue'
 
 const router = useRouter()
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isAdmin)
 
 // ========== 组织卡片 ==========
 const orgs = ref<OrgCardItem[]>([])
@@ -203,6 +207,19 @@ function handleInstanceSearch() {
 function goInstanceDetail(id: number) { router.push(`/flows/instances/${id}`) }
 function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id) }
 
+/** 管理员永久删除已终止实例 */
+async function handlePermanentDelete(row: InstanceListItem) {
+  try {
+    await ElMessageBox.confirm(`确认永久删除实例「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await permanentDeleteInstance(row.id)
+    ElMessage.success('实例已永久删除')
+    fetchInstances()
+    fetchStatusCounts()
+  } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
+}
+
 // ========== 工具 ==========
 function fmtTime(val: string | null): string {
   if (!val) return '-'
@@ -223,6 +240,8 @@ function instStatusLabel(s: string): string {
 </script>
 
 <style lang="scss" scoped>
+.page-header__subtitle { margin-left: 12px; font-weight: 400; }
+
 .flow-management { max-width: var(--content-max-width, 1200px); margin: 0 auto; }
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }

@@ -106,9 +106,10 @@
             <el-table-column prop="initiated_at" label="发起时间" min-width="140">
               <template #default="{ row }">{{ fmtTime(row.initiated_at) }}</template>
             </el-table-column>
-            <el-table-column label="操作" min-width="60" fixed="right">
+            <el-table-column label="操作" min-width="120" fixed="right">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
+                <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -174,7 +175,7 @@
 /** 所内主页 —— 实例列表 + 模板管理（PRD P04，参考 pages/P04_org_home.html） */
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
@@ -185,7 +186,7 @@ import {
   type OrgCardItem,
   type TemplateItem,
 } from '@/api/template'
-import { getInstances, type InstanceListItem } from '@/api/instance'
+import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
 import TemplateTable from './components/TemplateTable.vue'
 
@@ -193,6 +194,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 
+const isAdmin = computed(() => userStore.isAdmin)
 const isManager = computed(() => userStore.isManager)
 const activeTab = ref('instance')
 
@@ -326,6 +328,19 @@ function handleInstanceFilter(status: string) {
   instanceStatusFilter.value = status
   instancePage.value = 1
   fetchInstances()
+}
+
+/** 管理员永久删除已终止实例 */
+async function handlePermanentDelete(row: InstanceListItem) {
+  try {
+    await ElMessageBox.confirm(`确认永久删除实例「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await permanentDeleteInstance(row.id)
+    ElMessage.success('实例已永久删除')
+    fetchInstances()
+    fetchStatusCounts()
+  } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
 }
 
 let instanceSearchTimer: ReturnType<typeof setTimeout> | null = null
