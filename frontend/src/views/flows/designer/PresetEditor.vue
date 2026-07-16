@@ -78,7 +78,7 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 const saving = ref(false)
-const isEdit = computed(() => !!props.initial)
+const isEdit = computed(() => !!props.editingId)
 
 /** 用户名称缓存 */
 const userNameCache = reactive<Record<number, string>>({})
