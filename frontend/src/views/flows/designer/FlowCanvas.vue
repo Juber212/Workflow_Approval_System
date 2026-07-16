@@ -16,6 +16,7 @@ import '@logicflow/extension/lib/style/index.css'
 import { registerWorkNode } from './nodes/WorkNode'
 import { registerStartNode } from './nodes/StartNode'
 import { registerEndNode } from './nodes/EndNode'
+import { registerSmoothEdge } from './nodes/SmoothEdge'
 
 /** 注册 Control 扩展（右上角缩放控件） */
 LogicFlow.use(Control)
@@ -33,7 +34,7 @@ const DEFAULT_CONFIG = {
   history: true,
   adjustEdge: true,
   adjustEdgeStartAndEnd: true, // 允许拖动边的端点重新连接到其他节点
-  edgeType: 'polyline' as const, // 折线连线
+  edgeType: 'smooth-edge' as const, // 平滑曲线（基于折线，支持端点拖拽重连）
   /** 守卫：拦截非法操作 */
   guards: {
     beforeDelete: (data: any) => {
@@ -65,6 +66,7 @@ onMounted(() => {
   registerStartNode(logicFlow)
   registerWorkNode(logicFlow)
   registerEndNode(logicFlow)
+  registerSmoothEdge(logicFlow) // 注册平滑曲线边
 
   // 基础渲染
   logicFlow.render({ nodes: [], edges: [] })
