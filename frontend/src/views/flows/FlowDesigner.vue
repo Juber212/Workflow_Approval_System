@@ -103,7 +103,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createTemplate, getTemplateDetail, type TemplateDetail } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance } from '@/api/instance'
@@ -355,13 +355,17 @@ function handleEditPreset(preset?: PresetItem) {
 /** 删除预设 */
 async function handleDeletePreset(preset: PresetItem) {
   try {
-    await import('element-plus').then(({ ElMessageBox }) =>
-      ElMessageBox.confirm(`确定删除预设「${preset.name}」？`, '删除确认', { type: 'warning' })
-    )
+    await ElMessageBox.confirm(`确定删除预设「${preset.name}」？`, '删除确认', { type: 'warning' })
+  } catch {
+    return // 用户取消
+  }
+  try {
     await deletePreset(preset.id)
     ElMessage.success('预设已删除')
     await fetchPresets()
-  } catch { /* 取消或失败 */ }
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || '删除失败')
+  }
 }
 
 /** PropertyPanel "保存为预设"事件 */
