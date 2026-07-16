@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none">
   <g stroke="#111" stroke-width="2.2" stroke-linejoin="round" fill="none">
-    <!-- 顶面菱形 -->
-    <path d="M24 4L43 14L24 24L5 14Z"/>
-    <!-- 左面 -->
-    <path d="M5 14v16l19 10V24"/>
-    <!-- 右面 -->
-    <path d="M24 24v16l19-10V14"/>
-    <!-- 底面 -->
-    <path d="M5 30L24 40l19-10"/>
-    <!-- 背线（虚线） -->
-    <path d="M24 4v17" stroke-dasharray="3 3" opacity="0.3"/>
+    <!-- 顶面六边形 -->
+    <path d="M24 6l14 8-7 12-14 0-7-12z"/>
+    <!-- 可见垂直边 -->
+    <line x1="38" y1="14" x2="38" y2="28"/>
+    <line x1="31" y1="26" x2="31" y2="40"/>
+    <line x1="17" y1="26" x2="17" y2="40"/>
+    <!-- 底面可见边 -->
+    <path d="M38 28l-7 12-14 0"/>
+    <!-- 被遮挡的垂直边（虚线） -->
+    <line x1="10" y1="14" x2="10" y2="28" stroke-dasharray="3 3" opacity="0.3"/>
   </g>
 
-  <!-- 流动S曲线（白色，与黑线框形成对比） -->
-  <path d="M10 17c8-4 14 10 24 4"
-        stroke="#111" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-  <circle cx="10" cy="17" r="2.8" fill="#111"/>
-  <circle cx="34" cy="21" r="2.8" fill="#111"/>
+  <!-- 流动折线 -->
+  <path d="M14 20l8-4 5 8 9-6"
+        stroke="#111" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="14" cy="20" r="2.5" fill="#111"/>
+  <circle cx="36" cy="18" r="2.5" fill="#111"/>
 </svg>
