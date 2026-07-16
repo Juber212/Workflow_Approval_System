@@ -174,7 +174,9 @@ import { getTasks, type TaskListItem } from '@/api/task'
 import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
+const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
 const userStore = useUserStore()
 
@@ -247,7 +249,10 @@ async function fetchInitiated() {
 }
 
 // ========== 生命周期 ==========
-onMounted(() => fetchTasks())
+onMounted(() => {
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '个人中心' }])
+  fetchTasks()
+})
 
 watch(activeTab, (tab) => {
   if (tab === 'checks') fetchChecks()

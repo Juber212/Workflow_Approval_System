@@ -95,6 +95,9 @@ async def create_instance(
         organization_id=tpl.organization_id,
         initiator_id=current_user.id,
         priority=priority,
+        contract_no=request.contract_no.strip() if request.contract_no else None,
+        product_model=request.product_model.strip() if request.product_model else None,
+        sales_manager=request.sales_manager.strip() if request.sales_manager else None,
         status="created",
     )
     db.add(instance)
@@ -554,6 +557,9 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         "status": (instance.status or "created").lower(),
         "archive_status": (instance.archive_status or "").lower() if instance.archive_status else None,
         "termination_reason": instance.termination_reason,
+        "contract_no": instance.contract_no,
+        "product_model": instance.product_model,
+        "sales_manager": instance.sales_manager,
         "current_node_index": processed_count, "total_nodes": total_nodes,
         "initiated_at": instance.initiated_at,
         "completed_at": instance.completed_at,

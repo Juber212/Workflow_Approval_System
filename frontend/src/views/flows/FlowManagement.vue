@@ -111,8 +111,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import OrgCardList from './components/OrgCardList.vue'
 
+const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.isAdmin)
@@ -140,6 +142,7 @@ const instanceFilters = [
 
 // ========== 初始化 ==========
 onMounted(async () => {
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '流程管理' }])
   await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
 })
 

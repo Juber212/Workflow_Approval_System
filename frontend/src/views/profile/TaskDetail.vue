@@ -125,8 +125,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, type TaskDetail } from '@/api/task'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 
+const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
 
@@ -141,6 +143,11 @@ const canUpload = computed(() => detail.value && ['pending', 'processing'].inclu
 const canSubmit = computed(() => detail.value && ['pending', 'processing'].includes(detail.value.status))
 
 onMounted(async () => {
+  setBreadcrumb([
+    { label: '首页', to: '/dashboard' },
+    { label: '个人中心', to: '/profile' },
+    { label: '任务处理' },
+  ])
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true

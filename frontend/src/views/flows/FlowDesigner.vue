@@ -33,6 +33,22 @@
       </div>
     </div>
 
+    <!-- 发起模式：业务信息卡片 -->
+    <div v-if="isLaunchMode && hasBizInfo" class="biz-info-card">
+      <div class="biz-info-card__item">
+        <span class="biz-info-card__label">合同号</span>
+        <span class="biz-info-card__value">{{ bizInfo.contract_no }}</span>
+      </div>
+      <div class="biz-info-card__item">
+        <span class="biz-info-card__label">产品型号</span>
+        <span class="biz-info-card__value">{{ bizInfo.product_model }}</span>
+      </div>
+      <div class="biz-info-card__item">
+        <span class="biz-info-card__label">销售经理</span>
+        <span class="biz-info-card__value">{{ bizInfo.sales_manager }}</span>
+      </div>
+    </div>
+
     <!-- 主体区域：画布 + 面板 -->
     <div class="designer-body" v-loading="loading">
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
@@ -106,6 +122,17 @@ const selectedNodeData = ref<any>(null)
 const isLaunchMode = computed(() => route.query.mode === 'launch')
 /** 是否为新建模板模式（还未入库，首次保存时才创建） */
 const isNewTemplate = computed(() => route.query.new === '1')
+
+/** 发起模式下的业务信息（从路由 query 读取） */
+const bizInfo = computed(() => ({
+  contract_no: (route.query.contract_no as string) || '',
+  product_model: (route.query.product_model as string) || '',
+  sales_manager: (route.query.sales_manager as string) || '',
+}))
+/** 是否有业务信息可展示 */
+const hasBizInfo = computed(() =>
+  bizInfo.value.contract_no !== '' || bizInfo.value.product_model !== '' || bizInfo.value.sales_manager !== ''
+)
 
 /** 发起流程表单 */
 const launchForm = ref({ name: '', priority: 'normal' as string, description: '' })
@@ -307,6 +334,9 @@ async function handleLaunch() {
       name: launchForm.value.name.trim(),
       priority: launchForm.value.priority,
       description: launchForm.value.description || undefined,
+      contract_no: bizInfo.value.contract_no || undefined,
+      product_model: bizInfo.value.product_model || undefined,
+      sales_manager: bizInfo.value.sales_manager || undefined,
     })
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false
@@ -323,4 +353,14 @@ async function handleLaunch() {
 .designer-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #fff; border-bottom: 1px solid var(--el-border-color-light); flex-shrink: 0; .header-actions { display: flex; align-items: center; gap: 4px; } }
 .designer-body { flex: 1; overflow: hidden; display: flex; }
 .view-mode-toggle { position: absolute; bottom: 16px; left: 16px; z-index: 10; background: #fff; border-radius: 6px; padding: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+
+/* ─── 发起模式：业务信息卡片 ─── */
+.biz-info-card {
+  display: flex; align-items: center; gap: 32px;
+  padding: 10px 24px; background: #f5f7fa; border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-shrink: 0;
+  &__item { display: flex; align-items: center; gap: 8px; }
+  &__label { font-size: 12px; color: var(--el-text-color-secondary); }
+  &__value { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); }
+}
 </style>

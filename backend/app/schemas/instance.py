@@ -21,6 +21,9 @@ class CreateInstanceRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="实例名称")
     description: str | None = Field(None, max_length=500, description="实例描述")
     priority: str = Field("normal", description="优先级：urgent / high / normal / low")
+    contract_no: str | None = Field(None, max_length=100, description="合同号")
+    product_model: str | None = Field(None, max_length=100, description="产品型号")
+    sales_manager: str | None = Field(None, max_length=50, description="销售经理")
     node_overrides: list[NodeOverride] | None = Field(None, description="节点覆盖配置（可选）")
 
 
@@ -160,6 +163,9 @@ class InstanceDetailResponse(BaseModel):
     status: str
     archive_status: str | None = None
     termination_reason: str | None = None
+    contract_no: str | None = None
+    product_model: str | None = None
+    sales_manager: str | None = None
     current_node_index: int = 0
     total_nodes: int = 0
     initiated_at: datetime | None = None

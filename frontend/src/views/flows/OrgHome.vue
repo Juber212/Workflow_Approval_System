@@ -15,20 +15,39 @@
       </div>
     </div>
 
-    <!-- 选择模板弹窗（发起流程） -->
-    <el-dialog v-model="showTemplatePicker" title="选择流程模板" width="520px">
+    <!-- 选择模板并填写业务信息（发起流程） -->
+    <el-dialog v-model="showTemplatePicker" title="发起流程" width="560px" @close="resetPickerForm">
       <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px" />
-      <el-table :data="templateList" v-loading="pickerLoading" @row-click="handlePickTemplate" style="cursor:pointer" max-height="360">
+      <el-table
+        :data="templateList" v-loading="pickerLoading"
+        @row-click="handleSelectTemplate" style="cursor:pointer" max-height="280"
+        :row-class-name="({ row }: any) => row.id === selectedTplId ? 'is-selected-row' : ''"
+      >
         <el-table-column prop="name" label="模板名称" min-width="160" />
         <el-table-column prop="node_count" label="节点数" width="80" align="center" />
         <el-table-column prop="instance_count" label="运行实例" width="80" align="center" />
-        <el-table-column label="操作" width="80" align="center">
-          <template #default>
-            <el-button text type="primary" size="small">选择</el-button>
-          </template>
-        </el-table-column>
       </el-table>
-      <template #footer><el-button @click="showTemplatePicker = false">取消</el-button></template>
+
+      <!-- 业务信息表单（选择模板后出现） -->
+      <template v-if="selectedTplId">
+        <el-divider />
+        <el-form :model="pickerForm" label-width="80px" size="default" @submit.prevent>
+          <el-form-item label="合同号" required>
+            <el-input v-model="pickerForm.contract_no" placeholder="请输入合同号" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="产品型号" required>
+            <el-input v-model="pickerForm.product_model" placeholder="请输入产品型号" maxlength="100" />
+          </el-form-item>
+          <el-form-item label="销售经理" required>
+            <el-input v-model="pickerForm.sales_manager" placeholder="请输入销售经理姓名" maxlength="50" />
+          </el-form-item>
+        </el-form>
+      </template>
+
+      <template #footer>
+        <el-button @click="showTemplatePicker = false">取消</el-button>
+        <el-button type="primary" :disabled="!pickerCanConfirm" @click="handleConfirmLaunch">确认发起</el-button>
+      </template>
     </el-dialog>
 
     <!-- Tab 切换 -->
@@ -181,9 +200,10 @@ import {
 } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
-import { provideBreadcrumb } from '@/composables/useBreadcrumb'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import TemplateTable from './components/TemplateTable.vue'
 
+const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
@@ -192,13 +212,37 @@ const isAdmin = computed(() => userStore.isAdmin)
 const isManager = computed(() => userStore.isManager)
 const activeTab = ref('instance')
 
-// ========== 发起流程：模板选择弹窗 ==========
+// ========== 发起流程：模板选择 + 业务信息弹窗 ==========
 const showTemplatePicker = ref(false)
 const pickerLoading = ref(false)
 const tplKeyword = ref('')
 const templateList = ref<TemplateItem[]>([])
+const selectedTplId = ref<number | null>(null)  // 当前选中的模板 ID
 
-watch(showTemplatePicker, (val) => { if (val) fetchTemplateList() })
+/** 业务信息表单 */
+const pickerForm = reactive({
+  contract_no: '',
+  product_model: '',
+  sales_manager: '',
+})
+
+/** 确认按钮是否可用：模板已选 + 三个必填字段已填写 */
+const pickerCanConfirm = computed(() =>
+  selectedTplId.value !== null &&
+  pickerForm.contract_no.trim() !== '' &&
+  pickerForm.product_model.trim() !== '' &&
+  pickerForm.sales_manager.trim() !== ''
+)
+
+watch(showTemplatePicker, (val) => { if (val) { fetchTemplateList(); resetPickerForm() } })
+
+/** 重置弹窗表单 */
+function resetPickerForm() {
+  selectedTplId.value = null
+  pickerForm.contract_no = ''
+  pickerForm.product_model = ''
+  pickerForm.sales_manager = ''
+}
 
 /** 加载模板列表（限定当前所） */
 async function fetchTemplateList() {
@@ -210,10 +254,22 @@ async function fetchTemplateList() {
   finally { pickerLoading.value = false }
 }
 
-/** 选择模板 → 进入设计器（发起模式） */
-function handlePickTemplate(row: TemplateItem) {
+/** 点击模板行 → 选中模板，下方显示业务信息表单 */
+function handleSelectTemplate(row: TemplateItem) {
+  selectedTplId.value = row.id
+}
+
+/** 确认发起 → 携带业务信息参数跳设计器 */
+function handleConfirmLaunch() {
+  if (!pickerCanConfirm.value || !selectedTplId.value) return
   showTemplatePicker.value = false
-  router.push(`/flows/designer/${row.id}?mode=launch`)
+  const params = new URLSearchParams({
+    mode: 'launch',
+    contract_no: pickerForm.contract_no.trim(),
+    product_model: pickerForm.product_model.trim(),
+    sales_manager: pickerForm.sales_manager.trim(),
+  })
+  router.push(`/flows/designer/${selectedTplId.value}?${params.toString()}`)
 }
 
 // ========== 组织信息 ==========
@@ -275,16 +331,18 @@ async function fetchOrgInfo() {
     if (org) {
       orgInfo.value = org
       orgName.value = org.name
-      // 动态设置面包屑为实际组织名称
-      provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: org.name }])
     } else {
       orgName.value = '未知组织'
-      provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: '未知组织' }])
     }
   } catch {
     orgName.value = '加载失败'
-    provideBreadcrumb([{ label: '流程管理', to: '/flows' }, { label: '加载失败' }])
   }
+  // 面包屑：首页 > 流程管理 > 当前所
+  setBreadcrumb([
+    { label: '首页', to: '/dashboard' },
+    { label: '流程管理', to: '/flows' },
+    { label: orgName.value },
+  ])
 }
 
 /** 获取该所各状态的实例总数 */
@@ -483,4 +541,9 @@ function instStatusLabel(s: string): string {
 .list-pagination {
   display: flex; justify-content: center; margin-top: 16px;
 }
+</style>
+
+<style lang="scss">
+/* 发起流程弹窗：选中模板行高亮（非 scoped 才能覆盖 el-table 行样式） */
+.is-selected-row td { background: var(--el-color-primary-light-9) !important; }
 </style>

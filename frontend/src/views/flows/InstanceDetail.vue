@@ -90,6 +90,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getInstanceDetail, type InstanceDetailResponse } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import InstanceInfo from './components/InstanceInfo.vue'
 import NodeCard from './components/NodeCard.vue'
 import OperationTimeline from './components/OperationTimeline.vue'
@@ -101,6 +102,7 @@ import type { DetailNodeInfo } from '@/api/instance'
 
 const route = useRoute()
 const userStore = useUserStore()
+const { setBreadcrumb } = useBreadcrumb()
 
 // ========== 状态 ==========
 const loading = ref(false)
@@ -131,6 +133,15 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getInstanceDetail(id)
+    // 面包屑：首页 > 流程管理 > XX所 > 实例详情
+    if (detail.value) {
+      setBreadcrumb([
+        { label: '首页', to: '/dashboard' },
+        { label: '流程管理', to: '/flows' },
+        { label: detail.value.organization_name, to: `/flows/organization/${detail.value.organization_id}` },
+        { label: detail.value.name },
+      ])
+    }
   } catch (err: any) {
     const msg = err?.response?.data?.message || err?.message || '加载实例详情失败'
     ElMessage.error(msg)

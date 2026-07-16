@@ -143,8 +143,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getApprovalDetail, approveApproval, rejectApproval, type ApprovalDetail } from '@/api/approval'
 import { previewFile, downloadFile } from '@/api/task'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 
+const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
 
@@ -171,6 +173,11 @@ const fileGroups = computed(() => {
 })
 
 onMounted(async () => {
+  setBreadcrumb([
+    { label: '首页', to: '/dashboard' },
+    { label: '个人中心', to: '/profile' },
+    { label: '审批处理' },
+  ])
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true

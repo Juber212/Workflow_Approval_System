@@ -91,8 +91,19 @@
             <el-table-column prop="organization_name" label="所属组织" min-width="80" />
             <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
             <el-table-column prop="current_assignee_name" label="负责人" min-width="64" />
-            <el-table-column label="耗时" min-width="50" align="center">
-              <template #default="{ row }">{{ row.days_elapsed }}天</template>
+            <el-table-column label="进度" min-width="160" align="center">
+              <template #default="{ row }">
+                <div class="bt-progress">
+                  <el-progress
+                    :percentage="row.total_nodes > 0 ? Math.round((row.finished_count / row.total_nodes) * 100) : 0"
+                    :stroke-width="8"
+                    :show-text="false"
+                  />
+                  <span class="bt-progress__text">
+                    {{ row.total_nodes > 0 ? Math.round((row.finished_count / row.total_nodes) * 100) : 0 }}%（{{ row.finished_count }}/{{ row.total_nodes }}）
+                  </span>
+                </div>
+              </template>
             </el-table-column>
             <el-table-column label="状态" min-width="72" align="center">
               <template #default="{ row }">
@@ -293,6 +304,14 @@ function chainNodeClass(seg: string): string {
   &--active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); border-color: var(--el-color-primary); font-weight: 600; }
   &--wait { background: #fafafa; color: var(--el-text-color-placeholder); border-color: #eee; }
 }
+
+/* ─── 进度条 --- */
+.bt-progress {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  :deep(.el-progress) { flex: 1; min-width: 60px; }
+  :deep(.el-progress-bar__outer) { border-radius: 4px; }
+}
+.bt-progress__text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; flex-shrink: 0; }
 
 /* ─── 逾期 --- */
 .od-tag { font-size: 12px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }

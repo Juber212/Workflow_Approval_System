@@ -7,32 +7,6 @@
   padding: 0;
 }
 
-// ========== 面包屑导航 ==========
-.page-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 16px;
-  line-height: 1.5;
-
-  a {
-    color: var(--el-text-color-regular);
-    text-decoration: none;
-    &:hover { color: var(--el-color-primary); }
-  }
-
-  .breadcrumb-sep {
-    color: var(--el-text-color-placeholder);
-    margin: 0 2px;
-  }
-
-  .breadcrumb-current {
-    color: var(--el-text-color-secondary);
-  }
-}
-
 // ========== 页面返回按钮样式 ==========
 .el-page-header {
   margin-bottom: 8px;

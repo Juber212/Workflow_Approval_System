@@ -26,7 +26,8 @@ export interface BottleneckItem {
   current_node_name: string
   current_assignee_name: string
   priority: string
-  days_elapsed: number
+  finished_count: number
+  total_nodes: number
   overdue_status: string
   all_finished: boolean
 }

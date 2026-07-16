@@ -53,6 +53,19 @@
           <span style="font-size:13px;color:var(--el-text-color-secondary)"> / {{ detail.total_nodes }}</span>
         </div>
       </div>
+      <!-- 业务信息（有值才展示） -->
+      <div class="info-grid__item" v-if="detail.contract_no">
+        <div class="k">合同号</div>
+        <div class="v">{{ detail.contract_no }}</div>
+      </div>
+      <div class="info-grid__item" v-if="detail.product_model">
+        <div class="k">产品型号</div>
+        <div class="v">{{ detail.product_model }}</div>
+      </div>
+      <div class="info-grid__item" v-if="detail.sales_manager">
+        <div class="k">销售经理</div>
+        <div class="v">{{ detail.sales_manager }}</div>
+      </div>
     </div>
 
     <!-- 第三行：流程进度条 -->

@@ -18,6 +18,9 @@ export interface CreateInstanceData {
   name: string
   description?: string | null
   priority?: string
+  contract_no?: string | null
+  product_model?: string | null
+  sales_manager?: string | null
   node_overrides?: NodeOverride[]
 }
 
@@ -165,6 +168,9 @@ export interface InstanceDetailResponse {
   status: string
   archive_status: string | null
   termination_reason: string | null
+  contract_no: string | null
+  product_model: string | null
+  sales_manager: string | null
   current_node_index: number
   total_nodes: number
   initiated_at: string | null

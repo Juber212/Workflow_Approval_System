@@ -109,8 +109,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCheckDetail, passCheck, returnCheck, type CheckDetail } from '@/api/check'
 import { previewFile, downloadFile } from '@/api/task'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 
+const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
 
@@ -121,6 +123,11 @@ const passing = ref(false)
 const returning = ref(false)
 
 onMounted(async () => {
+  setBreadcrumb([
+    { label: '首页', to: '/dashboard' },
+    { label: '个人中心', to: '/profile' },
+    { label: '校验处理' },
+  ])
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true

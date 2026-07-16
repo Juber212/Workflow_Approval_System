@@ -27,8 +27,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import UserManagement from './UserManagement.vue'
 import OrganizationManagement from './OrganizationManagement.vue'
 import RoleManagement from './RoleManagement.vue'
@@ -36,6 +37,11 @@ import ConfigManagement from './ConfigManagement.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { setBreadcrumb } = useBreadcrumb()
+
+onMounted(() => {
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '系统管理' }])
+})
 
 /** 当前激活的 Tab（从路由路径推断） */
 const activeTab = computed(() => {

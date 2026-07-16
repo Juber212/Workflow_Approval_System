@@ -1,15 +1,26 @@
-/** 面包屑 provide/inject 工具 —— 供页面注入动态面包屑（如组织名称） */
-import { provide, inject, type Ref, ref } from 'vue'
-import type { BreadcrumbItem } from '@/router'
+import { ref } from 'vue'
 
-const BREADCRUMB_KEY = Symbol('pageBreadcrumb')
-
-/** 在页面中使用：设置动态面包屑（覆盖路由静态 meta） */
-export function provideBreadcrumb(items: BreadcrumbItem[]) {
-  provide(BREADCRUMB_KEY, ref(items))
+/** 面包屑单项 */
+export interface BreadcrumbItem {
+  /** 显示文字 */
+  label: string
+  /** 可选：点击跳转路径，当前页（最后一级）不传 */
+  to?: string
 }
 
-/** 在 AppLayout 中使用：获取页面注入的动态面包屑 */
-export function usePageBreadcrumb(): Ref<BreadcrumbItem[] | null> {
-  return inject(BREADCRUMB_KEY, ref(null))
+/** 模块级共享状态 —— 全局只有一份面包屑 */
+const items = ref<BreadcrumbItem[]>([])
+
+/**
+ * 面包屑状态管理 composable
+ *
+ * 用法：页面内调用 setBreadcrumb() 设置，AppLayout 读取 items 渲染
+ */
+export function useBreadcrumb() {
+  /** 设置面包屑（覆盖旧值） */
+  function setBreadcrumb(list: BreadcrumbItem[]) {
+    items.value = list
+  }
+
+  return { items, setBreadcrumb }
 }

@@ -217,8 +217,9 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
         else:
             overdue_status = "正常"
 
-        # 已耗时天数
-        days_elapsed = (now - (inst.initiated_at or inst.created_at)).days
+        # 进度统计：已完成节点数 / 总工作节点数
+        finished_count = sum(1 for n in nodes if n.status == "finished")
+        total_nodes = len(nodes)
 
         items.append({
             "instance_id": inst.id,
@@ -228,7 +229,8 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
             "current_node_name": current_node_name,
             "current_assignee_name": current_assignee_name,
             "priority": inst.priority,
-            "days_elapsed": days_elapsed,
+            "finished_count": finished_count,
+            "total_nodes": total_nodes,
             "overdue_status": overdue_status,
             "all_finished": all_finished,
         })

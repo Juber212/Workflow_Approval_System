@@ -1,28 +1,57 @@
 <template>
-  <!-- 侧边栏 + 顶栏 + 内容区布局（飞书风格） -->
-  <div class="app-shell">
+  <!-- 侧边栏 + 内容区布局 —— 支持折叠为图标列，设计器全屏 -->
+  <div class="app-shell" :class="{ 'app-shell--designer': isDesigner }">
     <!-- ==================== 侧边栏 ==================== -->
-    <aside class="sidebar">
-      <!-- 品牌 Logo -->
-      <router-link to="/dashboard" class="sidebar-brand">
-        <span class="sidebar-brand__icon">流</span>
-        <div class="sidebar-brand__text">
-          <span class="sidebar-brand__title">流程审批系统</span>
-          <span class="sidebar-brand__sub">Workflow Approval</span>
-        </div>
-      </router-link>
+    <aside v-show="!isDesigner" class="sidebar" :class="{ 'is-collapsed': isCollapsed }">
+      <!-- 品牌 Logo 行（折叠态：logo 可点击展开） -->
+      <div class="sidebar-brand">
+        <!-- 折叠态：logo 图标切换为展开按钮，hover 时显示折叠图标 -->
+        <el-tooltip v-if="isCollapsed" content="展开侧边栏" placement="right">
+          <span
+            class="sidebar-brand__icon sidebar-brand__icon--toggle"
+            @click="isCollapsed = false"
+            @mouseenter="isBrandHovered = true"
+            @mouseleave="isBrandHovered = false"
+          >
+            <svg v-if="isBrandHovered" width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <rect x="1.5" y="3.5" width="17" height="13" rx="3" />
+              <line x1="6" y1="3.5" x2="6" y2="16.5" />
+            </svg>
+            <span v-else>流</span>
+          </span>
+        </el-tooltip>
+        <!-- 展开态：logo 正常链接 -->
+        <template v-else>
+          <router-link to="/dashboard" class="sidebar-brand__icon sidebar-brand__icon--link">流</router-link>
+          <div class="sidebar-brand__text">
+            <router-link to="/dashboard" class="sidebar-brand__title">流程审批系统</router-link>
+            <span class="sidebar-brand__sub">Workflow Approval</span>
+          </div>
+          <!-- 折叠按钮（展开态显示在 logo 行右侧） -->
+          <button class="sidebar-toggle" @click="handleCollapse" title="折叠侧边栏">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <rect x="1.5" y="3.5" width="17" height="13" rx="3" />
+              <line x1="6" y1="3.5" x2="6" y2="16.5" />
+            </svg>
+          </button>
+        </template>
+      </div>
 
-      <!-- 导航菜单（纯文字，无图标） -->
+      <!-- 导航菜单 -->
       <nav class="sidebar-nav">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="sidebar-nav__item"
-          :class="{ 'is-active': isMenuActive(item.path) }"
+        <el-tooltip
+          v-for="item in menuItems" :key="item.path"
+          :content="item.label" placement="right" :disabled="!isCollapsed"
         >
-          {{ item.label }}
-        </router-link>
+          <router-link
+            :to="item.path"
+            class="sidebar-nav__item"
+            :class="{ 'is-active': isMenuActive(item.path) }"
+          >
+            <el-icon :size="20"><component :is="item.icon" /></el-icon>
+            <span class="sidebar-nav__label">{{ item.label }}</span>
+          </router-link>
+        </el-tooltip>
       </nav>
 
       <!-- 底部用户区 -->
@@ -37,19 +66,19 @@
 
     <!-- ==================== 右侧区域 ==================== -->
     <div class="app-right">
-      <!-- 窄顶栏：面包屑导航 -->
-      <header class="topbar">
-        <nav class="topbar-breadcrumb">
-          <template v-for="(item, i) in breadcrumbs" :key="i">
-            <span v-if="i > 0" class="breadcrumb-sep">/</span>
-            <router-link v-if="item.to" :to="item.to" class="breadcrumb-link">{{ item.label }}</router-link>
-            <span v-else class="breadcrumb-current">{{ item.label }}</span>
-          </template>
-        </nav>
-      </header>
-
-      <!-- 主内容区 -->
       <main class="app-content">
+        <!-- 面包屑导航栏（设计器 & 有返回按钮的页面隐藏） -->
+        <div v-if="showBreadcrumb" class="breadcrumb-bar">
+          <el-breadcrumb separator="›">
+            <el-breadcrumb-item
+              v-for="(item, idx) in breadcrumbItems"
+              :key="idx"
+              :to="idx < breadcrumbItems.length - 1 && item.to ? item.to : undefined"
+            >
+              {{ item.label }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
         <router-view />
       </main>
     </div>
@@ -89,7 +118,6 @@
           <el-descriptions-item label="手机号">{{ userStore.userInfo.phone || '-' }}</el-descriptions-item>
         </el-descriptions>
 
-        <!-- 签名上传 -->
         <el-divider />
         <div class="signature-section">
           <h4 class="signature-section__title">个人签名</h4>
@@ -132,19 +160,44 @@
 </template>
 
 <script setup lang="ts">
-/** 应用布局 —— 侧边栏 + 顶栏面包屑 + 内容区（飞书风格） */
+/** 应用布局 —— 侧边栏 + 内容区（飞书风格） */
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { Monitor, Document, Setting, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getMeApi, changePasswordApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
-import { usePageBreadcrumb } from '@/composables/useBreadcrumb'
-import type { BreadcrumbItem } from '@/router'
+import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+
+// ==================== 侧边栏状态 ====================
+/** 侧边栏是否折叠为图标列 */
+const isCollapsed = ref(false)
+/** 折叠态下鼠标是否悬停在 logo 上（切换显示折叠图标） */
+const isBrandHovered = ref(false)
+/** 是否在流程设计器页面（隐藏侧边栏，占满全屏） */
+const isDesigner = computed(() => route.path.startsWith('/flows/designer/'))
+
+// ==================== 面包屑 ====================
+const { items: breadcrumbItems } = useBreadcrumb()
+
+/** 面包屑可见条件：首页/设计器/模板详情不显示 */
+const showBreadcrumb = computed(() => {
+  if (route.path === '/dashboard') return false
+  if (isDesigner.value) return false
+  if (route.path.startsWith('/flows/detail/')) return false
+  return true
+})
+
+/** 折叠侧边栏，同时重置 hover 状态避免图标残留 */
+function handleCollapse() {
+  isCollapsed.value = true
+  isBrandHovered.value = false
+}
 
 // ==================== 菜单项 ====================
 /** 是否为系统管理员 */
@@ -164,17 +217,25 @@ function roleTagLabel(role: string): string {
   return m[role] || role
 }
 
-interface MenuItem { path: string; label: string }
+/** 菜单项图标映射（Element Plus 线框风格） */
+const MENU_ICONS: Record<string, any> = {
+  '/dashboard': Monitor,
+  '/flows': Document,
+  '/admin/users': Setting,
+  '/profile': User,
+}
+
+interface MenuItem { path: string; label: string; icon: any }
 
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
-    { path: '/dashboard', label: '首页' },
-    { path: '/flows', label: '流程管理' },
+    { path: '/dashboard', label: '首页', icon: MENU_ICONS['/dashboard'] },
+    { path: '/flows', label: '流程管理', icon: MENU_ICONS['/flows'] },
   ]
   if (isAdmin.value) {
-    items.push({ path: '/admin/users', label: '系统管理' })
+    items.push({ path: '/admin/users', label: '系统管理', icon: MENU_ICONS['/admin/users'] })
   } else {
-    items.push({ path: '/profile', label: '个人中心' })
+    items.push({ path: '/profile', label: '个人中心', icon: MENU_ICONS['/profile'] })
   }
   return items
 })
@@ -186,21 +247,6 @@ function isMenuActive(base: string): boolean {
   if (base === '/profile') return p.startsWith('/profile')
   return p === base || p.startsWith(base + '/')
 }
-
-// ==================== 面包屑 ====================
-/** 页面临时注入的动态面包屑 */
-const injectedBreadcrumb = usePageBreadcrumb()
-
-/** 面包屑：优先使用页面注入的动态值，否则用 route meta */
-const breadcrumbs = computed<BreadcrumbItem[]>(() => {
-  if (injectedBreadcrumb?.value) return injectedBreadcrumb.value
-  const metaBreadcrumb = route.meta.breadcrumb as BreadcrumbItem[] | undefined
-  if (metaBreadcrumb && metaBreadcrumb.length > 0) return metaBreadcrumb
-  // 兜底：用页面 title
-  const title = route.meta.title as string
-  if (title) return [{ label: title }]
-  return [{ label: '首页' }]
-})
 
 // ==================== 用户 Popover ====================
 const showUserPopover = ref(false)
@@ -330,6 +376,17 @@ async function handleChangePassword() {
   height: 100vh;
   overflow: hidden;
   background: var(--page-bg);
+
+  // 设计器模式：侧边栏隐藏，内容区占满全屏
+  &--designer {
+    .app-content {
+      padding: 0;
+      > * { max-width: none; margin: 0; }
+      :deep(.flow-designer) {
+        margin: 0; width: 100%; height: 100%;
+      }
+    }
+  }
 }
 
 /* ==================== 侧边栏 ==================== */
@@ -342,6 +399,33 @@ async function handleChangePassword() {
   flex-direction: column;
   user-select: none;
   z-index: 10;
+  transition: width 0.2s ease;
+  position: relative;
+
+  // 折叠状态：窄图标列
+  &.is-collapsed {
+    width: 60px;
+
+    .sidebar-brand { justify-content: center; padding: 16px 8px 12px; }
+
+    .sidebar-nav { padding: 4px 8px; }
+    .sidebar-nav__item { justify-content: center; padding: 0; border-radius: 8px; height: 44px; }
+    .sidebar-nav__label { display: none; }
+    .sidebar-nav__item.is-active { box-shadow: none; }
+
+    .sidebar-user { justify-content: center; padding: 12px 8px; }
+    .sidebar-user__info { display: none; }
+  }
+}
+
+/* 折叠切换按钮（展开态，放在品牌行右侧） */
+.sidebar-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; margin-left: auto; flex-shrink: 0;
+  border: none; background: transparent; border-radius: 6px;
+  cursor: pointer; color: var(--el-text-color-secondary);
+  transition: background 0.15s, color 0.15s;
+  &:hover { background: #f2f3f5; color: var(--el-text-color-primary); }
 }
 
 /* 侧边栏品牌标识 */
@@ -349,10 +433,10 @@ async function handleChangePassword() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 20px 20px 16px;
-  text-decoration: none;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   margin-bottom: 8px;
+  transition: padding 0.2s ease;
 
   &__icon {
     display: inline-flex;
@@ -364,6 +448,17 @@ async function handleChangePassword() {
     color: #fff;
     font-size: 18px; font-weight: 700;
     flex-shrink: 0;
+
+    // logo 链接重置
+    &--link { text-decoration: none; }
+
+    // 折叠态：logo 可点击展开
+    &--toggle {
+      cursor: pointer; transition: background 0.15s;
+      &:hover { background: var(--el-fill-color); }
+      // SVG 图标颜色覆盖（不要白色，和正常图标一样的中性灰）
+      svg { color: var(--el-text-color-secondary); }
+    }
   }
 
   &__text {
@@ -374,7 +469,9 @@ async function handleChangePassword() {
   &__title {
     font-size: 15px; font-weight: 600;
     color: var(--el-text-color-primary);
+    text-decoration: none;
     white-space: nowrap;
+    &:hover { color: var(--color-primary); }
   }
 
   &__sub {
@@ -383,17 +480,19 @@ async function handleChangePassword() {
   }
 }
 
-/* 侧边栏导航菜单（无图标纯文字） */
+/* 侧边栏导航菜单 */
 .sidebar-nav {
   flex: 1;
   padding: 4px 12px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  transition: padding 0.2s ease;
 
   &__item {
     display: flex;
     align-items: center;
+    gap: 10px;
     height: 40px;
     padding: 0 12px;
     border-radius: 6px;
@@ -401,7 +500,7 @@ async function handleChangePassword() {
     color: var(--el-text-color-regular);
     text-decoration: none;
     white-space: nowrap;
-    transition: background 0.15s, color 0.15s;
+    transition: all 0.15s;
 
     &:hover { background: #f2f3f5; }
 
@@ -411,6 +510,8 @@ async function handleChangePassword() {
       box-shadow: inset 3px 0 0 var(--color-primary);
     }
   }
+
+  &__label { transition: opacity 0.15s; }
 }
 
 /* 侧边栏底部用户区 */
@@ -421,7 +522,7 @@ async function handleChangePassword() {
   padding: 12px 16px;
   border-top: 1px solid var(--el-border-color-lighter);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.2s;
 
   &:hover { background: #f2f3f5; }
 
@@ -462,59 +563,53 @@ async function handleChangePassword() {
   overflow: hidden;
 }
 
-/* 窄顶栏：面包屑 */
-.topbar {
-  height: var(--topbar-height);
-  flex-shrink: 0;
-  background: #fff;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  display: flex;
-  align-items: center;
-  padding: 0 32px;
-  z-index: 5;
-}
-
-.topbar-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  line-height: 1;
-}
-
-.breadcrumb-link {
-  color: var(--el-text-color-secondary);
-  text-decoration: none;
-  &:hover { color: var(--color-primary); }
-}
-
-.breadcrumb-sep {
-  color: var(--el-text-color-placeholder);
-  margin: 0 2px;
-}
-
-.breadcrumb-current {
-  color: var(--el-text-color-primary);
-  font-weight: 500;
-}
-
 /* ==================== 内容区 ==================== */
 .app-content {
   flex: 1;
   overflow-y: auto;
   padding: var(--content-padding-y) var(--content-padding-x);
-  // 默认页面有最大宽度并居中
   > * {
     max-width: var(--content-max-width);
     margin: 0 auto;
   }
-  // 流程设计器占满整个内容区，不受 max-width 和 padding 限制
+  // 流程设计器占满整个内容区
   :deep(.flow-designer) {
     max-width: none;
     margin: calc(-1 * var(--content-padding-y)) calc(-1 * var(--content-padding-x));
     width: auto;
     height: calc(100% + 2 * var(--content-padding-y));
+  }
+}
+
+/* ==================== 面包屑导航栏 ==================== */
+.breadcrumb-bar {
+  max-width: var(--content-max-width);
+  margin: 0 auto 12px;
+  padding: 0;
+  :deep(.el-breadcrumb) {
+    font-size: 13px;
+  }
+  :deep(.el-breadcrumb__item) {
+    // 非最后一项（可点击跳转）
+    .el-breadcrumb__inner {
+      color: var(--el-text-color-secondary);
+      font-weight: 400;
+      transition: color 0.15s;
+      &:hover { color: var(--color-primary); }
+    }
+  }
+  :deep(.el-breadcrumb__item:last-child) {
+    .el-breadcrumb__inner {
+      color: var(--el-text-color-primary);
+      font-weight: 500;
+      cursor: default;
+      &:hover { color: var(--el-text-color-primary); }
+    }
+  }
+  :deep(.el-breadcrumb__separator) {
+    color: var(--el-text-color-placeholder);
+    font-weight: 400;
+    margin: 0 6px;
   }
 }
 
