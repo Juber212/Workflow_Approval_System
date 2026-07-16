@@ -11,6 +11,7 @@
     :clearable="clearable"
     style="width: 100%"
     @change="handleChange"
+    @visible-change="handleVisibleChange"
   >
     <el-option
       v-for="user in options"
@@ -27,6 +28,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { searchUsers, type UserSearchItem } from '@/api/admin'
+import { useUserStore } from '@/stores/user'
 
 /** Props */
 const props = withDefaults(defineProps<{
@@ -37,6 +39,8 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   disabled?: boolean
   clearable?: boolean
+  /** 是否启用本所人员下拉浏览 —— 展开时自动加载当前用户所属组织的成员 */
+  orgMembers?: boolean
 }>(), {
   modelValue: undefined,
   initialOptions: () => [],
@@ -44,6 +48,7 @@ const props = withDefaults(defineProps<{
   placeholder: '请搜索并选择用户',
   disabled: false,
   clearable: true,
+  orgMembers: false,
 })
 
 const emit = defineEmits<{
@@ -52,10 +57,14 @@ const emit = defineEmits<{
   'options-loaded': [users: UserSearchItem[]]
 }>()
 
+const userStore = useUserStore()
+
 // ========== 状态 ==========
 const loading = ref(false)
 const options = ref<UserSearchItem[]>([])
 const selected = ref<number | number[] | undefined>(props.modelValue)
+/** 是否正在搜索模式（用户已输入关键词，使用远程搜索） */
+const isSearching = ref(false)
 
 // 双向绑定
 watch(() => props.modelValue, (v) => { selected.value = v })
@@ -72,14 +81,56 @@ function handleChange(val: number | number[] | undefined) {
   emit('update:modelValue', val)
 }
 
+// ========== 本所成员浏览 ==========
+
+/** 下拉框展开/收起事件 */
+async function handleVisibleChange(visible: boolean) {
+  if (!visible) return
+  if (!props.orgMembers) return
+  // 已有搜索关键词 → 走远程搜索逻辑，不覆盖
+  if (isSearching.value) return
+  // 已加载过 → 不重复请求
+  if (options.value.length > 0 && !isSearching.value) return
+
+  const orgId = userStore.userInfo?.organization_id
+  if (!orgId) return
+
+  loading.value = true
+  try {
+    options.value = await searchUsers(undefined, 100, orgId)
+    emit('options-loaded', options.value)
+  } catch {
+    options.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
 // ========== 远程搜索 ==========
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 async function handleSearch(keyword: string) {
   if (!keyword || keyword.length < 1) {
+    // 清空搜索 → 切回本所浏览模式
+    isSearching.value = false
     options.value = []
+    // 重新加载本所成员
+    const orgId = userStore.userInfo?.organization_id
+    if (props.orgMembers && orgId) {
+      loading.value = true
+      try {
+        options.value = await searchUsers(undefined, 100, orgId)
+        emit('options-loaded', options.value)
+      } catch {
+        options.value = []
+      } finally {
+        loading.value = false
+      }
+    }
     return
   }
+
+  isSearching.value = true
 
   // 防抖 300ms
   if (searchTimer) clearTimeout(searchTimer)

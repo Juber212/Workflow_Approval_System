@@ -116,23 +116,35 @@ async def put_user_reset_password(
 
 @router.get("/users/search")
 async def search_users(
-    keyword: str = Query(..., min_length=1, description="搜索关键词（姓名/用户名）"),
-    limit: int = Query(20, ge=1, le=100, description="返回数量上限"),
+    keyword: str | None = Query(None, description="搜索关键词（姓名/用户名），为空时配合 organization_id 可拉取组织全部成员"),
+    organization_id: int | None = Query(None, description="按组织筛选，为空且无 keyword 时返回空"),
+    limit: int = Query(100, ge=1, le=200, description="返回数量上限"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """用户快速搜索 —— 用于人员选择器下拉框"""
+    """用户搜索 —— 支持三种模式：
+
+    1. 仅 keyword → 全局搜索（现有行为）
+    2. 仅 organization_id → 返回该组织全部活跃用户
+    3. keyword + organization_id → 在该组织内搜索
+    """
     from sqlalchemy import select as sql_select, or_ as sql_or
     from app.models import User, Organization
 
-    like = f"%{keyword}%"
+    conditions = [User.is_active == True]
+
+    if organization_id:
+        conditions.append(User.organization_id == organization_id)
+
+    if keyword:
+        like = f"%{keyword}%"
+        conditions.append(sql_or(User.real_name.like(like), User.username.like(like)))
+
     stmt = (
         sql_select(User)
         .options(joinedload(User.organization))
-        .where(
-            sql_or(User.real_name.like(like), User.username.like(like)),
-            User.is_active == True,
-        )
+        .where(*conditions)
+        .order_by(User.real_name)
         .limit(limit)
     )
     result = await db.execute(stmt)

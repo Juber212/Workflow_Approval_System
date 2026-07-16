@@ -119,9 +119,9 @@ export interface UserSearchItem {
   organization_name: string | null
 }
 
-/** 按关键词搜索用户（远程搜索） */
-export async function searchUsers(keyword: string, limit = 20): Promise<UserSearchItem[]> {
-  const res = await request.get('/users/search', { params: { keyword, limit } })
+/** 按关键词搜索用户（远程搜索），也可传 organizationId 获取组织成员列表 */
+export async function searchUsers(keyword?: string, limit = 100, organizationId?: number): Promise<UserSearchItem[]> {
+  const res = await request.get('/users/search', { params: { keyword, organization_id: organizationId, limit } })
   return res.data
 }
 

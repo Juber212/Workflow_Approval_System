@@ -35,6 +35,7 @@
               :model-value="getOverride(node.id, 'assignee_id') ?? node.assignee_id"
               @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'assignee_id', v as number | undefined)"
               :placeholder="'选择负责人'"
+              org-members
               style="width: 280px"
               @options-loaded="(users: any[]) => cacheNames(users)"
             />
@@ -49,6 +50,7 @@
                 @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'checkers_ids', v as number[] | undefined)"
                 :multiple="true"
                 :placeholder="'选择校验人（可多选）'"
+                org-members
                 style="width: 400px"
                 @options-loaded="(users: any[]) => cacheNames(users)"
               />
@@ -67,6 +69,7 @@
                 @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'approvers_ids', v as number[] | undefined)"
                 :multiple="true"
                 :placeholder="'选择审批人（可多选）'"
+                org-members
                 style="width: 400px"
                 @options-loaded="(users: any[]) => cacheNames(users)"
               />

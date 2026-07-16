@@ -82,6 +82,7 @@
             v-model="form.assignee_id"
             :initial-options="assigneeInitialOptions"
             placeholder="搜索并选择负责人"
+            org-members
             @update:model-value="handleAssigneeChange"
             @options-loaded="handleOptionsLoaded"
           />
@@ -98,6 +99,7 @@
             :multiple="true"
             :initial-options="checkerInitialOptions"
             placeholder="搜索并选择校验人（可多选）"
+            org-members
             @update:model-value="handleCheckersChange"
             @options-loaded="handleOptionsLoaded"
           />
@@ -114,6 +116,7 @@
             :multiple="true"
             :initial-options="approverInitialOptions"
             placeholder="搜索并选择审批人（可多选）"
+            org-members
             @update:model-value="handleApproversChange"
             @options-loaded="handleOptionsLoaded"
           />

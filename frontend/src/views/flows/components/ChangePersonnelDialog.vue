@@ -22,6 +22,7 @@
           @update:model-value="(v: number | number[] | undefined) => form.assignee_id = v as number | undefined"
           :initial-options="assigneeInitialOptions"
           :placeholder="'选择负责人'"
+          org-members
           style="width: 320px"
         />
       </div>
@@ -35,6 +36,7 @@
           :initial-options="checkerInitialOptions"
           :multiple="true"
           :placeholder="'选择校验人（可多选）'"
+          org-members
           style="width: 320px"
         />
       </div>
@@ -48,6 +50,7 @@
           :initial-options="approverInitialOptions"
           :multiple="true"
           :placeholder="'选择审批人（可多选）'"
+          org-members
           style="width: 320px"
         />
       </div>
