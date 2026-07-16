@@ -342,9 +342,7 @@ function validatePresetUsers(preset: PresetItem) {
   }
   // toast 提示
   if (missing.length > 0) {
-    import('element-plus').then(({ ElMessage }) => {
-      ElMessage.warning(`预设「${preset.name}」中的以下人员已不可用：${missing.join('、')}`)
-    })
+    ElMessage.warning(`预设「${preset.name}」中的以下人员已不可用：${missing.join('、')}`)
   }
 }
 
@@ -361,7 +359,7 @@ async function handleDeletePreset(preset: PresetItem) {
       ElMessageBox.confirm(`确定删除预设「${preset.name}」？`, '删除确认', { type: 'warning' })
     )
     await deletePreset(preset.id)
-    import('element-plus').then(({ ElMessage }) => ElMessage.success('预设已删除'))
+    ElMessage.success('预设已删除')
     await fetchPresets()
   } catch { /* 取消或失败 */ }
 }
