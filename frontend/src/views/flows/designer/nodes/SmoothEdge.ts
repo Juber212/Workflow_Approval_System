@@ -12,6 +12,37 @@ function parsePoints(pointsStr: string): Array<{ x: number; y: number }> {
   })
 }
 
+/** 合并共线冗余点 —— 同方向连续线段合并，只保留方向变化处的拐点 */
+function simplifyPoints(points: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+  if (points.length <= 2) return points
+
+  const result = [points[0]] // 起点保留
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = result[result.length - 1]
+    const curr = points[i]
+    const next = points[i + 1]
+
+    const dx1 = curr.x - prev.x
+    const dy1 = curr.y - prev.y
+    const dx2 = next.x - curr.x
+    const dy2 = next.y - curr.y
+
+    // 两段线段方向相同 → 中间点是冗余的（如连续向右、连续向下）
+    const sameDirection =
+      (dx1 > 0 && dx2 > 0) || (dx1 < 0 && dx2 < 0) || // 水平同向
+      (dy1 > 0 && dy2 > 0) || (dy1 < 0 && dy2 < 0)    // 垂直同向
+
+    if (!sameDirection) {
+      result.push(curr) // 方向变化 → 保留拐点
+    }
+    // 方向相同 → 跳过，合并为一条直线
+  }
+
+  result.push(points[points.length - 1]) // 终点保留
+  return result
+}
+
 /** 将折线点数组转换为平滑贝塞尔曲线路径 d 属性 */
 function calcSmoothPath(points: Array<{ x: number; y: number }>): string {
   if (points.length < 2) return ''
@@ -28,10 +59,10 @@ function calcSmoothPath(points: Array<{ x: number; y: number }>): string {
     const p2 = points[i + 1]
     const p3 = points[Math.min(points.length - 1, i + 2)]
 
-    const cp1x = p1.x + (p2.x - p0.x) / 6
-    const cp1y = p1.y + (p2.y - p0.y) / 6
-    const cp2x = p2.x - (p3.x - p1.x) / 6
-    const cp2y = p2.y - (p3.y - p1.y) / 6
+    const cp1x = p1.x + (p2.x - p0.x) / 10  // 张力 1/10，曲线紧贴折线
+    const cp1y = p1.y + (p2.y - p0.y) / 10
+    const cp2x = p2.x - (p3.x - p1.x) / 10
+    const cp2y = p2.y - (p3.y - p1.y) / 10
 
     d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
   }
@@ -57,9 +88,10 @@ class SmoothEdgeView extends PolylineEdge {
     const style = model.getEdgeStyle()
     const { arrowConfig } = model as any
 
-    // 用 <path> + 平滑 d 替换 <polyline>
+    // 先合并冗余共线点，再计算平滑路径（减少不必要的中间弯曲）
+    const simplified = simplifyPoints(points)
     const attr: Record<string, any> = {
-      d: calcSmoothPath(points),
+      d: calcSmoothPath(simplified),
       ...style,
       ...(arrowConfig || {}),
       fill: 'none',
