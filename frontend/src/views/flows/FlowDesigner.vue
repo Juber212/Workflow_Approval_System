@@ -161,6 +161,15 @@ const launchRules: FormRules = {
 /** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
 const systemNodeDbIds = ref<{ start?: number; end?: number }>({})
 
+/** 将 points 字符串（"x1,y1 x2,y2"）转为 LogicFlow pickEdgeConfig 需要的 pointsList 数组 */
+function pointsStrToList(pts: string | null | undefined): Array<{ x: number; y: number }> | undefined {
+  if (!pts) return undefined
+  return pts.split(' ').filter(Boolean).map(p => {
+    const [x, y] = p.split(',')
+    return { x: Number(x), y: Number(y) }
+  })
+}
+
 /** 构建节点 LF UUID → 数据库 ID 的映射（通过 properties.db_id） */
 function buildSystemIdMapping(graphData: { nodes: any[]; edges: any[] }): Record<string, number> {
   const mapping: Record<string, number> = {}
@@ -248,7 +257,12 @@ onMounted(async () => {
       }
       lf.renderRawData({
         nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy } })),
-        edges: detail.edges.map(e => ({ id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id), points: e.points || undefined })),
+        edges: detail.edges.map(e => {
+          const ptsList = pointsStrToList(e.points)
+          return ptsList
+            ? { id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id), points: e.points, pointsList: ptsList }
+            : { id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) }
+        }),
       })
       updateUndoRedoState(lf)
     }
