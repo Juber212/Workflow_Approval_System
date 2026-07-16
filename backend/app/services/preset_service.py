@@ -26,7 +26,7 @@ async def list_presets(db: AsyncSession, user_id: int) -> PresetListResponse:
     # 批量收集所有 user_id，一次性查询姓名
     name_map = await _batch_resolve_names(db, presets)
 
-    items = [PresetResponse(**_preset_to_response(p, name_map)) for p in presets]
+    items = [_preset_to_response(p, name_map) for p in presets]
     return PresetListResponse(items=items, total=total)
 
 
@@ -78,7 +78,7 @@ async def _get_owned_preset(db: AsyncSession, preset_id: int, user_id: int) -> N
 async def _preset_to_response_async(db: AsyncSession, preset: NodePreset) -> PresetResponse:
     """异步版：模型 → 响应（填充人员姓名）—— 用于创建/更新后返回单条"""
     name_map = await _batch_resolve_names(db, [preset])
-    return _build_preset_response(preset, name_map)
+    return _preset_to_response(preset, name_map)
 
 
 async def _batch_resolve_names(db: AsyncSession, presets: list[NodePreset]) -> dict[int, str]:
@@ -103,28 +103,8 @@ async def _batch_resolve_names(db: AsyncSession, presets: list[NodePreset]) -> d
     return name_map
 
 
-def _preset_to_response(preset: NodePreset, name_map: dict[int, str] | None = None) -> dict:
-    """同步版：模型 → dict（用于列表批量转换，避免每个 preset 都查一次）"""
-    return {
-        "id": preset.id,
-        "name": preset.name,
-        "node_name": preset.node_name,
-        "assignee_id": preset.assignee_id,
-        "assignee_name": name_map.get(preset.assignee_id) if name_map and preset.assignee_id else None,
-        "checkers": preset.checkers,
-        "checkers_names": _extract_names(preset.checkers, name_map) if name_map else None,
-        "approvers": preset.approvers,
-        "approvers_names": _extract_names(preset.approvers, name_map) if name_map else None,
-        "time_limit_days": preset.time_limit_days,
-        "require_file": preset.require_file,
-        "sort_order": preset.sort_order,
-        "created_at": preset.created_at.isoformat() if preset.created_at else None,
-        "updated_at": preset.updated_at.isoformat() if preset.updated_at else None,
-    }
-
-
-def _build_preset_response(preset: NodePreset, name_map: dict[int, str]) -> PresetResponse:
-    """构建 PresetResponse（含姓名）"""
+def _preset_to_response(preset: NodePreset, name_map: dict[int, str]) -> PresetResponse:
+    """模型 → PresetResponse（含人员姓名填充）—— 用于列表批量转换和单条构建"""
     return PresetResponse(
         id=preset.id,
         name=preset.name,
@@ -144,13 +124,12 @@ def _build_preset_response(preset: NodePreset, name_map: dict[int, str]) -> Pres
 
 
 def _extract_names(items: list[dict] | None, name_map: dict[int, str]) -> list[str]:
-    """从 [{"user_id": N}] 列表提取姓名"""
+    """从 [{"user_id": N}] 列表提取姓名，保持与输入列表等长"""
     if not items:
         return []
     names = []
     for item in items:
         if isinstance(item, dict) and "user_id" in item:
             name = name_map.get(item["user_id"])
-            if name:
-                names.append(name)
+            names.append(name or "")  # None 时用空字符串占位，保持数组长度一致
     return names
