@@ -153,7 +153,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     total_nodes = len(all_nodes)
     current_node_index = sum(
         1 for n in all_nodes
-        if (n.status or "").lower() in ("finished", "skipped")
+        if (n.status or "").lower() == "finished"
     )
 
     # 文件
@@ -240,7 +240,6 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             {
                 "id": n.id, "name": n.name,
                 "is_start": n.is_start, "is_end": n.is_end,
-                "is_skipped": n.is_skipped,
                 "status": (n.status or "waiting").lower(),
                 "sort_order": n.sort_order,
             }

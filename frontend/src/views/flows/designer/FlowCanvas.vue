@@ -160,35 +160,6 @@ function addWorkNode(x?: number, y?: number) {
       is_start: false, is_end: false,
       require_file: true,
       approval_strategy: 'all_approve',
-      is_optional: false,
-      time_limit_days: 3,
-    },
-  })
-}
-
-/** 添加可选节点 */
-function addOptionalNode(x?: number, y?: number) {
-  const instance = lf.value
-  if (!instance) return
-
-  if (x === undefined || y === undefined) {
-    const { SCALE_X, TRANSLATE_X, TRANSLATE_Y } = instance.getTransform()
-    const container = canvasRef.value!
-    const cx = (container.clientWidth / 2 - TRANSLATE_X) / SCALE_X
-    const cy = (container.clientHeight / 2 - TRANSLATE_Y) / SCALE_X
-    x = cx + (Math.random() - 0.5) * 100
-    y = cy + (Math.random() - 0.5) * 100
-  }
-
-  instance.addNode({
-    id: `work-${Date.now()}`,
-    type: 'work-node', x, y,
-    properties: {
-      name: `可选节点 ${workNodeCounter++}`,
-      is_start: false, is_end: false,
-      require_file: true,
-      approval_strategy: 'all_approve',
-      is_optional: true,
       time_limit_days: 3,
     },
   })
@@ -210,7 +181,7 @@ function deleteSelected() {
 
 function getLf() { return lf.value }
 
-defineExpose({ getLf, lf, addWorkNode, addOptionalNode, deleteSelected })
+defineExpose({ getLf, lf, addWorkNode, deleteSelected })
 </script>
 
 <style lang="scss" scoped>

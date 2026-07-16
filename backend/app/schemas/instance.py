@@ -13,7 +13,6 @@ class NodeOverride(BaseModel):
     deadline: str | None = Field(None, description="截止日期，ISO 格式如 2026-07-21")
     checkers: list[dict] | None = Field(None, description="校验人列表 [{\"user_id\": 1}]")
     approvers: list[dict] | None = Field(None, description="审批人列表 [{\"user_id\": 1}]")
-    skip: bool | None = Field(None, description="跳过该节点（仅 is_optional=1 的节点可跳过）")
 
 
 class CreateInstanceRequest(BaseModel):
@@ -31,7 +30,6 @@ class InstanceNodeBrief(BaseModel):
     name: str
     is_start: bool
     is_end: bool
-    is_skipped: bool
     status: str
     sort_order: int
 
@@ -117,8 +115,6 @@ class DetailNodeInfo(BaseModel):
     name: str
     is_start: bool = False
     is_end: bool = False
-    is_optional: bool = False
-    is_skipped: bool = False
     status: str
     sort_order: int = 0
     round: int = 1
@@ -200,3 +196,10 @@ class ChangePriorityRequest(BaseModel):
         ..., pattern="^(urgent|high|normal|low)$",
         description="优先级：urgent / high / normal / low"
     )
+
+
+# ==================== 补交文件 ====================
+
+class SupplementFileResponse(BaseModel):
+    """补交文件上传响应 —— 返回本次上传的文件列表"""
+    files: list[NodeFileBrief] = Field(..., description="本次补交的文件列表")

@@ -21,7 +21,9 @@
         :key="node.id"
         :node="node"
         :is-initiator="isInitiator"
+        :instance-status="detail.status"
         @change-personnel="handleChangePersonnel"
+        @supplement="handleSupplement"
       />
 
       <!-- 实例补充说明 -->
@@ -67,6 +69,16 @@
         :node="selectedNode"
         @success="handlePersonnelChanged"
       />
+
+      <!-- 补交文件弹窗 -->
+      <SupplementFileDialog
+        v-if="detail"
+        v-model="showSupplementDialog"
+        :instance-id="detail.id"
+        :nodes="detail.nodes"
+        :preselected-node-id="supplementPreselectedNodeId"
+        @success="handleSupplementSuccess"
+      />
     </template>
   </div>
 </template>
@@ -84,6 +96,7 @@ import OperationTimeline from './components/OperationTimeline.vue'
 import TerminateDialog from './components/TerminateDialog.vue'
 import PriorityEditDialog from './components/PriorityEditDialog.vue'
 import ChangePersonnelDialog from './components/ChangePersonnelDialog.vue'
+import SupplementFileDialog from './components/SupplementFileDialog.vue'
 import type { DetailNodeInfo } from '@/api/instance'
 
 const route = useRoute()
@@ -95,6 +108,8 @@ const detail = ref<InstanceDetailResponse | null>(null)
 const showTerminateDialog = ref(false)
 const showPriorityDialog = ref(false)
 const showPersonnelDialog = ref(false)
+const showSupplementDialog = ref(false)
+const supplementPreselectedNodeId = ref<number | undefined>(undefined)
 const selectedNode = ref<DetailNodeInfo | null>(null)
 
 /** 当前用户是否为发起人 */
@@ -125,8 +140,15 @@ async function fetchDetail() {
 }
 
 // ========== 操作处理 ==========
-function handleSupplement() {
-  ElMessage.info('补交文件功能将在后续版本实现')
+/** 打开补交文件弹窗：全局入口不传 nodeId，节点卡片入口传入 nodeId */
+function handleSupplement(nodeId?: number) {
+  supplementPreselectedNodeId.value = nodeId
+  showSupplementDialog.value = true
+}
+
+/** 补交成功后刷新详情 */
+function handleSupplementSuccess() {
+  fetchDetail()
 }
 
 /** 打开优先级修改弹窗 */

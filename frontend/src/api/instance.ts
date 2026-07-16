@@ -10,7 +10,6 @@ export interface NodeOverride {
   deadline?: string | null
   checkers?: { user_id: number }[]
   approvers?: { user_id: number }[]
-  skip?: boolean
 }
 
 /** 发起实例请求 */
@@ -35,7 +34,6 @@ export interface InstanceCreated {
     name: string
     is_start: boolean
     is_end: boolean
-    is_skipped: boolean
     status: string
     sort_order: number
   }[]
@@ -122,8 +120,6 @@ export interface DetailNodeInfo {
   name: string
   is_start: boolean
   is_end: boolean
-  is_optional: boolean
-  is_skipped: boolean
   status: string
   sort_order: number
   round: number
@@ -261,4 +257,20 @@ export async function changePersonnel(
 /** 永久删除流程实例（仅系统管理员，仅已终止） */
 export async function permanentDeleteInstance(instanceId: number): Promise<void> {
   await request.delete(`/instances/${instanceId}/permanent`)
+}
+
+/** 补交文件到已完成实例的已完成节点 */
+export async function supplementFiles(
+  instanceId: number,
+  nodeId: number,
+  files: File[],
+): Promise<{ files: NodeFileBrief[] }> {
+  const form = new FormData()
+  files.forEach(f => form.append('files', f))
+  const res = await request.post(
+    `/instances/${instanceId}/nodes/${nodeId}/supplement-files`,
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  )
+  return res.data
 }

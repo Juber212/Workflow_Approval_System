@@ -136,18 +136,6 @@
           />
         </el-form-item>
 
-        <!-- 是否可选节点 -->
-        <el-form-item label="可选节点">
-          <el-switch
-            v-model="form.is_optional"
-            active-text="可选"
-            inactive-text="必选"
-            @change="syncToNode"
-          />
-          <div class="field-hint">
-            可选节点在流程推进时自动跳过，同时自动穿透到下一节点
-          </div>
-        </el-form-item>
       </el-form>
     </div>
   </div>
@@ -182,7 +170,6 @@ const form = reactive({
   approvers_names: [] as string[],
   time_limit_days: undefined as number | undefined,
   require_file: false,
-  is_optional: false,
 })
 
 /** 用户名称缓存 —— 从 UserSelector options-loaded 事件积累 */
@@ -255,7 +242,6 @@ function loadFromNode() {
   form.approvers_names = Array.isArray(p.approvers_names) ? [...p.approvers_names] : []
   form.time_limit_days = p.time_limit_days ?? undefined
   form.require_file = p.require_file ?? false
-  form.is_optional = p.is_optional ?? false
 }
 
 /** 同步表单 → LogicFlow 节点（即时生效，不持久化） */
@@ -279,7 +265,6 @@ function syncToNode() {
     approvers_names: form.approvers_names.length > 0 ? [...form.approvers_names] : null,
     time_limit_days: form.time_limit_days ?? null,
     require_file: form.require_file,
-    is_optional: form.is_optional,
   })
 }
 

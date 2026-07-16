@@ -22,7 +22,6 @@ class TemplateNode(Base):
     approvers: Mapped[dict | None] = mapped_column(JSON, comment="审批人列表")
     checkers: Mapped[dict | None] = mapped_column(JSON, comment="校验人列表")
     approval_strategy: Mapped[str] = mapped_column(String(30), default="all_approve", comment="审批策略")
-    is_optional: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否可选节点")
     position_x: Mapped[float] = mapped_column(Float, default=0, comment="画布X坐标")
     position_y: Mapped[float] = mapped_column(Float, default=0, comment="画布Y坐标")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, comment="排序序号")

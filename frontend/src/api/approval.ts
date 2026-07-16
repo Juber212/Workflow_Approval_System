@@ -33,7 +33,7 @@ export interface ApprovalDetail {
   is_end_node: boolean
   total_nodes: number
   current_node_index: number
-  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; is_skipped: boolean; status: string; sort_order: number }[]
+  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
   files: { id: number; original_name: string; file_size: number | null; node_id: number | null; node_name: string; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]
   approval_progress: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]

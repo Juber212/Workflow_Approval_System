@@ -15,7 +15,6 @@ export interface DesignerNode {
   approvers?: number[] | null
   checkers?: number[] | null
   approval_strategy?: string
-  is_optional?: boolean
   position_x: number       // 画布X坐标
   position_y: number       // 画布Y坐标
   sort_order?: number

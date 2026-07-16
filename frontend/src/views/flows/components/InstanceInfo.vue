@@ -132,10 +132,10 @@ const canChangePriority = computed(() => {
   return props.isInitiator && (props.detail.status || '').toLowerCase() === 'running'
 })
 
-/** 除 Terminated 外均可补交（PRD §8.5：Completed 含已归档也可补交） */
+/** 仅 Completed 状态可补交 */
 const canSupplement = computed(() => {
   const s = (props.detail.status || '').toLowerCase()
-  return s !== 'terminated'
+  return s === 'completed'
 })
 
 // ========== 工具方法 ==========
@@ -147,7 +147,7 @@ function formatTime(val: string | null): string {
 
 <style lang="scss" scoped>
 .sticky-head {
-  background: var(--el-bg-color);
+  background: #fff;
   border: 1px solid var(--el-border-color-light);
   border-radius: 10px;
   padding: 16px 20px;

@@ -302,17 +302,13 @@ async function handleSubmit() {
       const nodeId = Number(nodeIdStr)
       const override: NodeOverride = { node_id: nodeId }
 
-      if (config.skip) {
-        override.skip = true
-      } else {
-        if (config.assignee_id !== undefined) override.assignee_id = config.assignee_id
-        if (config.deadline) override.deadline = config.deadline
-        if (config.checkers_ids?.length > 0) {
-          override.checkers = config.checkers_ids.map((id: number) => ({ user_id: id }))
-        }
-        if (config.approvers_ids?.length > 0) {
-          override.approvers = config.approvers_ids.map((id: number) => ({ user_id: id }))
-        }
+      if (config.assignee_id !== undefined) override.assignee_id = config.assignee_id
+      if (config.deadline) override.deadline = config.deadline
+      if (config.checkers_ids?.length > 0) {
+        override.checkers = config.checkers_ids.map((id: number) => ({ user_id: id }))
+      }
+      if (config.approvers_ids?.length > 0) {
+        override.approvers = config.approvers_ids.map((id: number) => ({ user_id: id }))
       }
       overrides.push(override)
     }

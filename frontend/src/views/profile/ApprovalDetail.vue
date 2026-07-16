@@ -1,136 +1,138 @@
 <template>
-  <!-- 审批处理页 —— 两栏：左栏审批表单 / 右栏流程上下文 -->
+  <!-- 审批处理页 —— 顶部摘要 + 进度条 + 单栏表单 -->
   <div class="approval-detail" v-loading="loading">
     <el-empty v-if="!loading && !detail" description="审批记录不存在" />
 
     <template v-if="detail">
-      <div class="detail-layout">
-        <!-- ===== 左栏：审批处理表单 ===== -->
-        <div class="detail-layout__main">
-          <div class="info-card">
-            <h2>{{ detail.instance_name }} · {{ detail.node_name }}
-              <el-tag v-if="detail.is_end_node" type="warning" size="small">终审节点</el-tag>
-            </h2>
-            <div class="info-grid">
-              <div><span class="k">审批人</span><span class="v">{{ detail.approver_name }}</span></div>
-              <div><span class="k">节点说明</span><span class="v">{{ detail.node_description || '无' }}</span></div>
-            </div>
-          </div>
-
-          <!-- 文件（按节点分组） -->
-          <div class="card">
-            <div class="card__header">{{ detail.is_end_node ? '流程全部文件' : '节点文件' }}（{{ detail.files.length }}）</div>
-            <div class="card__body">
-              <div v-if="detail.files.length === 0" class="empty-hint">暂无文件</div>
-              <template v-else>
-                <!-- 终审按节点分组；普通审批直接列 -->
-                <template v-if="detail.is_end_node">
-                  <div v-for="group in fileGroups" :key="group.nodeKey" class="file-group">
-                    <div class="file-group__title">{{ group.nodeName }}</div>
-                    <div v-for="f in group.files" :key="f.id" class="file-row">
-                      <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
-                      <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
-                      <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
-                    </div>
-                  </div>
-                </template>
-                <template v-else>
-                  <div v-for="f in detail.files" :key="f.id" class="file-row">
-                    <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
-                    <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
-                    <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
-                  </div>
-                </template>
-              </template>
-            </div>
-          </div>
-
-          <!-- 校验进度 -->
-          <div class="card" v-if="detail.check_progress.length > 0">
-            <div class="card__header">校验进度</div>
-            <div class="card__body">
-              <div v-for="c in detail.check_progress" :key="c.id" class="progress-row">
-                <span>{{ c.checker_name }}</span>
-                <span class="status-tag" :class="c.status === 'passed' ? 'status-tag--completed' : ''">{{ c.status }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 审批进度 -->
-          <div class="card" v-if="detail.approval_progress.length > 0">
-            <div class="card__header">审批进度</div>
-            <div class="card__body">
-              <div v-for="a in detail.approval_progress" :key="a.id" class="progress-row">
-                <span>{{ a.approver_name }}</span>
-                <span class="status-tag" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
-                <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
-                <span v-if="a.opinion" class="opinion">「{{ a.opinion }}」</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 操作区 -->
-          <div class="card" v-if="detail.status === 'pending'">
-            <div class="card__header">审批决定</div>
-            <div class="card__body">
-              <el-input v-model="opinion" type="textarea" :rows="2" maxlength="500" show-word-limit :placeholder="'通过可空，退回必填'" />
-
-              <!-- 终审总驳回目标选择 -->
-              <div v-if="detail.is_end_node && showRejectTarget" class="reject-target">
-                <div class="label">驳回目标节点（必选）</div>
-                <el-select v-model="rejectTargetId" placeholder="选择驳回目标节点" style="width:100%">
-                  <el-option v-for="n in detail.reject_target_nodes" :key="n.id" :label="`${n.name}（排序${n.sort_order}）`" :value="n.id" />
-                </el-select>
-              </div>
-
-              <div class="actions-bar">
-                <el-button type="success" size="large" :loading="approving" @click="handleApprove">审批通过</el-button>
-                <el-button type="danger" size="large" :loading="rejecting" @click="handleReject">审批退回</el-button>
-              </div>
-            </div>
-          </div>
-          <el-alert v-else :type="detail.status === 'approved' ? 'success' : 'warning'" :closable="false" show-icon>
-            {{ detail.status === 'approved' ? '已审批通过' + (detail.signature_applied ? '（已签名）' : '') : '已审批退回' }}
-          </el-alert>
-        </div>
-
-        <!-- ===== 右栏：流程上下文 ===== -->
-        <div class="detail-layout__side">
-          <div class="side-card">
-            <h3 class="side-card__title">流程进度</h3>
-            <ProgressBar v-if="detail.nodes.length > 0" :nodes="detail.nodes" />
-          </div>
-
-          <div class="side-card">
-            <div class="side-info">
-              <div class="side-info__row">
-                <span class="k">发起人</span>
-                <span class="v">{{ detail.initiator_name }}</span>
-              </div>
-              <div class="side-info__row">
-                <span class="k">优先级</span>
-                <span class="v">
-                  <span class="pri-tag" :class="'pri--' + detail.priority">{{ priLabel(detail.priority) }}</span>
-                </span>
-              </div>
-              <div class="side-info__row">
-                <span class="k">状态</span>
-                <span class="v">
-                  <span class="status-tag" :class="instStatusClass(detail.instance_status)">{{ instStatusLabel(detail.instance_status) }}</span>
-                </span>
-              </div>
-              <div class="side-info__row">
-                <span class="k">节点进度</span>
-                <span class="v">{{ detail.current_node_index }} / {{ detail.total_nodes }}</span>
-              </div>
-            </div>
-          </div>
-
-          <router-link :to="`/flows/instances/${detail.instance_id}`" class="side-link">
-            <el-button type="primary" plain style="width:100%">查看完整流程 →</el-button>
-          </router-link>
+      <!-- ===== 顶部摘要条 ===== -->
+      <div class="top-summary">
+        <h2 class="top-summary__title">
+          {{ detail.instance_name }} · {{ detail.node_name }}
+          <el-tag v-if="detail.is_end_node" type="warning" size="small" style="margin-left:8px;vertical-align:middle">终审节点</el-tag>
+        </h2>
+        <div class="top-summary__meta">
+          <span>审批人：<b>{{ detail.approver_name }}</b></span>
+          <span class="top-summary__sep">·</span>
+          <span v-if="detail.node_description">节点说明：{{ detail.node_description }}</span>
         </div>
       </div>
+
+      <!-- ===== 流程进度条 ===== -->
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">流程进度</span>
+          <router-link :to="`/flows/instances/${detail.instance_id}`" class="view-flow-link">查看完整流程 →</router-link>
+        </div>
+        <div class="card__body" style="padding:16px 20px">
+          <ProgressBar v-if="detail.nodes.length > 0" :nodes="detail.nodes" />
+          <div v-else class="empty-hint">暂无节点数据</div>
+        </div>
+      </div>
+
+      <!-- 节点信息 -->
+      <div class="card">
+        <div class="card__header">节点信息</div>
+        <div class="card__body">
+          <div class="info-grid">
+            <div class="info-grid__item">
+              <div class="k">发起人</div>
+              <div class="v">{{ detail.initiator_name }}</div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">优先级</div>
+              <div class="v">
+                <span class="pri-tag" :class="'pri--' + detail.priority">{{ priLabel(detail.priority) }}</span>
+              </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">流程状态</div>
+              <div class="v">
+                <span class="status-tag" :class="instStatusClass(detail.instance_status)">{{ instStatusLabel(detail.instance_status) }}</span>
+              </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">节点进度</div>
+              <div class="v">{{ detail.current_node_index }} / {{ detail.total_nodes }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 文件（按节点分组） -->
+      <div class="card">
+        <div class="card__header">{{ detail.is_end_node ? '流程全部文件' : '节点文件' }}（{{ detail.files.length }}）</div>
+        <div class="card__body">
+          <div v-if="detail.files.length === 0" class="empty-hint">暂无文件</div>
+          <template v-else>
+            <!-- 终审按节点分组；普通审批直接列 -->
+            <template v-if="detail.is_end_node">
+              <div v-for="group in fileGroups" :key="group.nodeKey" class="file-group">
+                <div class="file-group__title">{{ group.nodeName }}</div>
+                <div v-for="f in group.files" :key="f.id" class="file-row">
+                  <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
+                  <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                  <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <div v-for="f in detail.files" :key="f.id" class="file-row">
+                <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
+                <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+              </div>
+            </template>
+          </template>
+        </div>
+      </div>
+
+      <!-- 校验进度 -->
+      <div class="card" v-if="detail.check_progress.length > 0">
+        <div class="card__header">校验进度</div>
+        <div class="card__body">
+          <div v-for="c in detail.check_progress" :key="c.id" class="progress-row">
+            <span>{{ c.checker_name }}</span>
+            <span class="status-tag" :class="c.status === 'passed' ? 'status-tag--completed' : ''">{{ c.status }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 审批进度 -->
+      <div class="card" v-if="detail.approval_progress.length > 0">
+        <div class="card__header">审批进度</div>
+        <div class="card__body">
+          <div v-for="a in detail.approval_progress" :key="a.id" class="progress-row">
+            <span>{{ a.approver_name }}</span>
+            <span class="status-tag" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
+            <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+            <span v-if="a.opinion" class="opinion">「{{ a.opinion }}」</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作区 -->
+      <div class="card" v-if="detail.status === 'pending'">
+        <div class="card__header">审批决定</div>
+        <div class="card__body">
+          <el-input v-model="opinion" type="textarea" :rows="2" maxlength="500" show-word-limit :placeholder="'通过可空，退回必填'" />
+
+          <!-- 终审总驳回目标选择 -->
+          <div v-if="detail.is_end_node && showRejectTarget" class="reject-target">
+            <div class="label">驳回目标节点（必选）</div>
+            <el-select v-model="rejectTargetId" placeholder="选择驳回目标节点" style="width:100%">
+              <el-option v-for="n in detail.reject_target_nodes" :key="n.id" :label="`${n.name}（排序${n.sort_order}）`" :value="n.id" />
+            </el-select>
+          </div>
+
+          <div class="actions-bar">
+            <el-button type="success" size="large" :loading="approving" @click="handleApprove">审批通过</el-button>
+            <el-button type="danger" size="large" :loading="rejecting" @click="handleReject">审批退回</el-button>
+          </div>
+        </div>
+      </div>
+      <el-alert v-else :type="detail.status === 'approved' ? 'success' : 'warning'" :closable="false" show-icon>
+        {{ detail.status === 'approved' ? '已审批通过' + (detail.signature_applied ? '（已签名）' : '') : '已审批退回' }}
+      </el-alert>
     </template>
   </div>
 </template>
@@ -219,72 +221,45 @@ function approvalStatusLabel(s: string) { const m: Record<string, string> = { pe
 <style lang="scss" scoped>
 .approval-detail { /* max-width 由 AppLayout 内容区统一控制 */ }
 
-/* 两栏布局 */
-.detail-layout {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-
-  &__main {
-    flex: 0 0 58%;
-    min-width: 0;
-  }
-
-  &__side {
-    flex: 1;
-    min-width: 280px;
-    position: sticky;
-    top: 20px;
-  }
-}
-
-/* 右侧卡片 */
-.side-card {
-  background: var(--el-bg-color);
+/* ===== 顶部摘要条 ===== */
+.top-summary {
+  background: #fff;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 10px;
-  padding: 16px;
-  margin-bottom: 14px;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
 
   &__title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 12px;
+    font-size: 20px; font-weight: 600;
     color: var(--el-text-color-primary);
+    margin: 0 0 8px;
+  }
+
+  &__meta {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 13px; color: var(--el-text-color-secondary);
+    flex-wrap: wrap;
+    b { color: var(--el-text-color-primary); }
+  }
+
+  &__sep {
+    color: var(--el-text-color-placeholder);
+    margin: 0 4px;
   }
 }
 
-.side-info {
-  &__row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 8px;
-    font-size: 13px;
-
-    &:last-child { margin-bottom: 0; }
-
-    .k {
-      color: var(--el-text-color-secondary);
-      width: 60px;
-      flex-shrink: 0;
-    }
-    .v {
-      color: var(--el-text-color-primary);
-      font-weight: 500;
-    }
-  }
+.view-flow-link {
+  font-size: 13px; color: var(--el-color-primary); text-decoration: none;
+  font-weight: 400;
+  &:hover { text-decoration: underline; }
 }
 
-.side-link {
-  display: block;
-  text-decoration: none;
+.info-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;
+  .k { color: var(--el-text-color-secondary); margin-bottom: 2px; font-size: 12px; }
+  .v { color: var(--el-text-color-primary); font-weight: 500; }
 }
 
-/* 原有样式 */
-.info-card { background: var(--el-bg-color); border: 1px solid var(--el-border-color-light); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
-.info-card h2 { font-size: 18px; margin: 0 0 8px; }
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 14px; }
-.info-grid .k { color: var(--el-text-color-secondary); margin-right: 8px; }
 .file-row { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: var(--el-bg-color-page); border-radius: 4px; margin-bottom: 4px; font-size: 13px; }
 .file-size { color: var(--el-text-color-secondary); font-size: 12px; }
 .empty-hint { color: var(--el-text-color-placeholder); font-size: 13px; text-align: center; padding: 12px; }

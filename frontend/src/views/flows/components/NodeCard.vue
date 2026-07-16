@@ -15,16 +15,18 @@
         <span class="node-name">{{ node.name }}</span>
         <!-- 节点状态标签 -->
         <span class="status-tag" :class="nodeStatusClass">{{ nodeStatusLabel }}</span>
-        <!-- 跳过标识 -->
-        <el-tag v-if="node.is_skipped" size="small" type="info" effect="plain">已跳过</el-tag>
-        <!-- 可选节点标识 -->
-        <el-tag v-if="node.is_optional" size="small" type="info" effect="plain">可选</el-tag>
         <!-- 负责人 -->
         <span v-if="node.assignee_name" class="node-assignee">
           · {{ node.is_start ? '发起人 ' : '负责人 ' }}{{ node.assignee_name }}
         </span>
       </div>
       <div class="node-card__head-right">
+        <!-- 补交文件按钮（仅已完成的工作节点显示） -->
+        <el-button
+          v-if="canSupplementNode"
+          text type="primary" size="small"
+          @click.stop="$emit('supplement', node.id)"
+        >补交文件</el-button>
         <span v-if="node.completed_at" class="node-time">{{ formatTime(node.completed_at) }}</span>
         <span v-if="node.started_at && !node.completed_at" class="node-time">{{ formatTime(node.started_at) }}</span>
         <el-icon :class="{ 'is-rotated': expanded }" class="toggle-arrow">
@@ -36,7 +38,7 @@
     <!-- 卡片内容（可折叠） -->
     <div class="node-card__body" v-show="expanded">
       <!-- 阶段进度指示（非开始/结束/跳过节点显示） -->
-      <div v-if="!node.is_start && !node.is_end && !node.is_skipped" class="stage-progress">
+      <div v-if="!node.is_start && !node.is_end" class="stage-progress">
         <div class="stage-steps">
           <template v-for="(label, idx) in ['处理', '校验', '审批', '完成']" :key="label">
             <div class="stage-step" :class="stageClass(idx)">{{ label }}</div>
@@ -74,64 +76,89 @@
         {{ node.is_start ? '系统默认开始节点，显示发起人姓名，发起后自动跳过。' : '发起人终审节点，查看全部文件后通过则归档。' }}
       </div>
 
-      <!-- 文件列表 -->
-      <div v-if="node.files.length > 0" class="node-section">
-        <div class="node-section__title">文件（{{ node.files.length }}）</div>
-        <div class="file-list">
-          <div v-for="f in node.files" :key="f.id" class="file-item">
-            <el-icon :size="16"><Document /></el-icon>
-            <span class="file-name">{{ f.original_name }}</span>
-            <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
-            <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
-            <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
-            <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+      <!-- ===== 三栏布局：文件 / 校验 / 审批（非开始/结束节点） ===== -->
+      <div v-if="!node.is_start && !node.is_end" class="node-columns">
+        <!-- 文件栏（40%）—— 正常文件 + 补交文件分开展示 -->
+        <div class="node-col">
+          <!-- 正常文件 -->
+          <div class="node-col__title">📁 文件（{{ normalFiles.length }}）</div>
+          <div v-if="normalFiles.length === 0" class="node-col__empty">暂无</div>
+          <div v-else class="file-list">
+            <div v-for="f in normalFiles" :key="f.id" class="file-item">
+              <div class="file-item__main">
+                <el-icon :size="14"><Document /></el-icon>
+                <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+                <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
+              </div>
+              <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</div>
+              <div class="file-item__actions">
+                <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+              </div>
+            </div>
+          </div>
+          <!-- 补交文件 -->
+          <template v-if="supplementFiles.length > 0">
+            <div class="node-col__title node-col__title--supplement">📎 补交文件（{{ supplementFiles.length }}）</div>
+            <div class="file-list">
+              <div v-for="f in supplementFiles" :key="f.id" class="file-item file-item--supplement">
+                <div class="file-item__main">
+                  <el-icon :size="14"><Document /></el-icon>
+                  <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+                  <el-tag size="small" type="warning" effect="dark">补交</el-tag>
+                </div>
+                <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }} · {{ formatTime(f.created_at) }}</div>
+                <div class="file-item__actions">
+                  <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                  <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- 校验栏（30%） -->
+        <div class="node-col">
+          <div class="node-col__title">✓ 校验记录（{{ node.checks.length }}）</div>
+          <div v-if="node.checks.length === 0" class="node-col__empty">暂无</div>
+          <div v-else class="record-list">
+            <div
+              v-for="c in node.checks"
+              :key="c.id"
+              class="record-item"
+              :class="'record--' + (c.status || '').toLowerCase()"
+            >
+              <div class="record-item__main">
+                <span class="record-user">{{ c.checker_name }}</span>
+                <span class="record-status" :class="checkStatusClass(c.status)">{{ c.status === 'passed' ? '已通过' : c.status === 'rejected' ? '已退回' : c.status }}</span>
+              </div>
+              <div v-if="c.opinion" class="record-item__opinion">「{{ c.opinion }}」</div>
+              <div class="record-item__time" v-if="c.decided_at">{{ formatTime(c.decided_at) }}</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- 校验记录 -->
-      <div v-if="node.checks.length > 0" class="node-section">
-        <div class="node-section__title">校验记录（{{ node.checks.length }}）</div>
-        <div class="record-list">
-          <div
-            v-for="c in node.checks"
-            :key="c.id"
-            class="record-item"
-            :class="'record--' + (c.status || '').toLowerCase()"
-          >
-            <span class="record-user">{{ c.checker_name }}</span>
-            <span class="record-status" :class="checkStatusClass(c.status)">{{ c.status === 'passed' ? '已通过' : c.status === 'rejected' ? '已退回' : c.status }}</span>
-            <span v-if="c.opinion" class="record-opinion">「{{ c.opinion }}」</span>
-            <span class="record-time" v-if="c.decided_at">{{ formatTime(c.decided_at) }}</span>
+        <!-- 审批栏（30%） -->
+        <div class="node-col">
+          <div class="node-col__title">📝 审批记录（{{ node.approvals.length }}）</div>
+          <div v-if="node.approvals.length === 0" class="node-col__empty">暂无</div>
+          <div v-else class="record-list">
+            <div
+              v-for="a in node.approvals"
+              :key="a.id"
+              class="record-item"
+              :class="'record--' + (a.status || '').toLowerCase()"
+            >
+              <div class="record-item__main">
+                <span class="record-user">{{ a.approver_name }}</span>
+                <span class="record-status" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
+                <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+              </div>
+              <div v-if="a.opinion" class="record-item__opinion">「{{ a.opinion }}」</div>
+              <div class="record-item__time" v-if="a.decided_at">{{ formatTime(a.decided_at) }}</div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <!-- 审批记录 -->
-      <div v-if="node.approvals.length > 0" class="node-section">
-        <div class="node-section__title">审批记录（{{ node.approvals.length }}）</div>
-        <div class="record-list">
-          <div
-            v-for="a in node.approvals"
-            :key="a.id"
-            class="record-item"
-            :class="'record--' + (a.status || '').toLowerCase()"
-          >
-            <span class="record-user">{{ a.approver_name }}</span>
-            <span class="record-status" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
-            <span v-if="a.opinion" class="record-opinion">「{{ a.opinion }}」</span>
-            <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain" style="margin-left:4px">已签名</el-tag>
-            <span class="record-time" v-if="a.decided_at">{{ formatTime(a.decided_at) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 无内容的占位提示 -->
-      <div
-        v-if="node.files.length === 0 && node.checks.length === 0 && node.approvals.length === 0 && !node.is_start && !node.is_end"
-        class="node-empty"
-      >
-        暂无操作记录
       </div>
 
       <!-- 修改人员按钮（仅发起人可见，未完成节点可操作） -->
@@ -154,10 +181,13 @@ import { previewFile, downloadFile } from '@/api/task'
 const props = defineProps<{
   node: DetailNodeInfo
   isInitiator?: boolean
+  /** 实例主状态（用于控制补交按钮可见性——仅 completed 实例可补交） */
+  instanceStatus?: string
 }>()
 
 defineEmits<{
   changePersonnel: [nodeId: number]
+  supplement: [nodeId: number]
 }>()
 
 /** 是否可修改人员：发起人 + 非开始/结束节点 + 节点未完成 */
@@ -165,7 +195,14 @@ const canChangePersonnel = computed(() => {
   if (!props.isInitiator) return false
   if (props.node.is_start || props.node.is_end) return false
   const s = (props.node.status || '').toLowerCase()
-  return !['finished', 'skipped', 'terminated'].includes(s)
+  return !['finished', 'terminated'].includes(s)
+})
+
+/** 是否可补交：仅 completed 实例的 finished 节点（权限由后端最终校验） */
+const canSupplementNode = computed(() => {
+  if ((props.instanceStatus || '').toLowerCase() !== 'completed') return false
+  if (props.node.is_start || props.node.is_end) return false
+  return (props.node.status || '').toLowerCase() === 'finished'
 })
 
 // ========== 折叠状态 ==========
@@ -180,7 +217,7 @@ function getInitialExpand(): boolean {
 // ========== 节点序号 ==========
 const indexLabel = computed(() => {
   const s = (props.node.status || '').toLowerCase()
-  if (s === 'finished' || s === 'skipped') return '✓'
+  if (s === 'finished') return '✓'
   return props.node.sort_order
 })
 
@@ -194,7 +231,6 @@ const nodeStatusLabel = computed(() => {
     waiting_check: '待校验',
     waiting_approval: '待审批',
     finished: '已完成',
-    skipped: '已跳过',
     rejected: '已驳回',
     terminated: '已终止',
   }
@@ -209,7 +245,6 @@ const nodeStatusClass = computed(() => {
     waiting_check: 'status-tag--running',
     waiting_approval: 'status-tag--running',
     finished: 'status-tag--completed',
-    skipped: 'status-tag--draft',
     rejected: 'status-tag--terminated',
     terminated: 'status-tag--terminated',
   }
@@ -231,7 +266,7 @@ const isWait = computed(() => {
 /** 已完成/跳过的节点（绿色对勾） */
 const isDone = computed(() => {
   const s = (props.node.status || '').toLowerCase()
-  return s === 'finished' || s === 'skipped'
+  return s === 'finished'
 })
 
 // ========== 人员名称 ==========
@@ -273,6 +308,14 @@ const strategyLabel = computed(() => {
   return props.node.approval_strategy === 'all_approve' ? '全部通过' : props.node.approval_strategy
 })
 
+/** 按 upload_type 分组：正常文件 vs 补交文件 */
+const normalFiles = computed(() =>
+  props.node.files.filter(f => (f.upload_type || '').toLowerCase() !== 'supplement')
+)
+const supplementFiles = computed(() =>
+  props.node.files.filter(f => (f.upload_type || '').toLowerCase() === 'supplement')
+)
+
 // ========== 校验/审批状态 ==========
 function checkStatusClass(status: string): string {
   const s = (status || '').toLowerCase()
@@ -309,7 +352,6 @@ function formatTime(val: string | null): string {
 
 function formatDeadline(val: string): string {
   if (!val) return ''
-  // deadline 可能是 ISO 格式
   const d = val.replace('T', ' ').substring(0, 16)
   return `截止 ${d}`
 }
@@ -324,6 +366,7 @@ function formatFileSize(bytes: number | null): string {
 
 <style lang="scss" scoped>
 .node-card {
+  background: #fff;
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
   margin-bottom: 14px;
@@ -346,7 +389,7 @@ function formatFileSize(bytes: number | null): string {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--el-bg-color-page);
+  background: #fff;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s;
@@ -483,36 +526,38 @@ function formatFileSize(bytes: number | null): string {
   padding: 4px 0;
 }
 
-/* 子分区 */
-.node-section {
+/* ===== 三栏容器（grid 4:3:3） ===== */
+.node-columns {
+  display: grid;
+  grid-template-columns: 4fr 3fr 3fr;
+  gap: 16px;
   margin-top: 14px;
+}
 
-  &:first-child {
-    margin-top: 0;
-  }
+.node-col {
+  min-width: 0; /* 防止内容溢出 */
 
   &__title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--el-text-color-primary);
+    color: var(--el-text-color-secondary);
     margin-bottom: 8px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--el-border-color-lighter);
+
+    &--supplement {
+      margin-top: 14px;
+      color: var(--el-color-warning-dark-2);
+      border-bottom-color: var(--el-color-warning-light-7);
+    }
   }
-}
 
-.node-empty {
-  font-size: 13px;
-  color: var(--el-text-color-placeholder);
-  padding: 8px 0;
-  text-align: center;
-}
-
-/* 节点操作区 */
-.node-actions {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
+  &__empty {
+    font-size: 12px;
+    color: var(--el-text-color-placeholder);
+    text-align: center;
+    padding: 16px 0;
+  }
 }
 
 /* 文件列表 */
@@ -524,39 +569,56 @@ function formatFileSize(bytes: number | null): string {
 
 .file-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+  flex-direction: column;
+  padding: 8px 10px;
   background: var(--el-bg-color-page);
   border-radius: 6px;
-  font-size: 13px;
 
-  .file-name {
-    font-weight: 500;
-    color: var(--el-text-color-primary);
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  &--supplement {
+    border-left: 3px solid var(--el-color-warning);
   }
 
-  .file-meta {
+  &__main {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .file-name {
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--el-text-color-primary);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-round {
+      font-size: 11px;
+      color: var(--el-color-primary);
+      background: var(--el-color-primary-light-9);
+      padding: 0 5px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+  }
+
+  &__meta {
     font-size: 12px;
     color: var(--el-text-color-secondary);
-    flex-shrink: 0;
+    padding-left: 18px; /* 对齐文件名（图标14px + gap 4px） */
+    margin-top: 3px;
   }
 
-  .file-round {
-    font-size: 11px;
-    color: var(--el-color-primary);
-    background: var(--el-color-primary-light-9);
-    padding: 0 6px;
-    border-radius: 999px;
-    flex-shrink: 0;
+  &__actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    justify-content: flex-end;
   }
 }
 
-/* 校验/审批记录 */
+/* 校验/审批记录列表 */
 .record-list {
   display: flex;
   flex-direction: column;
@@ -565,9 +627,8 @@ function formatFileSize(bytes: number | null): string {
 
 .record-item {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  flex-direction: column;
+  padding: 6px 8px;
   border-radius: 6px;
   font-size: 13px;
   border-left: 3px solid var(--el-border-color);
@@ -581,36 +642,46 @@ function formatFileSize(bytes: number | null): string {
     border-left-color: var(--el-color-danger);
     background: var(--el-color-danger-light-9);
   }
+
+  &__main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+
+    .record-user {
+      font-weight: 500;
+      color: var(--el-text-color-primary);
+    }
+
+    .record-status {
+      font-size: 12px;
+      font-weight: 500;
+
+      &.status--pass { color: var(--el-color-success); }
+      &.status--reject { color: var(--el-color-danger); }
+      &.status--terminated { color: var(--el-color-info); }
+    }
+  }
+
+  &__opinion {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    margin-top: 2px;
+  }
+
+  &__time {
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+    margin-top: 2px;
+  }
 }
 
-.record-user {
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.record-status {
-  font-size: 12px;
-  font-weight: 500;
-
-  &.status--pass { color: var(--el-color-success); }
-  &.status--reject { color: var(--el-color-danger); }
-  &.status--terminated { color: var(--el-color-info); }
-}
-
-.record-opinion {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.record-time {
-  font-size: 11px;
-  color: var(--el-text-color-placeholder);
-  flex-shrink: 0;
-  margin-left: auto;
+/* 节点操作区 */
+.node-actions {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 // 时限

@@ -17,19 +17,6 @@
       </div>
     </div>
 
-    <!-- 可选节点卡片 -->
-    <div
-      class="node-card node-card--optional"
-      draggable="true"
-      @click="emit('addOptional')"
-      @dragstart="onOptionalDragStart"
-    >
-      <div class="node-icon" style="background: #fef7ed; border-color: #e6a23c" />
-      <div class="node-info">
-        <div class="node-label">可选节点</div>
-        <div class="node-hint">条件触发，自动跳过</div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -38,7 +25,6 @@ import type LogicFlow from '@logicflow/core'
 
 const emit = defineEmits<{
   add: []
-  addOptional: []
 }>()
 
 const props = defineProps<{
@@ -46,25 +32,23 @@ const props = defineProps<{
 }>()
 
 /** 拖拽辅助函数 */
-function startDnD(event: DragEvent, isOptional: boolean) {
+function startDnD(event: DragEvent) {
   if (!props.lf || !event.dataTransfer) return
   event.dataTransfer.effectAllowed = 'move'
   event.dataTransfer.setData('text/plain', 'work-node')
   props.lf.dnd.startDrag({
     type: 'work-node',
     properties: {
-      name: isOptional ? '可选节点' : '新节点',
+      name: '新节点',
       is_start: false, is_end: false,
       require_file: true,
       approval_strategy: 'all_approve',
-      is_optional: isOptional,
       time_limit_days: 3,
     },
   })
 }
 
-function onWorkDragStart(e: DragEvent) { startDnD(e, false) }
-function onOptionalDragStart(e: DragEvent) { startDnD(e, true) }
+function onWorkDragStart(e: DragEvent) { startDnD(e) }
 </script>
 
 <style lang="scss" scoped>

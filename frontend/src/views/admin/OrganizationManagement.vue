@@ -1,7 +1,7 @@
 <template>
   <div class="org-management">
     <!-- 搜索栏 -->
-    <el-card class="search-card" shadow="never">
+    <div class="search-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="状态">
           <el-select v-model="query.is_active" placeholder="全部" clearable style="width: 120px" @change="handleSearch">
@@ -14,10 +14,10 @@
           <el-button type="success" @click="openCreate">新增组织</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+    </div>
 
     <!-- 组织列表 -->
-    <el-card class="table-card" shadow="never">
+    <div class="table-section">
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="组织名称" min-width="150" />
@@ -71,7 +71,7 @@
           @change="fetchList"
         />
       </div>
-    </el-card>
+    </div>
 
     <!-- 新增/编辑弹窗 -->
     <OrgFormDialog
@@ -157,7 +157,13 @@ async function handleToggleStatus(row: OrgItem) {
 
 <style lang="scss" scoped>
 .org-management {
-  .search-card { margin-bottom: 16px; }
-  .pagination-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
+  .search-bar { display: flex; justify-content: center; margin-bottom: 16px; }
+  .table-section {
+    background: #fff;
+    border: 1px solid var(--el-border-color-light);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .pagination-wrap { display: flex; justify-content: flex-end; padding: 12px 16px; }
 }
 </style>

@@ -1,6 +1,6 @@
-"""流程实例 API —— 发起、查询、终止、换人、优先级"""
+"""流程实例 API —— 发起、查询、终止、换人、优先级、补交文件"""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -15,6 +15,7 @@ from app.schemas.instance import (
     TerminateInstanceRequest,
     ChangePersonnelRequest,
     ChangePriorityRequest,
+    SupplementFileResponse,
 )
 from app.services.instance_service import (
     create_instance,
@@ -23,6 +24,7 @@ from app.services.instance_service import (
     terminate_instance,
     change_personnel,
     change_priority,
+    supplement_files,
     permanent_delete_instance,
 )
 
@@ -182,6 +184,26 @@ async def change_instance_priority(
     await db.commit()
 
     return ApiResponse.ok(result, message="优先级修改成功")
+
+
+@router.post("/instances/{instance_id}/nodes/{node_id}/supplement-files")
+async def supplement_instance_files(
+    instance_id: int,
+    node_id: int,
+    files: list[UploadFile] = FastAPIFile(...),
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """补交文件到已完成实例的已完成节点
+
+    权限：实例发起人（所长）或该节点的历史负责人。
+    限制：仅 completed 实例 + finished 节点（排除开始/结束）。
+    文件支持：Word/Excel/图片/PDF，单文件 ≤50MB。
+    不触发审批/校验/签名。
+    """
+    result = await supplement_files(db, instance_id, node_id, files, current_user)
+    await db.commit()
+    return ApiResponse.ok(result, message="文件补交成功")
 
 
 @router.delete("/instances/{instance_id}/permanent")

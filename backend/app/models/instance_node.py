@@ -23,8 +23,6 @@ class InstanceNode(Base):
     approvers: Mapped[dict | None] = mapped_column(JSON, comment="审批人列表")
     checkers: Mapped[dict | None] = mapped_column(JSON, comment="校验人列表")
     approval_strategy: Mapped[str] = mapped_column(String(30), default="all_approve", comment="审批策略")
-    is_optional: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否可选节点")
-    is_skipped: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否被跳过")
     status: Mapped[str] = mapped_column(String(20), default="waiting", comment="节点状态")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, comment="排序序号")
     incoming_count: Mapped[int] = mapped_column(Integer, default=0, comment="汇合节点上游连线数")

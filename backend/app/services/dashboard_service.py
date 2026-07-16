@@ -190,8 +190,6 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
             status_icon = "⚪"  # 待开始
             if node.status == "finished":
                 status_icon = "✅"
-            elif node.status == "skipped":
-                status_icon = "⏭️"
             elif node.status in ("running", "waiting_check", "waiting_approval"):
                 status_icon = "🔵"
                 all_finished = False

@@ -47,7 +47,6 @@ class InstanceNodeStatus(str, enum.Enum):
     FINISHED = "finished"
     REJECTED = "rejected"
     TERMINATED = "terminated"
-    SKIPPED = "skipped"
 
 
 class TaskStatus(str, enum.Enum):

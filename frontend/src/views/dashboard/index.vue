@@ -12,19 +12,19 @@
 
     <!-- ====== 统计卡片 ====== -->
     <div class="stats-grid">
-      <div class="stat-card" @click="$router.push('/flows')">
+      <div class="stat-card stat-card--primary" @click="$router.push('/flows')">
         <div class="stat-card__num stat-card__num--primary">{{ data.stats.running_instances }}</div>
         <div class="stat-card__label">进行中项目</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card--success">
         <div class="stat-card__num stat-card__num--success">{{ data.stats.archived_total }}</div>
         <div class="stat-card__label">已归档项目</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-card stat-card--info">
         <div class="stat-card__num stat-card__num--info">{{ data.stats.archived_this_month }}</div>
         <div class="stat-card__label">本月归档</div>
       </div>
-      <div class="stat-card" @click="$router.push('/profile')">
+      <div class="stat-card stat-card--danger" @click="$router.push('/profile')">
         <div class="stat-card__num stat-card__num--danger">{{ data.stats.overdue_warnings }}</div>
         <div class="stat-card__label">超期预警</div>
       </div>
@@ -237,7 +237,7 @@ function statusLabel(s: string) { const m: Record<string, string> = { running: '
 
 /** 提取进度链片段的节点名称（去掉 emoji 图标前缀） */
 function chainNodeLabel(seg: string): string {
-  if (seg.startsWith('✅') || seg.startsWith('🔵') || seg.startsWith('⚪') || seg.startsWith('⏭️')) return seg.slice(2)
+  if (seg.startsWith('✅') || seg.startsWith('🔵') || seg.startsWith('⚪')) return seg.slice(2)
   return seg
 }
 
@@ -245,7 +245,6 @@ function chainNodeLabel(seg: string): string {
 function chainNodeClass(seg: string): string {
   if (seg.startsWith('🔵')) return 'bt-node--active'        // 当前节点高亮
   if (seg.startsWith('✅')) return 'bt-node--done'           // 已完成
-  if (seg.startsWith('⏭️')) return 'bt-node--skip'           // 已跳过
   return 'bt-node--wait'                                     // 待开始
 }
 </script>
@@ -259,6 +258,7 @@ function chainNodeClass(seg: string): string {
 .stat-card {
   background: #fff; border: 1px solid var(--el-border-color-light);
   border-radius: 10px; padding: 24px 20px; text-align: center; cursor: default;
+  border-bottom: 3px solid transparent;
   transition: box-shadow .2s, transform .2s;
   &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); transform: translateY(-1px); }
 
@@ -269,6 +269,12 @@ function chainNodeClass(seg: string): string {
   &__num--danger  { color: var(--el-color-danger); }
 
   &__label { font-size: 14px; color: var(--el-text-color-secondary); margin-top: 6px; }
+
+  // 底部色条
+  &--primary { border-bottom-color: var(--el-color-primary); }
+  &--success { border-bottom-color: var(--el-color-success); }
+  &--info    { border-bottom-color: #409EFF; }
+  &--danger  { border-bottom-color: var(--el-color-danger); }
 }
 
 /* ─── 双栏 ─── */
@@ -285,7 +291,6 @@ function chainNodeClass(seg: string): string {
   font-size: 13px; white-space: nowrap; border: 1px solid var(--el-border-color);
   &--done { background: #eafaf1; color: #1e8449; border-color: #a3d9b1; }
   &--active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); border-color: var(--el-color-primary); font-weight: 600; }
-  &--skip { background: #f5f5f5; color: var(--el-text-color-placeholder); border-color: #e0e0e0; text-decoration: line-through; }
   &--wait { background: #fafafa; color: var(--el-text-color-placeholder); border-color: #eee; }
 }
 

@@ -115,7 +115,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     total_nodes = len(all_nodes)
     current_node_index = sum(
         1 for n in all_nodes
-        if (n.status or "").lower() in ("finished", "skipped")
+        if (n.status or "").lower() == "finished"
     )
 
     # 文件（终审节点查看流程全部文件，普通节点只看本节点文件）
@@ -190,7 +190,6 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
                 InstanceNode.instance_id == a.instance_id,
                 InstanceNode.is_start == False,
                 InstanceNode.is_end == False,
-                InstanceNode.is_skipped == False,
                 InstanceNode.status.notin_(["waiting", "terminated"]),
             ).order_by(InstanceNode.sort_order)
         )
@@ -222,7 +221,6 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             {
                 "id": n.id, "name": n.name,
                 "is_start": n.is_start, "is_end": n.is_end,
-                "is_skipped": n.is_skipped,
                 "status": (n.status or "waiting").lower(),
                 "sort_order": n.sort_order,
             }
@@ -365,8 +363,6 @@ async def reject(
             raise AppException(ErrorCode.NOT_FOUND, "目标节点不存在")
         if target_node.is_start or target_node.is_end:
             raise AppException(ErrorCode.BAD_REQUEST, "不可驳回至开始或结束节点")
-        if target_node.is_skipped:
-            raise AppException(ErrorCode.BAD_REQUEST, "不可驳回至已跳过节点")
 
         a.status = ApprovalStatus.REJECTED
         a.opinion = opinion

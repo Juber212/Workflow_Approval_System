@@ -32,7 +32,7 @@ export interface CheckDetail {
   opinion: string | null
   total_nodes: number
   current_node_index: number
-  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; is_skipped: boolean; status: string; sort_order: number }[]
+  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
   files: { id: number; original_name: string; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   assignee_note: string | null
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]

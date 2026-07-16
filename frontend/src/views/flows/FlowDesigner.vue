@@ -36,7 +36,7 @@
     <!-- 主体区域：画布 + 面板 -->
     <div class="designer-body" v-loading="loading">
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
-        <NodePanel :lf="canvasRef?.getLf() ?? null" @add="handleAddNode" @add-optional="handleAddOptionalNode" />
+        <NodePanel :lf="canvasRef?.getLf() ?? null" @add="handleAddNode" />
         <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
         <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" />
       </div>
@@ -175,8 +175,8 @@ onMounted(async () => {
     if (lf) {
       // 等待 LogicFlow 初始化完成
       await new Promise(r => setTimeout(r, 100))
-      lf.addNode({ id: 'start', type: 'start-node', x: 100, y: 300, properties: { db_id: null, name: '开始', is_start: true, is_end: false, require_file: false, approval_strategy: 'all_approve', is_optional: false } })
-      lf.addNode({ id: 'end', type: 'end-node', x: 700, y: 300, properties: { db_id: null, name: '结束', is_start: false, is_end: true, require_file: false, approval_strategy: 'all_approve', is_optional: false } })
+      lf.addNode({ id: 'start', type: 'start-node', x: 100, y: 300, properties: { db_id: null, name: '开始', is_start: true, is_end: false, require_file: false, approval_strategy: 'all_approve' } })
+      lf.addNode({ id: 'end', type: 'end-node', x: 700, y: 300, properties: { db_id: null, name: '结束', is_start: false, is_end: true, require_file: false, approval_strategy: 'all_approve' } })
       updateUndoRedoState(lf)
     }
     loading.value = false
@@ -201,7 +201,7 @@ onMounted(async () => {
         return 'work-node'
       }
       lf.renderRawData({
-        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy, is_optional: n.is_optional } })),
+        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy } })),
         edges: detail.edges.map(e => ({ id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) })),
       })
       updateUndoRedoState(lf)
@@ -220,7 +220,6 @@ function updateUndoRedoState(lf?: any) {
 }
 
 function handleAddNode() { canvasRef.value?.addWorkNode(); updateUndoRedoState() }
-function handleAddOptionalNode() { canvasRef.value?.addOptionalNode(); updateUndoRedoState() }
 function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }
 function undo() { canvasRef.value?.getLf()?.undo(); updateUndoRedoState() }
 function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
@@ -247,7 +246,7 @@ async function handleSave() {
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      is_optional: n.properties?.is_optional ?? false, position_x: Math.round(n.x), position_y: Math.round(n.y),
+      position_x: Math.round(n.x), position_y: Math.round(n.y),
       sort_order: n.properties?.sort_order ?? 0,
     }))
     const edges: DesignerEdge[] = graphData.edges
@@ -294,7 +293,7 @@ async function handleLaunch() {
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      is_optional: n.properties?.is_optional ?? false, position_x: Math.round(n.x), position_y: Math.round(n.y),
+      position_x: Math.round(n.x), position_y: Math.round(n.y),
       sort_order: n.properties?.sort_order ?? 0,
     }))
     const edges: DesignerEdge[] = graphData.edges

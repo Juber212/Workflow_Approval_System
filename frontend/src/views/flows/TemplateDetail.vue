@@ -32,9 +32,6 @@
             <el-table-column label="时限" width="80">
               <template #default="{ row }">{{ row.time_limit_days || '-' }}天</template>
             </el-table-column>
-            <el-table-column label="可选" width="60" align="center">
-              <template #default="{ row }">{{ row.is_optional ? '是' : '否' }}</template>
-            </el-table-column>
             <el-table-column label="需文件" width="70" align="center">
               <template #default="{ row }">{{ row.require_file ? '是' : '否' }}</template>
             </el-table-column>

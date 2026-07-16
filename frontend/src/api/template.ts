@@ -61,7 +61,6 @@ export interface TemplateNodeItem {
   checkers: any
   checkers_names: string[] | null
   approval_strategy: string
-  is_optional: boolean
   position_x: number
   position_y: number
   sort_order: number

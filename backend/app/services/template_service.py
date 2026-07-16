@@ -312,7 +312,6 @@ def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = Non
         "approvers_names": approvers_names,
         "checkers": node.checkers, "checkers_names": checkers_names,
         "approval_strategy": node.approval_strategy,
-        "is_optional": node.is_optional,
         "position_x": node.position_x, "position_y": node.position_y,
         "sort_order": node.sort_order,
     }

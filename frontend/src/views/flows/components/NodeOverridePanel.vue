@@ -28,23 +28,8 @@
         </template>
 
         <div class="node-override-form">
-          <!-- 跳过开关（仅可选节点） -->
-          <div v-if="node.is_optional" class="override-row">
-            <label class="override-label">
-              <el-switch
-                :model-value="isNodeSkipped(node.id)"
-                @update:model-value="(v: boolean) => setSkip(node.id, node.is_optional, v)"
-                size="small"
-              />
-              <span class="label-text">跳过此节点</span>
-            </label>
-            <span class="override-desc" v-if="isNodeSkipped(node.id)">
-              跳过后将不生成任务，直接进入下一节点
-            </span>
-          </div>
-
           <!-- 负责人 -->
-          <div class="override-row" v-if="!isNodeSkipped(node.id)">
+          <div class="override-row">
             <label class="override-label">负责人</label>
             <UserSelector
               :model-value="getOverride(node.id, 'assignee_id') ?? node.assignee_id"
@@ -56,7 +41,7 @@
           </div>
 
           <!-- 校验人 -->
-          <div class="override-row" v-if="!isNodeSkipped(node.id)">
+          <div class="override-row">
             <label class="override-label">校验人</label>
             <div>
               <UserSelector
@@ -74,7 +59,7 @@
           </div>
 
           <!-- 审批人 -->
-          <div class="override-row" v-if="!isNodeSkipped(node.id)">
+          <div class="override-row">
             <label class="override-label">审批人</label>
             <div>
               <UserSelector
@@ -92,7 +77,7 @@
           </div>
 
           <!-- 截止日期 -->
-          <div class="override-row" v-if="!isNodeSkipped(node.id)">
+          <div class="override-row">
             <label class="override-label">截止日期</label>
             <el-date-picker
               :model-value="getOverride(node.id, 'deadline') ?? ''"
@@ -119,10 +104,10 @@
 </template>
 
 <script setup lang="ts">
-/** 节点覆盖配置面板 —— 逐节点调整负责人/校验人/审批人/截止日期/跳过 */
-import { ref } from 'vue'
+/** 节点覆盖配置面板 —— 逐节点调整负责人/校验人/审批人/截止日期 */
+import { ref, computed } from 'vue'
 import type { TemplateNodeItem } from '@/api/template'
-import { searchUsers, type UserSearchItem } from '@/api/admin'
+import type { UserSearchItem } from '@/api/admin'
 import UserSelector from '@/components/UserSelector.vue'
 
 // ========== Props & Emits ==========
@@ -184,34 +169,6 @@ function setOverride(nodeId: number, key: string, value: any) {
   emit('update:overrides', newOverrides)
 }
 
-/** 是否跳过 */
-function isNodeSkipped(nodeId: number): boolean {
-  return !!props.overrides[nodeId]?.skip
-}
-
-/** 设置跳过 */
-function setSkip(nodeId: number, isOptional: boolean, skip: boolean) {
-  if (skip && !isOptional) return  // 安全兜底
-  const newOverrides = { ...props.overrides }
-  if (skip) {
-    if (!newOverrides[nodeId]) newOverrides[nodeId] = {}
-    newOverrides[nodeId].skip = true
-    // 跳过时清除其他覆盖
-    delete newOverrides[nodeId].assignee_id
-    delete newOverrides[nodeId].checkers_ids
-    delete newOverrides[nodeId].approvers_ids
-    delete newOverrides[nodeId].deadline
-  } else {
-    if (newOverrides[nodeId]) {
-      delete newOverrides[nodeId].skip
-      if (Object.keys(newOverrides[nodeId]).length === 0) {
-        delete newOverrides[nodeId]
-      }
-    }
-  }
-  emit('update:overrides', newOverrides)
-}
-
 /** 重置单个节点 */
 function resetNode(nodeId: number) {
   const newOverrides = { ...props.overrides }
@@ -226,7 +183,6 @@ function cacheNames(users: UserSearchItem[]) {
 
 /** 获取节点摘要（显示在折叠标题） */
 function getNodeSummary(node: TemplateNodeItem): string {
-  if (isNodeSkipped(node.id)) return '⏭ 已跳过'
   const parts: string[] = []
   const aId = getOverride(node.id, 'assignee_id') ?? node.assignee_id
   if (aId && userNameCache.value[aId as number]) {
@@ -243,8 +199,6 @@ function getNodeSummary(node: TemplateNodeItem): string {
 
 /** 检查节点某个字段是否为空（覆盖后） */
 function isFieldEmpty(node: TemplateNodeItem, field: 'checkers' | 'approvers'): boolean {
-  if (isNodeSkipped(node.id)) return false  // 跳过节点不校验
-
   if (field === 'checkers') {
     const overrideVal = getOverride(node.id, 'checkers_ids')
     if (overrideVal !== undefined) return !overrideVal || overrideVal.length === 0
@@ -264,8 +218,6 @@ function isFieldEmpty(node: TemplateNodeItem, field: 'checkers' | 'approvers'): 
 /** 获取节点配置问题列表 */
 function getNodeIssues(node: TemplateNodeItem): string[] {
   const issues: string[] = []
-  if (isNodeSkipped(node.id)) return issues  // 跳过节点无需校验
-
   if (isFieldEmpty(node, 'checkers')) issues.push('校验人未设置')
   if (isFieldEmpty(node, 'approvers')) issues.push('审批人未设置')
 

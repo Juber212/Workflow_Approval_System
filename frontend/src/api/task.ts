@@ -56,7 +56,6 @@ export interface FlowNodeBrief {
   name: string
   is_start: boolean
   is_end: boolean
-  is_skipped: boolean
   status: string
   sort_order: number
 }

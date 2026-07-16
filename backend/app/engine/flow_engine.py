@@ -1,9 +1,8 @@
-"""流程引擎 —— 节点激活、跳过传播、实例状态推进
+"""流程引擎 —— 节点激活、实例状态推进
 
 负责实例节点间的流转逻辑：
-- 节点完成/跳过时，传播到达信号到下游
+- 节点完成时，传播到达信号到下游
 - 汇合节点等待所有上游到达后才激活
-- 跳过节点沿原图传播，不生成 Task
 - 开始/结束节点的特殊处理
 """
 
@@ -42,7 +41,7 @@ async def propagate_from_node(
     instance_id: int,
     finished_node_id: int,
 ) -> list[int]:
-    """节点完成/跳过时，传播到达信号到所有直接下游节点
+    """节点完成时，传播到达信号到所有直接下游节点
 
     返回本轮新激活的节点 ID 列表（状态变为 running/waiting_approval 的工作节点）
 
@@ -50,7 +49,6 @@ async def propagate_from_node(
     1. 查询所有以 finished_node_id 为源的边
     2. 对每个目标节点 arrived_count + 1
     3. 如果 arrived_count == incoming_count（所有上游已到达）：
-       - is_skipped → 标记 skipped，递归传播（并入队列）
        - is_end → 标记 waiting_approval（等待发起人终审）
        - 普通工作节点 → 标记 running，创建 Task
     """
@@ -91,24 +89,7 @@ async def propagate_from_node(
 
         # === 所有上游已到达，按节点类型处理 ===
 
-        if node.is_skipped:
-            # 跳过节点：标记 skipped，继续向下游传播
-            now = datetime.now()
-            node.status = "skipped"
-            node.started_at = now
-            node.completed_at = now
-
-            # 找到跳过节点的所有下游，入队
-            skip_edges = await db.execute(
-                select(InstanceEdge).where(
-                    InstanceEdge.source_node_id == node.id,
-                    InstanceEdge.instance_id == instance_id,
-                )
-            )
-            for se in skip_edges.scalars().all():
-                queue.append(se.target_node_id)
-
-        elif node.is_end:
+        if node.is_end:
             # 结束节点：进入 waiting_approval，按 approvers 创建审批记录，不生成 Task
             node.status = "waiting_approval"
             node.started_at = datetime.now()

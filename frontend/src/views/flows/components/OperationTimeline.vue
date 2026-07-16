@@ -43,7 +43,6 @@ function logTypeLabel(type: string): string {
     node_started: '节点开始',
     node_submitted: '节点提交',
     node_completed: '节点完成',
-    node_skipped: '节点跳过',
     check_passed: '校验通过',
     check_rejected: '校验退回',
     approval_approved: '审批通过',

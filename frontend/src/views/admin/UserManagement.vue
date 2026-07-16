@@ -1,7 +1,7 @@
 <template>
   <div class="user-management">
     <!-- 搜索栏 -->
-    <el-card class="search-card" shadow="never">
+    <div class="search-bar">
       <el-form :inline="true" :model="query" @submit.prevent="handleSearch">
         <el-form-item label="关键词">
           <el-input v-model="query.keyword" placeholder="用户名/姓名" clearable @clear="handleSearch" />
@@ -22,10 +22,10 @@
           <el-button type="success" @click="openCreate">新增用户</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
+    </div>
 
     <!-- 用户列表 -->
-    <el-card class="table-card" shadow="never">
+    <div class="table-section">
       <el-table :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" width="120" />
@@ -85,7 +85,7 @@
           @change="fetchList"
         />
       </div>
-    </el-card>
+    </div>
 
     <!-- 新增/编辑弹窗 -->
     <UserFormDialog
@@ -266,14 +266,23 @@ async function handleResetPwdSubmit(password: string) {
 
 <style lang="scss" scoped>
 .user-management {
-  .search-card {
+  .search-bar {
+    display: flex;
+    justify-content: center;
     margin-bottom: 16px;
+  }
+
+  .table-section {
+    background: #fff;
+    border: 1px solid var(--el-border-color-light);
+    border-radius: 8px;
+    overflow: hidden;
   }
 
   .pagination-wrap {
     display: flex;
     justify-content: flex-end;
-    margin-top: 16px;
+    padding: 12px 16px;
   }
 }
 </style>
