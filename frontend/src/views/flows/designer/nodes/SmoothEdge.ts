@@ -4,7 +4,15 @@ import type LogicFlow from '@logicflow/core'
 
 // ========== 路径计算 ==========
 
-/** 将折线点转换为平滑贝塞尔曲线路径 d 属性 */
+/** 将 LogicFlow points 字符串解析为坐标数组（格式："x1,y1 x2,y2 x3,y3"） */
+function parsePoints(pointsStr: string): Array<{ x: number; y: number }> {
+  return pointsStr.split(' ').filter(Boolean).map(p => {
+    const [x, y] = p.split(',')
+    return { x: Number(x), y: Number(y) }
+  })
+}
+
+/** 将折线点数组转换为平滑贝塞尔曲线路径 d 属性 */
 function calcSmoothPath(points: Array<{ x: number; y: number }>): string {
   if (points.length < 2) return ''
   if (points.length === 2) {
@@ -42,7 +50,10 @@ class SmoothEdgeModel extends PolylineEdgeModel {}
 class SmoothEdgeView extends PolylineEdge {
   getEdge() {
     const { model } = this.props
-    const points = (model as any).points as Array<{ x: number; y: number }> || []
+    // LogicFlow 的 model.points 是字符串格式（"x1,y1 x2,y2 ..."），需要先解析
+    const rawPoints = (model as any).points
+    const points: Array<{ x: number; y: number }> =
+      typeof rawPoints === 'string' ? parsePoints(rawPoints) : (rawPoints || [])
     const style = model.getEdgeStyle()
     const { arrowConfig } = model as any
 
