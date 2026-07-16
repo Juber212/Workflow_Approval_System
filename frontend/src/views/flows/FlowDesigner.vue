@@ -428,7 +428,11 @@ async function handleSave() {
     }))
     const edges: DesignerEdge[] = graphData.edges
       .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: e.points || null }))
+      .map((e: any) => {
+        // getGraphData() 不包含 points，需从 Model 实例直接读取
+        const edgeModel = lf.getEdgeModelById(e.id) as any
+        return { id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: edgeModel?.points || null }
+      })
 
     let templateId = Number(route.params.id)
     if (isNewTemplate.value) {
@@ -475,7 +479,11 @@ async function handleLaunch() {
     }))
     const edges: DesignerEdge[] = graphData.edges
       .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: e.points || null }))
+      .map((e: any) => {
+        // getGraphData() 不包含 points，需从 Model 实例直接读取
+        const edgeModel = lf.getEdgeModelById(e.id) as any
+        return { id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: edgeModel?.points || null }
+      })
     await saveDesign(templateId, { nodes, edges })
 
     // 2. 发起项目
