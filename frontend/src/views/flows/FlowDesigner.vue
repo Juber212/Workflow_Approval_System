@@ -377,8 +377,11 @@ function handleSaveAsPreset(formData: any) {
     name: formData.name || '',
     node_name: formData.name || '',
     assignee_id: formData.assignee_id,
+    assignee_name: formData.assignee_name || null,
     checkers: formData.checkers?.map((id: number) => ({ user_id: id })) || null,
+    checkers_names: formData.checkers_names || null,
     approvers: formData.approvers?.map((id: number) => ({ user_id: id })) || null,
+    approvers_names: formData.approvers_names || null,
     time_limit_days: formData.time_limit_days,
     require_file: formData.require_file,
   }
@@ -396,8 +399,11 @@ function editPresetToFormData(preset: PresetItem): PresetFormData {
     name: preset.name,
     node_name: preset.node_name,
     assignee_id: preset.assignee_id,
+    assignee_name: preset.assignee_name,       // 传递姓名，避免 UserSelector 空白
     checkers: preset.checkers,
+    checkers_names: preset.checkers_names,       // 传递姓名
     approvers: preset.approvers,
+    approvers_names: preset.approvers_names,     // 传递姓名
     time_limit_days: preset.time_limit_days,
     require_file: preset.require_file,
   }

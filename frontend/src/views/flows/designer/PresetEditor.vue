@@ -122,6 +122,23 @@ const approverInitialOptions = computed<UserSearchItem[]>(() => {
 /** 加载初始数据 */
 function loadInitial() {
   if (props.initial) {
+    // 预填 userNameCache —— 从 initial 携带的姓名中提取，避免 UserSelector 初次渲染时空白
+    if (props.initial.assignee_id && props.initial.assignee_name) {
+      userNameCache[props.initial.assignee_id] = props.initial.assignee_name
+    }
+    if (props.initial.checkers && props.initial.checkers_names) {
+      props.initial.checkers.forEach((c, i) => {
+        const name = props.initial?.checkers_names?.[i]
+        if (name) userNameCache[c.user_id] = name
+      })
+    }
+    if (props.initial.approvers && props.initial.approvers_names) {
+      props.initial.approvers.forEach((a, i) => {
+        const name = props.initial?.approvers_names?.[i]
+        if (name) userNameCache[a.user_id] = name
+      })
+    }
+
     form.name = props.initial.name || ''
     form.node_name = props.initial.node_name || ''
     form.assignee_id = props.initial.assignee_id ?? undefined

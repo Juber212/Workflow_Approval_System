@@ -25,8 +25,11 @@ export interface PresetFormData {
   name: string
   node_name: string
   assignee_id?: number | null
+  assignee_name?: string | null       // 预填时传递姓名，避免 UserSelector 空白
   checkers?: Array<{ user_id: number }> | null
+  checkers_names?: string[] | null     // 预填时传递姓名
   approvers?: Array<{ user_id: number }> | null
+  approvers_names?: string[] | null    // 预填时传递姓名
   time_limit_days?: number | null
   require_file?: boolean
 }
