@@ -116,17 +116,18 @@ async def save_design_data(
             logger.warning(f"[designer] 无法解析边端点，跳过: raw_source={raw_source!r} raw_target={raw_target!r}")
             continue
 
+        points = item.get("points")  # 折线路径点串（可能为空）
         if eid and eid in existing_edge_ids:
             submitted_edge_ids.add(eid)
-            await _update_edge(db, eid, source_id, target_id)
+            await _update_edge(db, eid, source_id, target_id, points)
         else:
             # 检查是否已存在相同端点的边（避免重复插入触发唯一约束）
             dup = _find_existing_edge(existing_edges, source_id, target_id)
             if dup:
                 submitted_edge_ids.add(dup.id)
-                await _update_edge(db, dup.id, source_id, target_id)
+                await _update_edge(db, dup.id, source_id, target_id, points)
             else:
-                new_edge = await _create_edge(db, template_id, source_id, target_id)
+                new_edge = await _create_edge(db, template_id, source_id, target_id, points)
                 submitted_edge_ids.add(new_edge.id)
 
     # 删除不在提交列表中的连线
@@ -176,12 +177,13 @@ async def _update_node(db: AsyncSession, node_id: int, data: dict) -> None:
             setattr(node, field, data[field])
 
 
-async def _create_edge(db: AsyncSession, template_id: int, source_id: int, target_id: int) -> TemplateEdge:
-    """创建新连线"""
+async def _create_edge(db: AsyncSession, template_id: int, source_id: int, target_id: int, points: str | None = None) -> TemplateEdge:
+    """创建新连线 —— 含折线路径点串"""
     edge = TemplateEdge(
         template_id=template_id,
         source_node_id=source_id,
         target_node_id=target_id,
+        points=points,
     )
     db.add(edge)
     await db.flush()
@@ -232,11 +234,12 @@ def _resolve_edge_endpoint(
     return None
 
 
-async def _update_edge(db: AsyncSession, edge_id: int, source_id: int, target_id: int) -> None:
-    """更新已有连线"""
+async def _update_edge(db: AsyncSession, edge_id: int, source_id: int, target_id: int, points: str | None = None) -> None:
+    """更新已有连线 —— 含折线路径点串"""
     edge = (await db.execute(select(TemplateEdge).where(TemplateEdge.id == edge_id))).scalar_one()
     edge.source_node_id = source_id
     edge.target_node_id = target_id
+    edge.points = points
 
 
 # ==================== 单节点 CRUD（简化版，无版本/状态限制） ====================

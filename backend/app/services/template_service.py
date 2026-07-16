@@ -244,7 +244,7 @@ async def get_template_detail(db: AsyncSession, template_id: int) -> TemplateDet
         organization_id=tpl.organization_id, organization_name=org_name,
         node_count=len(nodes), instance_count=inst_count,
         nodes=[_node_to_dict(n, user_name_map) for n in nodes],
-        edges=[{"id": e.id, "source_node_id": e.source_node_id, "target_node_id": e.target_node_id} for e in edges],
+        edges=[{"id": e.id, "source_node_id": e.source_node_id, "target_node_id": e.target_node_id, "points": e.points} for e in edges],
         created_by=tpl.created_by, created_by_name=creator_name,
         created_at=tpl.created_at, updated_at=tpl.updated_at,
     )

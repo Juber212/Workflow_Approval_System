@@ -25,6 +25,7 @@ export interface DesignerEdge {
   id?: number | null              // 已有连线 id（null/undefined 表示新增）
   source_node_id: number | string // 源节点 id（新节点可为临时字符串 ID）
   target_node_id: number | string // 目标节点 id（新节点可为临时字符串 ID）
+  points?: string | null          // 折线路径点串（LogicFlow points 字符串格式），保存后恢复避免路由重算
 }
 
 /** 批量保存请求体 */
