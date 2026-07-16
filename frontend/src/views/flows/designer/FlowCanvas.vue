@@ -32,7 +32,7 @@ const DEFAULT_CONFIG = {
   background: { backgroundColor: '#fafafa' },
   history: true,
   adjustEdge: true,
-  edgeType: 'polyline' as const, // 折线连线
+  edgeType: 'bezier' as const, // 贝塞尔平滑曲线
   /** 守卫：拦截非法操作 */
   guards: {
     beforeDelete: (data: any) => {
