@@ -32,7 +32,8 @@ const DEFAULT_CONFIG = {
   background: { backgroundColor: '#fafafa' },
   history: true,
   adjustEdge: true,
-  edgeType: 'bezier' as const, // 贝塞尔平滑曲线
+  adjustEdgeStartAndEnd: true, // 允许拖动边的端点重新连接到其他节点
+  edgeType: 'polyline' as const, // 折线连线
   /** 守卫：拦截非法操作 */
   guards: {
     beforeDelete: (data: any) => {
