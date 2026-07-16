@@ -309,14 +309,12 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     await db.flush()
 
     if node.is_end:
-        # 结束节点 → 流程完成，同步归档（V1 完成即归档）
+        # 结束节点 → 流程完成
         node.status = InstanceNodeStatus.FINISHED
         node.completed_at = now
         inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
         inst.status = InstanceStatus.COMPLETED
         inst.completed_at = now
-        inst.archive_status = "archived"
-        inst.archived_at = now
         return {"all_approved": True, "instance_completed": True, "message": "流程已完成"}
 
     # 普通节点 → finished → 传播到下游

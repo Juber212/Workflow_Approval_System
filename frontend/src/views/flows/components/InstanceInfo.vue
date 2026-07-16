@@ -6,8 +6,7 @@
       <div class="sticky-head__left">
         <h1 class="sticky-head__name">{{ detail.name }}</h1>
         <span class="status-tag" :class="statusTagClass">{{ statusLabel }}</span>
-        <!-- 归档状态标签（PRD §10.3：已归档灰色标签） -->
-        <span v-if="archiveLabel" class="status-tag status-tag--archived">{{ archiveLabel }}</span>
+
         <span class="priority-badge" :class="'priority--' + detail.priority">
           {{ priorityLabel }}
         </span>
@@ -28,7 +27,7 @@
           type="danger"
           size="default"
           @click="$emit('terminate')"
-        >终止流程</el-button>
+        >终止项目</el-button>
       </div>
     </div>
 
@@ -113,12 +112,6 @@ const statusTagClass = computed(() => {
   return map[s] || ''
 })
 
-/** 归档状态标签（PRD §10.3：已归档灰色标签；V1 终审通过同步归档） */
-const archiveLabel = computed(() => {
-  if (props.detail.archive_status === 'archived') return '已归档'
-  return null
-})
-
 // ========== 优先级 ==========
 const priorityLabel = computed(() => {
   const map: Record<string, string> = {
@@ -198,13 +191,6 @@ function formatTime(val: string | null): string {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-}
-
-// 归档状态标签样式
-.status-tag--archived {
-  background: var(--el-fill-color-dark);
-  color: var(--el-text-color-placeholder);
-  border: 1px solid var(--el-border-color);
 }
 
 // 优先级徽章

@@ -34,16 +34,16 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         select(func.count()).select_from(FlowInstance).where(FlowInstance.status == "running")
     )).scalar() or 0
 
-    # 已归档实例
+    # 已完成实例
     archived_count = (await db.execute(
-        select(func.count()).select_from(FlowInstance).where(FlowInstance.archive_status == "archived")
+        select(func.count()).select_from(FlowInstance).where(FlowInstance.status == "completed")
     )).scalar() or 0
 
-    # 本月归档
+    # 本月完成
     archived_this_month = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
-            FlowInstance.archive_status == "archived",
-            FlowInstance.archived_at >= month_start,
+            FlowInstance.status == "completed",
+            FlowInstance.completed_at >= month_start,
         )
     )).scalar() or 0
 

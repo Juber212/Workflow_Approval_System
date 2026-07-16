@@ -1,4 +1,4 @@
-/** 流程实例 API */
+/** 项目 API */
 import request from './request'
 
 // ==================== 类型 ====================
@@ -12,7 +12,7 @@ export interface NodeOverride {
   approvers?: { user_id: number }[]
 }
 
-/** 发起实例请求 */
+/** 发起项目请求 */
 export interface CreateInstanceData {
   template_id: number
   name: string
@@ -24,7 +24,7 @@ export interface CreateInstanceData {
   node_overrides?: NodeOverride[]
 }
 
-/** 发起实例响应 */
+/** 发起项目响应 */
 export interface InstanceCreated {
   id: number
   name: string
@@ -43,19 +43,20 @@ export interface InstanceCreated {
   initiated_at: string | null
 }
 
-// ==================== 实例列表 ====================
+// ==================== 项目列表 ====================
 
-/** 实例列表查询参数 */
+/** 项目列表查询参数 */
 export interface InstanceListParams {
   organization_id?: number
   status?: string
   priority?: string
   keyword?: string
+  sort_by?: string
   page?: number
   page_size?: number
 }
 
-/** 实例列表项 */
+/** 项目列表项 */
 export interface InstanceListItem {
   id: number
   name: string
@@ -65,7 +66,6 @@ export interface InstanceListItem {
   initiator_name: string
   priority: string
   status: string
-  archive_status: string | null
   current_node_index: number
   total_nodes: number
   current_assignee_name: string | null
@@ -74,7 +74,7 @@ export interface InstanceListItem {
   terminated_at: string | null
 }
 
-/** 实例列表响应 */
+/** 项目列表响应 */
 export interface InstanceListResponse {
   items: InstanceListItem[]
   total: number
@@ -82,7 +82,7 @@ export interface InstanceListResponse {
   page_size: number
 }
 
-// ==================== 实例详情 ====================
+// ==================== 项目详情 ====================
 
 /** 节点文件简要 */
 export interface NodeFileBrief {
@@ -117,7 +117,7 @@ export interface ApprovalBrief {
   decided_at: string | null
 }
 
-/** 实例详情中的节点信息 */
+/** 项目详情中的节点信息 */
 export interface DetailNodeInfo {
   id: number
   name: string
@@ -155,7 +155,7 @@ export interface LogItemBrief {
   created_at: string | null
 }
 
-/** 实例详情完整响应 */
+/** 项目详情完整响应 */
 export interface InstanceDetailResponse {
   id: number
   name: string
@@ -166,7 +166,6 @@ export interface InstanceDetailResponse {
   initiator_name: string
   priority: string
   status: string
-  archive_status: string | null
   termination_reason: string | null
   contract_no: string | null
   product_model: string | null
@@ -182,25 +181,25 @@ export interface InstanceDetailResponse {
 
 // ==================== API ====================
 
-/** 发起流程实例 */
+/** 发起项目 */
 export async function createInstance(data: CreateInstanceData): Promise<InstanceCreated> {
   const res = await request.post('/instances', data)
   return res.data
 }
 
-/** 查询实例列表 */
+/** 查询项目列表 */
 export async function getInstances(params: InstanceListParams = {}): Promise<InstanceListResponse> {
   const res = await request.get('/instances', { params })
   return res.data
 }
 
-/** 查询实例详情 */
+/** 查询项目详情 */
 export async function getInstanceDetail(id: number): Promise<InstanceDetailResponse> {
   const res = await request.get(`/instances/${id}`)
   return res.data
 }
 
-/** 终止流程实例 */
+/** 终止项目 */
 export async function terminateInstance(id: number, reason: string): Promise<{
   id: number
   name: string
@@ -212,13 +211,12 @@ export async function terminateInstance(id: number, reason: string): Promise<{
   return res.data
 }
 
-/** 修改流程优先级 */
-// ========== 我发起的流程 ==========
+/** 修改项目优先级 */
+// ========== 我发起的项目 ==========
 export interface MyInitiatedItem {
   id: number
   name: string
   status: string
-  archive_status: string
   priority: string
   initiated_at: string | null
   completed_at: string | null
@@ -260,12 +258,12 @@ export async function changePersonnel(
   return res.data
 }
 
-/** 永久删除流程实例（仅系统管理员，仅已终止） */
+/** 永久删除项目（仅系统管理员，仅已终止） */
 export async function permanentDeleteInstance(instanceId: number): Promise<void> {
   await request.delete(`/instances/${instanceId}/permanent`)
 }
 
-/** 补交文件到已完成实例的已完成节点 */
+/** 补交文件到已完成项目的已完成节点 */
 export async function supplementFiles(
   instanceId: number,
   nodeId: number,

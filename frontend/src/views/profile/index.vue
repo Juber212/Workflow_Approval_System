@@ -46,7 +46,7 @@
     <!-- ========== 待办列表 ========== -->
     <template v-if="activeTab === 'tasks'">
       <div class="list-toolbar">
-        <el-input v-model="taskKeyword" placeholder="搜索实例名称" clearable style="width:220px" @change="fetchTasks" />
+        <el-input v-model="taskKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchTasks" />
         <el-select v-model="taskStatus" placeholder="状态" clearable style="width:140px" @change="fetchTasks">
           <el-option label="待处理" value="pending" />
           <el-option label="处理中" value="processing" />
@@ -54,7 +54,7 @@
       </div>
 
       <el-table :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
+        <el-table-column prop="instance_name" label="项目" min-width="140" />
         <el-table-column prop="node_name" label="当前节点" min-width="100" />
         <el-table-column prop="initiator_name" label="发起人" min-width="72" />
         <el-table-column label="截止时间" min-width="140">
@@ -85,11 +85,11 @@
     <!-- ========== 校验列表 ========== -->
     <template v-if="activeTab === 'checks'">
       <div class="list-toolbar">
-        <el-input v-model="checkKeyword" placeholder="搜索实例名称" clearable style="width:220px" @change="fetchChecks" />
+        <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchChecks" />
       </div>
 
       <el-table :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push(`/profile/check/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
+        <el-table-column prop="instance_name" label="项目" min-width="140" />
         <el-table-column prop="node_name" label="节点" min-width="100" />
         <el-table-column prop="submitter_name" label="提交人" min-width="72" />
         <el-table-column prop="created_at" label="提交时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
@@ -110,11 +110,11 @@
     <!-- ========== 审批列表 ========== -->
     <template v-if="activeTab === 'approvals'">
       <div class="list-toolbar">
-        <el-input v-model="approvalKeyword" placeholder="搜索实例名称" clearable style="width:220px" @change="fetchApprovals" />
+        <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchApprovals" />
       </div>
 
       <el-table :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="instance_name" label="流程实例" min-width="140" />
+        <el-table-column prop="instance_name" label="项目" min-width="140" />
         <el-table-column prop="node_name" label="节点" min-width="100">
           <template #default="{ row }">
             {{ row.node_name }}
@@ -139,7 +139,7 @@
     <!-- ========== 我发起的流程（仅所长） ========== -->
     <template v-if="activeTab === 'initiated'">
       <el-table :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
-        <el-table-column prop="name" label="流程实例" min-width="140" />
+        <el-table-column prop="name" label="项目" min-width="140" />
         <el-table-column label="优先级" min-width="64" align="center">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
@@ -151,7 +151,6 @@
         <el-table-column label="状态" min-width="64" align="center">
           <template #default="{ row }">
             <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
-            <el-tag v-if="row.archive_status === 'archived'" size="small" type="info" effect="plain" style="margin-left:4px">已归档</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" min-width="60">

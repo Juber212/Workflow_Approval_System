@@ -18,7 +18,7 @@
         <span class="org-card__num" :class="{ 'is-warn': org.running_instance_count > 5 }">
           {{ org.running_instance_count }}
         </span>
-        <span class="org-card__unit">个运行中实例</span>
+        <span class="org-card__unit">个运行中项目</span>
       </div>
 
       <!-- 底部：更新时间 + 模板数 -->

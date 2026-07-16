@@ -5,7 +5,7 @@
       <div class="login-brand">
         <span class="login-logo-icon">流</span>
         <div>
-          <h1 class="login-title">企业流程审批系统</h1>
+          <h1 class="login-title">企业项目审批系统</h1>
           <p class="login-subtitle">Enterprise Workflow Approval System</p>
         </div>
       </div>

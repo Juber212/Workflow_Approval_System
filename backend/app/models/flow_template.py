@@ -1,4 +1,4 @@
-"""流程模板模型 —— 简化版：无版本、无状态，画布即模板"""
+"""项目模板模型 —— 简化版：无版本、无状态，画布即模板"""
 
 from sqlalchemy import String, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column

@@ -1,4 +1,4 @@
-"""流程实例 Schema —— 请求/响应模型"""
+"""项目 Schema —— 请求/响应模型"""
 
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -16,7 +16,7 @@ class NodeOverride(BaseModel):
 
 
 class CreateInstanceRequest(BaseModel):
-    """发起流程实例请求"""
+    """发起项目请求"""
     template_id: int = Field(..., description="模板 ID")
     name: str = Field(..., min_length=2, max_length=100, description="实例名称")
     description: str | None = Field(None, max_length=500, description="实例描述")
@@ -60,7 +60,6 @@ class InstanceListItem(BaseModel):
     initiator_name: str = ""
     priority: str
     status: str
-    archive_status: str | None = None
     current_node_index: int = 0
     total_nodes: int = 0
     current_assignee_name: str | None = None
@@ -161,7 +160,6 @@ class InstanceDetailResponse(BaseModel):
     initiator_name: str = ""
     priority: str
     status: str
-    archive_status: str | None = None
     termination_reason: str | None = None
     contract_no: str | None = None
     product_model: str | None = None
@@ -178,7 +176,7 @@ class InstanceDetailResponse(BaseModel):
 # ==================== 终止实例 ====================
 
 class TerminateInstanceRequest(BaseModel):
-    """终止流程实例请求"""
+    """终止项目请求"""
     reason: str = Field(
         ..., min_length=1, max_length=500,
         description="终止原因（必填，1-500字符）"

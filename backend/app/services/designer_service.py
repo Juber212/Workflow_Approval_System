@@ -1,4 +1,4 @@
-"""流程设计器服务 —— 保存/加载画布数据（节点 + 连线）"""
+"""项目设计器服务 —— 保存/加载画布数据（节点 + 连线）"""
 import logging
 from collections import deque
 from sqlalchemy import select, delete

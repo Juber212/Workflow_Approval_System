@@ -1,4 +1,4 @@
-"""流程实例服务 —— 发起实例、配置合并、快照复制、列表查询、终止流程、补交文件"""
+"""项目服务 —— 发起实例、配置合并、快照复制、列表查询、终止项目、补交文件"""
 
 import os
 import uuid
@@ -6,7 +6,7 @@ import uuid
 from fastapi import UploadFile
 from datetime import datetime
 
-from sqlalchemy import select, func, text, or_, delete as sql_delete, update as sql_update
+from sqlalchemy import select, func, text, or_, case, delete as sql_delete, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -45,7 +45,7 @@ async def create_instance(
     request: CreateInstanceRequest,
     current_user: CurrentUser,
 ) -> dict:
-    """发起流程实例 —— 从模板节点/连线直接复制生成实例快照
+    """发起项目 —— 从模板节点/连线直接复制生成实例快照
 
     步骤：
     1. 验证模板存在
@@ -173,7 +173,7 @@ async def create_instance(
         instance_id=instance.id,
         operator_type="user", operator_id=current_user.id,
         operation_type="initiate",
-        description=f"发起了流程实例「{instance.name}」",
+        description=f"发起了项目「{instance.name}」",
         detail={
             "template_id": request.template_id,
             "priority": priority,
@@ -203,10 +203,11 @@ async def list_instances(
     status: list[str] | None = None,
     priority: str | None = None,
     keyword: str | None = None,
+    sort_by: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
-    """查询流程实例列表（分页 + 多条件筛选）
+    """查询项目列表（分页 + 多条件筛选）
 
     返回每个实例的：
     - current_node_index: 已完成/跳过节点数（反映当前进度）
@@ -249,7 +250,35 @@ async def list_instances(
     total = total_result.scalar() or 0
 
     # ========== 排序 + 分页 ==========
-    list_stmt = base_stmt.order_by(FlowInstance.id.desc())
+    if sort_by == "priority":
+        # 运行中实例按优先级排序：urgent > high > normal > low
+        # 同优先级按当前活跃节点的截止时间（最近截止在先），无截止时间排最后
+        current_deadline = (
+            select(InstanceNode.deadline)
+            .where(
+                InstanceNode.instance_id == FlowInstance.id,
+                InstanceNode.status.in_(["pending", "processing"]),
+            )
+            .order_by(InstanceNode.sort_order)
+            .limit(1)
+            .correlate(FlowInstance)
+            .scalar_subquery()
+        )
+        # MySQL 不支持 NULLS LAST，用 CASE 将 null 推到末尾
+        list_stmt = base_stmt.order_by(
+            case((current_deadline.is_(None), 1), else_=0),  # 无截止时间排最后
+            current_deadline.asc(),
+            case(
+                (FlowInstance.priority == "urgent", 0),
+                (FlowInstance.priority == "high", 1),
+                (FlowInstance.priority == "normal", 2),
+                else_=3,
+            ),
+            FlowInstance.initiated_at.asc(),
+        )
+    else:
+        # 默认按 ID 倒序（最近发起的在前）
+        list_stmt = base_stmt.order_by(FlowInstance.id.desc())
     list_stmt = list_stmt.offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(list_stmt)
@@ -275,7 +304,6 @@ async def list_instances(
             initiator_name=initiator_name or "",
             priority=(instance.priority or "normal").lower(),
             status=(instance.status or "created").lower(),
-            archive_status=(instance.archive_status or "").lower() if instance.archive_status else None,
             current_node_index=node_stats["processed"],
             total_nodes=node_stats["total"],
             current_assignee_name=current_assignee,
@@ -356,7 +384,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     if row is None:
         from app.core.exceptions import AppException
         from app.core.error_codes import ErrorCode
-        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+        raise AppException(ErrorCode.NOT_FOUND, "项目不存在")
 
     instance = row[0]
     initiator_name = row[1]
@@ -555,7 +583,6 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         "initiator_id": instance.initiator_id, "initiator_name": initiator_name or "",
         "priority": (instance.priority or "normal").lower(),
         "status": (instance.status or "created").lower(),
-        "archive_status": (instance.archive_status or "").lower() if instance.archive_status else None,
         "termination_reason": instance.termination_reason,
         "contract_no": instance.contract_no,
         "product_model": instance.product_model,
@@ -575,7 +602,7 @@ async def terminate_instance(
     reason: str,
     current_user: CurrentUser,
 ) -> dict:
-    """终止流程实例 —— 级联关闭所有关联记录并物理删除文件
+    """终止项目 —— 级联关闭所有关联记录并物理删除文件
 
     处理步骤：
     1. 校验实例存在 + 发起人权限 + 未已终止
@@ -594,7 +621,7 @@ async def terminate_instance(
 
     # ========== 2. 校验发起人权限 ==========
     if instance.initiator_id != current_user.id:
-        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可终止流程")
+        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可终止项目")
 
     # ========== 3. 校验未已终止 ==========
     if (instance.status or "").lower() == "terminated":
@@ -676,7 +703,7 @@ async def terminate_instance(
         operator_type="user",
         operator_id=current_user.id,
         operation_type="instance_terminated",
-        description=f"终止流程：「{instance.name}」，原因：{reason}",
+        description=f"终止项目：「{instance.name}」，原因：{reason}",
         detail={"reason": reason, "instance_name": instance.name},
     )
     db.add(log)
@@ -897,7 +924,7 @@ async def change_priority(
     priority: str,
     current_user: CurrentUser,
 ) -> dict:
-    """修改流程实例优先级 —— 仅发起人 + running 状态可操作
+    """修改项目优先级 —— 仅发起人 + running 状态可操作
 
     返回更新后的优先级和实例基本信息。
     """
@@ -1082,7 +1109,7 @@ async def supplement_files(
 
 
 async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
-    """永久删除流程实例 —— 级联清除所有关联数据（仅管理员可操作，仅已终止实例可删）
+    """永久删除项目 —— 级联清除所有关联数据（仅管理员可操作，仅已终止实例可删）
 
     删除顺序（避免外键约束冲突）：
     approval → check_record → file → task → instance_edge → operation_log → instance_node → flow_instance

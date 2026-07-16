@@ -1,4 +1,4 @@
-"""流程模板 API —— 简化版"""
+"""项目模板 API —— 简化版"""
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from app.services.template_service import (
 )
 from app.api.deps import get_current_active_user, CurrentUser
 
-router = APIRouter(prefix="/api/v1", tags=["流程模板"])
+router = APIRouter(prefix="/api/v1", tags=["项目模板"])
 
 
 @router.get("/templates/organizations")

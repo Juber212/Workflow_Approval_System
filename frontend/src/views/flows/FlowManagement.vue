@@ -1,19 +1,19 @@
 <template>
-  <!-- 流程管理全局视图 —— 组织卡片 + 全部流程实例（PRD P03） -->
+  <!-- 项目管理全局视图 —— 组织卡片 + 全部项目（PRD P03） -->
   <div class="flow-management">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
-        <h1 class="page-header__title">流程管理<span class="page-header__subtitle">各组织流程运行概览，点击卡片进入对应组织</span></h1>
+        <h1 class="page-header__title">项目管理<span class="page-header__subtitle">各组织项目运行概览，点击卡片进入对应组织</span></h1>
       </div>
     </div>
 
     <!-- 组织卡片列表（点击跳转 /flows/organization/:id） -->
     <OrgCardList :orgs="orgs" @select="handleOrgSelect" />
 
-    <!-- 全部流程实例 -->
+    <!-- 全部项目 -->
     <div class="section-divider">
-      <h3 class="section-label">全部流程实例</h3>
+      <h3 class="section-label">全部项目</h3>
     </div>
 
     <!-- 实例操作栏 -->
@@ -30,7 +30,7 @@
       </div>
       <div class="instance-toolbar__right">
         <el-input
-          v-model="instanceKeyword" placeholder="搜索实例名称" clearable
+          v-model="instanceKeyword" placeholder="搜索项目名称" clearable
           :prefix-icon="Search" size="default" style="width: 220px"
           @input="handleInstanceSearch"
         />
@@ -41,9 +41,10 @@
     <div class="card">
       <div class="card__body" style="padding:0">
         <el-table :data="instances" stripe v-loading="instanceLoading"
+          :row-class-name="instanceRowClass"
           @row-click="handleInstanceRowClick" style="cursor:pointer"
         >
-          <el-table-column prop="name" label="实例名称" min-width="140">
+          <el-table-column prop="name" label="项目名称" min-width="140">
             <template #default="{ row }">
               <span class="inst-name">{{ row.name }}</span>
             </template>
@@ -83,7 +84,7 @@
         </el-table>
 
         <div v-if="!instanceLoading && instances.length === 0" style="padding:40px 0;text-align:center">
-          <span style="color:var(--el-text-color-secondary);font-size:14px">暂无流程实例</span>
+          <span style="color:var(--el-text-color-secondary);font-size:14px">暂无项目</span>
         </div>
       </div>
     </div>
@@ -101,7 +102,7 @@
 
 <script setup lang="ts">
 /**
- * 流程管理全局入口页 —— 组织卡片 + 全部流程实例（PRD P03）
+ * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
 import { ref, computed, onMounted } from 'vue'
@@ -142,7 +143,7 @@ const instanceFilters = [
 
 // ========== 初始化 ==========
 onMounted(async () => {
-  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '流程管理' }])
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '项目管理' }])
   await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
 })
 
@@ -185,11 +186,20 @@ async function fetchInstances() {
       page_size: instancePageSize.value,
       status: instanceStatusFilter.value === 'all' ? undefined : instanceStatusFilter.value,
       keyword: instanceKeyword.value || undefined,
+      sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
     })
     instances.value = data.items
     instanceTotal.value = data.total
   } catch { /* 拦截器统一处理 */ }
   finally { instanceLoading.value = false }
+}
+
+/** 实例表格行高亮：运行中 urgent/high 加背景色 */
+function instanceRowClass({ row }: { row: InstanceListItem }) {
+  if (row.status !== 'running') return ''
+  if (row.priority === 'urgent') return 'row--priority-urgent'
+  if (row.priority === 'high') return 'row--priority-high'
+  return ''
 }
 
 function handleInstanceFilter(status: string) {
@@ -213,11 +223,11 @@ function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id
 /** 管理员永久删除已终止实例 */
 async function handlePermanentDelete(row: InstanceListItem) {
   try {
-    await ElMessageBox.confirm(`确认永久删除实例「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
+    await ElMessageBox.confirm(`确认永久删除项目「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
   } catch { return }
   try {
     await permanentDeleteInstance(row.id)
-    ElMessage.success('实例已永久删除')
+    ElMessage.success('项目已永久删除')
     fetchInstances()
     fetchStatusCounts()
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
@@ -264,4 +274,10 @@ function instStatusLabel(s: string): string {
 
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
+</style>
+
+<style lang="scss">
+/* 优先级行高亮（仅运行中实例） */
+.row--priority-urgent td { background: #fde8e8 !important; }
+.row--priority-high td { background: #fef3e2 !important; }
 </style>

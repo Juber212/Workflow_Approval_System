@@ -11,7 +11,7 @@ def hash_password(password: str) -> str:
 # 预置角色
 ROLES = [
     {"code": "system_admin", "name": "系统管理员", "description": "维护基础数据，不参与业务"},
-    {"code": "manager", "name": "所长", "description": "设计流程、发起流程、终止流程、终审"},
+    {"code": "manager", "name": "所长", "description": "设计流程、发起项目、终止流程、终审"},
     {"code": "user", "name": "普通用户", "description": "执行节点、上传文件、审批"},
 ]
 

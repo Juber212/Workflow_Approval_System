@@ -39,21 +39,18 @@ defineProps<{
 /** 操作类型中文映射 */
 function logTypeLabel(type: string): string {
   const map: Record<string, string> = {
-    instance_created: '发起实例',
-    node_started: '节点开始',
-    node_submitted: '节点提交',
-    node_completed: '节点完成',
-    check_passed: '校验通过',
-    check_rejected: '校验退回',
-    approval_approved: '审批通过',
-    approval_rejected: '审批退回',
+    initiate: '发起项目',
+    task_submit: '提交任务',
+    check_pass: '校验通过',
+    check_return: '校验退回',
+    approve: '审批通过',
+    reject: '审批退回',
+    final_reject: '终审驳回',
     instance_completed: '流程完成',
-    instance_terminated: '流程终止',
-    instance_rejected: '流程驳回',
+    instance_terminated: '终止项目',
     personnel_changed: '人员变更',
     priority_changed: '优先级变更',
-    file_uploaded: '文件上传',
-    file_deleted: '文件删除',
+    file_supplement: '补交文件',
   }
   return map[type] || type
 }

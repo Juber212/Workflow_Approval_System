@@ -3,12 +3,12 @@
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
-        <h1 class="page-header__title">发起流程实例</h1>
+        <h1 class="page-header__title">发起项目</h1>
         <p class="page-header__subtitle" v-if="selectedTemplate">
           基于「{{ selectedTemplate.name }}」发起，可逐节点调整配置
         </p>
         <p class="page-header__subtitle" v-else>
-          请先选择一个已发布的流程模板
+          请先选择一个已发布的项目模板
         </p>
       </div>
     </div>
@@ -16,7 +16,7 @@
     <!-- 选择模板（未选择时显示） -->
     <div class="card" v-if="!selectedTemplate" v-loading="loadingTemplates">
       <div class="card__header">
-        <h3 class="card__title">选择流程模板</h3>
+        <h3 class="card__title">选择项目模板</h3>
       </div>
       <div class="card__body">
         <div class="template-grid" v-if="publishedTemplates.length > 0">
@@ -72,10 +72,10 @@
       </div>
     </div>
 
-    <!-- 实例信息 -->
+    <!-- 项目信息 -->
     <div class="card" v-if="selectedTemplate">
       <div class="card__header">
-        <h3 class="card__title">实例信息</h3>
+        <h3 class="card__title">项目信息</h3>
       </div>
       <div class="card__body">
         <el-form
@@ -84,10 +84,10 @@
           :rules="formRules"
           label-width="80px"
         >
-          <el-form-item label="实例名称" prop="name">
+          <el-form-item label="项目名称" prop="name">
             <el-input
               v-model="form.name"
-              placeholder="请输入实例名称（2-100字符）"
+              placeholder="请输入项目名称（2-100字符）"
               maxlength="100"
               show-word-limit
               style="max-width: 480px"
@@ -173,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-/** 发起流程实例页面 —— 选择模板 → 填写信息 → 调整节点配置 → 发起 */
+/** 发起项目页面 —— 选择模板 → 填写信息 → 调整节点配置 → 发起 */
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -209,8 +209,8 @@ const form = ref({
 
 const formRules: FormRules = {
   name: [
-    { required: true, message: '请输入实例名称', trigger: 'blur' },
-    { min: 2, max: 100, message: '实例名称需 2-100 个字符', trigger: 'blur' },
+    { required: true, message: '请输入项目名称', trigger: 'blur' },
+    { min: 2, max: 100, message: '项目名称需 2-100 个字符', trigger: 'blur' },
   ],
 }
 

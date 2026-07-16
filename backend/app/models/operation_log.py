@@ -11,7 +11,7 @@ class OperationLog(Base):
     __tablename__ = "operation_logs"
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, comment="自增ID")
-    instance_id: Mapped[int | None] = mapped_column(Integer, comment="所属流程实例")
+    instance_id: Mapped[int | None] = mapped_column(Integer, comment="所属项目")
     operator_type: Mapped[str] = mapped_column(String(20), default="user", comment="操作者类型")
     operator_id: Mapped[int | None] = mapped_column(Integer, comment="操作人；系统操作为NULL")
     triggered_by: Mapped[int | None] = mapped_column(Integer, comment="可选触发人")

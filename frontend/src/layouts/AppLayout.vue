@@ -24,7 +24,7 @@
         <template v-else>
           <router-link to="/dashboard" class="sidebar-brand__icon sidebar-brand__icon--link">流</router-link>
           <div class="sidebar-brand__text">
-            <router-link to="/dashboard" class="sidebar-brand__title">流程审批系统</router-link>
+            <router-link to="/dashboard" class="sidebar-brand__title">项目审批系统</router-link>
             <span class="sidebar-brand__sub">Workflow Approval</span>
           </div>
           <!-- 折叠按钮（展开态显示在 logo 行右侧） -->
@@ -179,17 +179,16 @@ const userStore = useUserStore()
 const isCollapsed = ref(false)
 /** 折叠态下鼠标是否悬停在 logo 上（切换显示折叠图标） */
 const isBrandHovered = ref(false)
-/** 是否在流程设计器页面（隐藏侧边栏，占满全屏） */
+/** 是否在项目设计器页面（隐藏侧边栏，占满全屏） */
 const isDesigner = computed(() => route.path.startsWith('/flows/designer/'))
 
 // ==================== 面包屑 ====================
 const { items: breadcrumbItems } = useBreadcrumb()
 
-/** 面包屑可见条件：首页/设计器/模板详情不显示 */
+/** 面包屑可见条件：首页/设计器不显示 */
 const showBreadcrumb = computed(() => {
   if (route.path === '/dashboard') return false
   if (isDesigner.value) return false
-  if (route.path.startsWith('/flows/detail/')) return false
   return true
 })
 
@@ -230,7 +229,7 @@ interface MenuItem { path: string; label: string; icon: any }
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { path: '/dashboard', label: '首页', icon: MENU_ICONS['/dashboard'] },
-    { path: '/flows', label: '流程管理', icon: MENU_ICONS['/flows'] },
+    { path: '/flows', label: '项目管理', icon: MENU_ICONS['/flows'] },
   ]
   if (isAdmin.value) {
     items.push({ path: '/admin/users', label: '系统管理', icon: MENU_ICONS['/admin/users'] })
@@ -572,7 +571,7 @@ async function handleChangePassword() {
     max-width: var(--content-max-width);
     margin: 0 auto;
   }
-  // 流程设计器占满整个内容区
+  // 项目设计器占满整个内容区
   :deep(.flow-designer) {
     max-width: none;
     margin: calc(-1 * var(--content-padding-y)) calc(-1 * var(--content-padding-x));

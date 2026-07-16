@@ -1,5 +1,5 @@
 <template>
-  <!-- 终止流程确认弹窗 —— 危险操作二次确认 -->
+  <!-- 终止项目确认弹窗 —— 危险操作二次确认 -->
   <el-dialog
     v-model="visible"
     :title="'⚠️ 永久终止并删除文件'"
@@ -11,7 +11,7 @@
     <!-- 当前流程信息 -->
     <div class="term-info">
       <div class="term-info__row">
-        <span class="term-info__label">流程实例</span>
+        <span class="term-info__label">项目</span>
         <span class="term-info__value">{{ instanceName }}</span>
       </div>
       <div class="term-info__row">
@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-/** 终止流程确认弹窗 —— 二次确认 + 终止原因必填 + 危险操作警告 */
+/** 终止项目确认弹窗 —— 二次确认 + 终止原因必填 + 危险操作警告 */
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { terminateInstance } from '@/api/instance'

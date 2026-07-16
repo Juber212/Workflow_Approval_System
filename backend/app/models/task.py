@@ -11,7 +11,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属流程实例")
+    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属项目")
     node_id: Mapped[int] = mapped_column(Integer, ForeignKey("instance_nodes.id"), nullable=False, comment="所属节点")
     assignee_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="负责人")
     status: Mapped[str] = mapped_column(String(20), default="pending", comment="任务状态")

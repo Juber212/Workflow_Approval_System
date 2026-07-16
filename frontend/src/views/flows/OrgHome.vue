@@ -11,12 +11,12 @@
         </p>
       </div>
       <div class="page-header__actions" v-if="isManager">
-        <el-button type="primary" @click="showTemplatePicker = true">发起流程</el-button>
+        <el-button type="primary" @click="showTemplatePicker = true">发起项目</el-button>
       </div>
     </div>
 
-    <!-- 选择模板并填写业务信息（发起流程） -->
-    <el-dialog v-model="showTemplatePicker" title="发起流程" width="560px" @close="resetPickerForm">
+    <!-- 选择模板并填写业务信息（发起项目） -->
+    <el-dialog v-model="showTemplatePicker" title="发起项目" width="560px" @close="resetPickerForm">
       <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px" />
       <el-table
         :data="templateList" v-loading="pickerLoading"
@@ -25,7 +25,7 @@
       >
         <el-table-column prop="name" label="模板名称" min-width="160" />
         <el-table-column prop="node_count" label="节点数" width="80" align="center" />
-        <el-table-column prop="instance_count" label="运行实例" width="80" align="center" />
+        <el-table-column prop="instance_count" label="运行项目" width="80" align="center" />
       </el-table>
 
       <!-- 业务信息表单（选择模板后出现） -->
@@ -53,11 +53,11 @@
     <!-- Tab 切换 -->
     <el-tabs v-model="activeTab" class="org-tabs">
       <!-- 默认选中实例 Tab（P04 规范） -->
-      <el-tab-pane label="流程实例" name="instance" />
-      <el-tab-pane label="流程模板" name="template" />
+      <el-tab-pane label="项目" name="instance" />
+      <el-tab-pane label="项目模板" name="template" />
     </el-tabs>
 
-    <!-- ========== 流程实例 Tab ========== -->
+    <!-- ========== 项目 Tab ========== -->
     <template v-if="activeTab === 'instance'">
       <!-- 状态筛选标签 -->
       <div class="filter-tabs">
@@ -73,7 +73,7 @@
         </button>
         <el-input
           v-model="instanceKeyword"
-          placeholder="搜索实例名称"
+          placeholder="搜索项目名称"
           clearable
           :prefix-icon="Search"
           size="default"
@@ -87,10 +87,11 @@
         <div class="card__body" style="padding:0">
           <el-table
             :data="instances" stripe v-loading="instanceLoading"
+            :row-class-name="instanceRowClass"
             @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)"
             style="cursor:pointer"
           >
-            <el-table-column prop="name" label="实例名称" min-width="140">
+            <el-table-column prop="name" label="项目名称" min-width="140">
               <template #default="{ row }">
                 <span class="inst-name">{{ row.name }}</span>
               </template>
@@ -127,7 +128,7 @@
           </el-table>
 
           <div v-if="!instanceLoading && instances.length === 0" style="padding:40px 0;text-align:center">
-            <span style="color:var(--el-text-color-secondary);font-size:14px">暂无流程实例</span>
+            <span style="color:var(--el-text-color-secondary);font-size:14px">暂无项目</span>
           </div>
         </div>
       </div>
@@ -144,7 +145,7 @@
       </div>
     </template>
 
-    <!-- ========== 流程模板 Tab ========== -->
+    <!-- ========== 项目模板 Tab ========== -->
     <template v-if="activeTab === 'template'">
       <TemplateTable
         :items="templates"
@@ -210,9 +211,15 @@ const userStore = useUserStore()
 
 const isAdmin = computed(() => userStore.isAdmin)
 const isManager = computed(() => userStore.isManager)
-const activeTab = ref('instance')
+/** 当前 Tab，与 URL query 同步（route.query.tab） */
+const activeTab = ref((route.query.tab as string) || 'instance')
 
-// ========== 发起流程：模板选择 + 业务信息弹窗 ==========
+// 浏览器前进/后退时同步 Tab
+watch(() => route.query.tab, (tab) => {
+  if (tab === 'instance' || tab === 'template') activeTab.value = tab
+})
+
+// ========== 发起项目：模板选择 + 业务信息弹窗 ==========
 const showTemplatePicker = ref(false)
 const pickerLoading = ref(false)
 const tplKeyword = ref('')
@@ -319,9 +326,13 @@ onMounted(async () => {
 })
 
 watch(activeTab, (tab) => {
+  // 同步 Tab 到 URL，方便面包屑/浏览器返回保持状态
+  if (route.query.tab !== tab) {
+    router.replace({ query: { ...route.query, tab: tab !== 'instance' ? tab : undefined } })
+  }
   if (tab === 'template') fetchTemplates()
   else if (tab === 'instance') fetchInstances()
-})
+}, { immediate: true })
 
 /** 从组织列表中获取当前所信息 */
 async function fetchOrgInfo() {
@@ -337,10 +348,10 @@ async function fetchOrgInfo() {
   } catch {
     orgName.value = '加载失败'
   }
-  // 面包屑：首页 > 流程管理 > 当前所
+  // 面包屑：首页 > 项目管理 > 当前所
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
-    { label: '流程管理', to: '/flows' },
+    { label: '项目管理', to: '/flows' },
     { label: orgName.value },
   ])
 }
@@ -373,11 +384,20 @@ async function fetchInstances() {
       status: instanceStatusFilter.value === 'all' ? undefined : instanceStatusFilter.value,
       keyword: instanceKeyword.value || undefined,
       organization_id: orgId.value,
+      sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
     })
     instances.value = data.items
     instanceTotal.value = data.total
   } catch { /* 拦截器统一处理 */ }
   finally { instanceLoading.value = false }
+}
+
+/** 实例表格行高亮：运行中 urgent/high 加背景色 */
+function instanceRowClass({ row }: { row: InstanceListItem }) {
+  if (row.status !== 'running') return ''
+  if (row.priority === 'urgent') return 'row--priority-urgent'
+  if (row.priority === 'high') return 'row--priority-high'
+  return ''
 }
 
 function handleInstanceFilter(status: string) {
@@ -393,7 +413,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
   } catch { return }
   try {
     await permanentDeleteInstance(row.id)
-    ElMessage.success('实例已永久删除')
+    ElMessage.success('项目已永久删除')
     fetchInstances()
     fetchStatusCounts()
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
@@ -544,6 +564,10 @@ function instStatusLabel(s: string): string {
 </style>
 
 <style lang="scss">
-/* 发起流程弹窗：选中模板行高亮（非 scoped 才能覆盖 el-table 行样式） */
+/* 发起项目弹窗：选中模板行高亮（非 scoped 才能覆盖 el-table 行样式） */
 .is-selected-row td { background: var(--el-color-primary-light-9) !important; }
+
+/* 优先级行高亮（仅运行中实例） */
+.row--priority-urgent td { background: #fde8e8 !important; }
+.row--priority-high td { background: #fef3e2 !important; }
 </style>

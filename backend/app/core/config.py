@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """应用配置（自动从环境变量 / .env 文件加载）"""
 
     # 应用
-    APP_NAME: str = "企业流程审批系统"
+    APP_NAME: str = "企业项目审批系统"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 

@@ -14,7 +14,7 @@ from app.schemas.task import TaskSaveDraft, TaskSubmit
 from app.services import task_service, file_service
 from app.services.pdf_converter import convert_to_pdf
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, CheckRecord, File
+from app.models import Task, InstanceNode, CheckRecord, File, OperationLog
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus
 from sqlalchemy import select
 
@@ -151,6 +151,18 @@ async def submit_task(
                 status=CheckStatus.PENDING,
             )
             db.add(check_rec)
+
+    # 操作日志
+    db.add(OperationLog(
+        instance_id=task.instance_id,
+        node_id=task.node_id,
+        operator_type="user",
+        operator_id=current_user.id,
+        operation_type="task_submit",
+        round=node.round,
+        description=f"提交了节点「{node.name}」的任务",
+        detail={"node_name": node.name, "round": node.round},
+    ))
 
     await db.commit()
     return ApiResponse.ok(message="任务已提交，等待校验")

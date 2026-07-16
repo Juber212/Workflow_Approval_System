@@ -1,4 +1,4 @@
-"""流程模板业务逻辑 —— 简化版：无版本、无状态，画布即模板"""
+"""项目模板业务逻辑 —— 简化版：无版本、无状态，画布即模板"""
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession

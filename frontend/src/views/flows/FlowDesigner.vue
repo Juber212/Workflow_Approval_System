@@ -4,8 +4,8 @@
     <div class="designer-header">
       <el-page-header @back="handleBack">
         <template #content>
-          <span v-if="isLaunchMode">发起流程 · {{ templateName }}</span>
-          <span v-else>流程设计器 · {{ templateName }}</span>
+          <span v-if="isLaunchMode">发起项目 · {{ templateName }}</span>
+          <span v-else>项目设计器 · {{ templateName }}</span>
         </template>
       </el-page-header>
       <div class="header-actions">
@@ -28,7 +28,7 @@
         <!-- 发起模式工具栏 -->
         <template v-else>
           <el-button @click="handleCancelLaunch">取消</el-button>
-          <el-button type="primary" :loading="launching" @click="showLaunchDialog = true">发起流程</el-button>
+          <el-button type="primary" :loading="launching" @click="showLaunchDialog = true">发起项目</el-button>
         </template>
       </div>
     </div>
@@ -66,11 +66,11 @@
       </el-radio-group>
     </div>
 
-    <!-- 发起流程弹窗 -->
-    <el-dialog v-model="showLaunchDialog" title="发起流程实例" width="480px" @close="launchFormRef?.resetFields()">
+    <!-- 发起项目弹窗 -->
+    <el-dialog v-model="showLaunchDialog" title="发起项目" width="480px" @close="launchFormRef?.resetFields()">
       <el-form ref="launchFormRef" :model="launchForm" :rules="launchRules" label-width="80px" @submit.prevent>
-        <el-form-item label="实例名称" prop="name">
-          <el-input v-model="launchForm.name" placeholder="请输入流程实例名称" maxlength="100" />
+        <el-form-item label="项目名称" prop="name">
+          <el-input v-model="launchForm.name" placeholder="请输入项目名称" maxlength="100" />
         </el-form-item>
         <el-form-item label="优先级" prop="priority">
           <el-select v-model="launchForm.priority" style="width:100%">
@@ -118,7 +118,7 @@ const redoable = ref(false)
 const viewMode = ref<'canvas' | 'list'>('canvas')
 const selectedNodeData = ref<any>(null)
 
-/** 是否为发起流程模式（路由参数 mode=launch） */
+/** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
 /** 是否为新建模板模式（还未入库，首次保存时才创建） */
 const isNewTemplate = computed(() => route.query.new === '1')
@@ -134,10 +134,10 @@ const hasBizInfo = computed(() =>
   bizInfo.value.contract_no !== '' || bizInfo.value.product_model !== '' || bizInfo.value.sales_manager !== ''
 )
 
-/** 发起流程表单 */
+/** 发起项目表单 */
 const launchForm = ref({ name: '', priority: 'normal' as string, description: '' })
 const launchRules: FormRules = {
-  name: [{ required: true, message: '请输入实例名称', trigger: 'blur' }, { min: 2, max: 100, message: '2-100字符', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }, { min: 2, max: 100, message: '2-100字符', trigger: 'blur' }],
 }
 
 /** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
@@ -251,7 +251,7 @@ function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState
 function undo() { canvasRef.value?.getLf()?.undo(); updateUndoRedoState() }
 function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
 
-/** 返回 —— 编辑模式回到上一页，发起模式直接回流程管理 */
+/** 返回 —— 编辑模式回到上一页，发起模式直接回项目管理 */
 function handleBack() {
   if (isLaunchMode.value) router.push('/flows')
   else router.back()
@@ -328,7 +328,7 @@ async function handleLaunch() {
       .map((e: any) => ({ id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId) }))
     await saveDesign(templateId, { nodes, edges })
 
-    // 2. 发起流程实例
+    // 2. 发起项目
     const result = await createInstance({
       template_id: templateId,
       name: launchForm.value.name.trim(),
@@ -343,7 +343,7 @@ async function handleLaunch() {
     router.push(`/flows/instances/${result.id}`)
   } catch (err: any) {
     if (err?.response?.data?.message) ElMessage.error(err.response.data.message)
-    else ElMessage.error('发起流程失败')
+    else ElMessage.error('发起项目失败')
   } finally { launching.value = false }
 }
 </script>

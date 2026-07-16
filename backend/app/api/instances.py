@@ -1,4 +1,4 @@
-"""流程实例 API —— 发起、查询、终止、换人、优先级、补交文件"""
+"""项目 API —— 发起、查询、终止、换人、优先级、补交文件"""
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,7 @@ from app.services.instance_service import (
     permanent_delete_instance,
 )
 
-router = APIRouter(prefix="/api/v1", tags=["流程实例"])
+router = APIRouter(prefix="/api/v1", tags=["项目"])
 
 
 @router.post("/instances")
@@ -37,11 +37,11 @@ async def launch_instance(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """发起流程实例 —— 从模板节点/连线复制生成实例快照"""
+    """发起项目 —— 从模板节点/连线复制生成实例快照"""
 
     result = await create_instance(db, body, current_user)
     await db.commit()
-    return ApiResponse.ok(result, message="流程发起成功")
+    return ApiResponse.ok(result, message="项目发起成功")
 
 
 @router.get("/instances")
@@ -49,13 +49,14 @@ async def get_instances(
     organization_id: int | None = Query(None, description="按组织筛选"),
     status: str | None = Query(None, description="状态筛选，多选用逗号分隔（running,completed,terminated）"),
     priority: str | None = Query(None, description="优先级筛选（urgent/high/normal/low）"),
-    keyword: str | None = Query(None, description="关键词模糊搜索实例名称"),
+    keyword: str | None = Query(None, description="关键词模糊搜索项目名称"),
+    sort_by: str | None = Query(None, description="排序方式：priority 按优先级排序"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """查询流程实例列表
+    """查询项目列表
 
     支持按组织、状态（多选）、优先级筛选，支持实例名称模糊搜索。
     返回当前进度（当前节点序号/总节点数）和当前处理人姓名。
@@ -71,6 +72,7 @@ async def get_instances(
         status=status_list,
         priority=priority,
         keyword=keyword,
+        sort_by=sort_by,
         page=page,
         page_size=page_size,
     )
@@ -108,7 +110,7 @@ async def my_initiated_instances(
     items = [
         {
             "id": i.id, "name": i.name,
-            "status": i.status, "archive_status": i.archive_status,
+            "status": i.status,
             "priority": i.priority, "initiated_at": i.initiated_at.isoformat() if i.initiated_at else None,
             "completed_at": i.completed_at.isoformat() if i.completed_at else None,
             "created_at": i.created_at.isoformat() if i.created_at else None,
@@ -124,7 +126,7 @@ async def get_instance(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """查询流程实例详情
+    """查询项目详情
 
     返回完整聚合数据：基本信息 + 节点列表（含文件/校验/审批） + 进度 + 操作日志分页。
     """
@@ -139,7 +141,7 @@ async def terminate_flow_instance(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """终止流程实例
+    """终止项目
 
     权限：仅发起人。任意未 terminated 状态均可终止（含 completed）。
     效果：级联关闭全部非终态 node/task/check/approval，物理删除全部文件，不可撤销。
@@ -147,7 +149,7 @@ async def terminate_flow_instance(
     result = await terminate_instance(db, instance_id, body.reason, current_user)
     await db.commit()
 
-    return ApiResponse.ok(result, message="流程已终止")
+    return ApiResponse.ok(result, message="项目已终止")
 
 
 @router.put("/instances/{instance_id}/nodes/{node_id}/personnel")
@@ -176,7 +178,7 @@ async def change_instance_priority(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """修改流程优先级
+    """修改项目优先级
 
     权限：仅发起人。仅 running 状态可修改。
     """
@@ -212,13 +214,13 @@ async def delete_instance_permanent(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """永久删除流程实例
+    """永久删除项目
 
     权限：仅系统管理员。仅已终止(terminated)实例可删除。
     级联清除：审批记录、校验记录、文件(物理+DB)、任务、连线、操作日志、节点、实例。
     """
     if not current_user.is_admin():
-        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可永久删除实例")
+        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可永久删除项目")
     await permanent_delete_instance(db, instance_id)
     await db.commit()
-    return ApiResponse.ok(message="实例已永久删除")
+    return ApiResponse.ok(message="项目已永久删除")

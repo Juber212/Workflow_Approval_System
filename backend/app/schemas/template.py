@@ -1,4 +1,4 @@
-"""流程模板相关 Schema —— 简化版：无版本、无状态"""
+"""项目模板相关 Schema —— 简化版：无版本、无状态"""
 
 from datetime import datetime
 from pydantic import BaseModel, Field

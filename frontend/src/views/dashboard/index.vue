@@ -35,7 +35,7 @@
       <div class="card__header"><span class="card__title">⚠️ 超期预警</span></div>
       <div class="card__body" style="padding:0">
         <el-table :data="data.overdue_list" stripe v-if="data.overdue_list.length > 0">
-          <el-table-column prop="instance_name" label="流程实例" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="instance_name" label="项目" min-width="150" show-overflow-tooltip />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
           <el-table-column prop="assignee_name" label="负责人" min-width="68" />
           <el-table-column label="截止时间" min-width="96">
@@ -59,7 +59,7 @@
     <!-- ====== 饼图 + 卡点追踪 ====== -->
     <div class="dash-row">
       <div class="card dash-pie">
-        <div class="card__header"><span class="card__title">各所运行中实例分布</span></div>
+        <div class="card__header"><span class="card__title">各所运行中项目分布</span></div>
         <div class="card__body" style="display:flex;align-items:center;justify-content:center;padding:24px 20px;flex:1">
           <PieChart :items="orgPieItems" @click="handlePieClick" />
         </div>
@@ -87,7 +87,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column prop="instance_name" label="流程实例" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="instance_name" label="项目" min-width="120" show-overflow-tooltip />
             <el-table-column prop="organization_name" label="所属组织" min-width="80" />
             <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
             <el-table-column prop="current_assignee_name" label="负责人" min-width="64" />
@@ -132,9 +132,9 @@
                 <span class="ov-title">{{ org.org_name }}</span>
                 <el-tag size="small" effect="plain" style="margin-left:8px">运行中 {{ org.running_count }}</el-tag>
               </template>
-              <div v-if="org.instances.length === 0" class="ov-empty">暂无运行中实例</div>
+              <div v-if="org.instances.length === 0" class="ov-empty">暂无运行中项目</div>
               <el-table v-else :data="org.instances" size="small" stripe @row-click="(row: any) => $router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
-                <el-table-column prop="name" label="实例名称" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
                 <el-table-column prop="current_node_name" label="当前节点" min-width="100" />
                 <el-table-column prop="current_assignee_name" label="负责人" min-width="72" />
                 <el-table-column label="优先级" min-width="64" align="center">
@@ -216,7 +216,7 @@ function onExpandChange(row: any, rows: any[]) {
   expandedRows.value = rows.map((r: any) => r.instance_id)
 }
 
-/** 饼图数据源：各所运行中实例分布（仅 running_count > 0 的组织） */
+/** 饼图数据源：各所运行中项目分布（仅 running_count > 0 的组织） */
 const orgPieItems = computed(() => {
   return data.org_overview
     .filter(o => o.running_count > 0)
@@ -239,7 +239,15 @@ function handlePieClick(orgId: string) {
     activeOrgs.value.push(id)             // 未展开 → 展开
   }
 }
-function tableRowClass({ row }: any) { return row.overdue_status === '已逾期' ? 'r--red' : row.overdue_status === '即将逾期' ? 'r--yel' : '' }
+function tableRowClass({ row }: any) {
+  // 逾期状态优先高亮
+  if (row.overdue_status === '已逾期') return 'r--red'
+  if (row.overdue_status === '即将逾期') return 'r--yel'
+  // 运行中实例按优先级高亮
+  if (row.priority === 'urgent') return 'r--pri-urgent'
+  if (row.priority === 'high') return 'r--pri-high'
+  return ''
+}
 function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将逾期' ? 'od--y' : 'od--g' }
 function fmt(d: string | null) { return d ? d.substring(0, 10) : '—' }
 function pri(p: string) { const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }; return m[p] || p }
@@ -341,4 +349,6 @@ function chainNodeClass(seg: string): string {
 /* 全局：表格行高亮 */
 .r--red td { background: #fef0f0 !important; }
 .r--yel td { background: #fffaf0 !important; }
+.r--pri-urgent td { background: #fde8e8 !important; }
+.r--pri-high td { background: #fef3e2 !important; }
 </style>

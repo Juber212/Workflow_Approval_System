@@ -1,4 +1,4 @@
-"""流程设计器 API —— 画布数据保存/加载 + 单节点/连线 CRUD"""
+"""项目设计器 API —— 画布数据保存/加载 + 单节点/连线 CRUD"""
 
 from fastapi import APIRouter, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,7 @@ from app.services.designer_service import (
 )
 from app.api.deps import get_current_active_user, CurrentUser
 
-router = APIRouter(prefix="/api/v1", tags=["流程设计器"])
+router = APIRouter(prefix="/api/v1", tags=["项目设计器"])
 
 
 @router.put("/templates/{template_id}/design")

@@ -4,7 +4,7 @@ import enum
 
 
 class TemplateStatus(str, enum.Enum):
-    """流程模板状态"""
+    """项目模板状态"""
     DRAFT = "draft"
     PUBLISHED = "published"
     DISABLED = "disabled"
@@ -22,12 +22,6 @@ class InstanceStatus(str, enum.Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     TERMINATED = "terminated"
-
-
-class ArchiveStatus(str, enum.Enum):
-    """归档状态"""
-    NOT_ARCHIVED = "not_archived"
-    ARCHIVED = "archived"
 
 
 class Priority(str, enum.Enum):

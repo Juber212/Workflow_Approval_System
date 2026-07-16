@@ -11,7 +11,7 @@ class Approval(Base):
     __tablename__ = "approvals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属流程实例")
+    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属项目")
     node_id: Mapped[int] = mapped_column(Integer, ForeignKey("instance_nodes.id"), nullable=False, comment="所属节点")
     task_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tasks.id"), comment="关联Task（结束节点为NULL）")
     approver_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="审批人")

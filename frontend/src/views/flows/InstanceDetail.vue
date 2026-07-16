@@ -1,8 +1,8 @@
 <template>
-  <!-- 流程实例详情页 —— 基本信息 + 进度条 + 节点卡片 + 操作日志 -->
+  <!-- 项目详情页 —— 基本信息 + 进度条 + 节点卡片 + 操作日志 -->
   <div class="instance-detail" v-loading="loading">
     <!-- 空数据 -->
-    <el-empty v-if="!loading && !detail" description="实例不存在或无权访问" :image-size="60" />
+    <el-empty v-if="!loading && !detail" description="项目不存在或无权访问" :image-size="60" />
 
     <template v-if="detail">
       <!-- 粘性头部：基本信息 + 进度 + 操作 -->
@@ -84,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-/** 流程实例详情页 —— 编排子组件，处理数据加载与用户交互 */
+/** 项目详情页 —— 编排子组件，处理数据加载与用户交互 */
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -133,17 +133,17 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getInstanceDetail(id)
-    // 面包屑：首页 > 流程管理 > XX所 > 实例详情
+    // 面包屑：首页 > 项目管理 > XX所 > 项目详情
     if (detail.value) {
       setBreadcrumb([
         { label: '首页', to: '/dashboard' },
-        { label: '流程管理', to: '/flows' },
+        { label: '项目管理', to: '/flows' },
         { label: detail.value.organization_name, to: `/flows/organization/${detail.value.organization_id}` },
         { label: detail.value.name },
       ])
     }
   } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '加载实例详情失败'
+    const msg = err?.response?.data?.message || err?.message || '加载项目详情失败'
     ElMessage.error(msg)
   } finally {
     loading.value = false

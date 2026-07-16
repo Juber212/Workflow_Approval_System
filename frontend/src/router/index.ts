@@ -12,7 +12,7 @@ declare module 'vue-router' {
   }
 }
 
-/** 路由配置 —— 一级菜单：Dashboard / 流程管理 / 个人中心 / 系统管理 */
+/** 路由配置 —— 一级菜单：Dashboard / 项目管理 / 个人中心 / 系统管理 */
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
@@ -29,7 +29,7 @@ const routes: RouteRecordRaw[] = [
         path: 'flows',
         name: 'Flows',
         component: () => import('@/views/flows/index.vue'),
-        meta: { title: '流程管理' },
+        meta: { title: '项目管理' },
       },
       {
         path: 'flows/organization/:orgId',
@@ -47,13 +47,13 @@ const routes: RouteRecordRaw[] = [
         path: 'flows/designer/:id',
         name: 'FlowDesigner',
         component: () => import('@/views/flows/FlowDesigner.vue'),
-        meta: { title: '流程设计器' },
+        meta: { title: '项目设计器' },
       },
       {
         path: 'flows/instances/:id',
         name: 'InstanceDetail',
         component: () => import('@/views/flows/InstanceDetail.vue'),
-        meta: { title: '实例详情' },
+        meta: { title: '项目详情' },
       },
       {
         path: 'profile',

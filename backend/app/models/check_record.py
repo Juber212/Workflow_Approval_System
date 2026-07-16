@@ -11,7 +11,7 @@ class CheckRecord(Base):
     __tablename__ = "check_records"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属流程实例")
+    instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属项目")
     node_id: Mapped[int] = mapped_column(Integer, ForeignKey("instance_nodes.id"), nullable=False, comment="所属节点")
     task_id: Mapped[int] = mapped_column(Integer, ForeignKey("tasks.id"), nullable=False, comment="关联Task")
     checker_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="校验人")
