@@ -20,6 +20,7 @@ from app.models.check_record import CheckRecord
 from app.models.approval import Approval
 from app.models.file import File
 from app.models.operation_log import OperationLog
+from app.models.node_preset import NodePreset
 
 __all__ = [
     "TemplateStatus", "VersionStatus", "InstanceStatus", "Priority",
@@ -27,5 +28,5 @@ __all__ = [
     "Organization", "User", "Role", "UserRole", "SystemConfig",
     "FlowTemplate", "TemplateNode", "TemplateEdge",
     "FlowInstance", "InstanceNode", "InstanceEdge",
-    "Task", "CheckRecord", "Approval", "File", "OperationLog",
+    "Task", "CheckRecord", "Approval", "File", "OperationLog", "NodePreset",
 ]
