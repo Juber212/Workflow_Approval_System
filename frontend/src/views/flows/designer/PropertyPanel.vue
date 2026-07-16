@@ -20,9 +20,21 @@
     <div v-else class="panel-form">
       <div class="panel-title">
         <span class="node-label">工作节点配置</span>
-        <el-tag size="small" :type="isConfigured ? 'success' : 'warning'">
-          {{ isConfigured ? '已配置' : '未配置' }}
-        </el-tag>
+        <div class="panel-title__right">
+          <el-tag size="small" :type="isConfigured ? 'success' : 'warning'">
+            {{ isConfigured ? '已配置' : '未配置' }}
+          </el-tag>
+          <el-button
+            v-show="isConfigured"
+            text
+            size="small"
+            type="primary"
+            @click="emit('save-as-preset', form)"
+            style="margin-left: 6px"
+          >
+            💾 保存为预设
+          </el-button>
+        </div>
       </div>
 
       <el-form
@@ -153,6 +165,11 @@ const props = defineProps<{
   lf?: any
   /** 当前选中节点的 LogicFlow 数据 */
   nodeData?: any
+}>()
+
+/** emit 事件 */
+const emit = defineEmits<{
+  'save-as-preset': [formData: typeof form]
 }>()
 
 /** 表单引用 */
@@ -346,6 +363,8 @@ watch(() => props.nodeData, () => {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 16px;
+
+    &__right { display: flex; align-items: center; }
 
     .node-label {
       font-size: 15px;

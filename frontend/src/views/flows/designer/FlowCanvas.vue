@@ -138,8 +138,8 @@ onUnmounted(() => {
   lf.value?.destroy()
 })
 
-/** 添加工作节点 */
-function addWorkNode(x?: number, y?: number) {
+/** 添加工作节点（可选预设配置） */
+function addWorkNode(x?: number, y?: number, presetProperties?: Record<string, any>) {
   const instance = lf.value
   if (!instance) return
 
@@ -152,16 +152,22 @@ function addWorkNode(x?: number, y?: number) {
     y = cy + (Math.random() - 0.5) * 100
   }
 
+  // 默认属性
+  const defaults = {
+    name: `节点 ${workNodeCounter++}`,
+    is_start: false, is_end: false,
+    require_file: true,
+    approval_strategy: 'all_approve',
+    time_limit_days: 3,
+  }
+
+  // 合并预设属性（预设优先），preset name 不自动加计数器
+  const merged = { ...defaults, ...(presetProperties || {}) }
+
   instance.addNode({
     id: `work-${Date.now()}`,
     type: 'work-node', x, y,
-    properties: {
-      name: `节点 ${workNodeCounter++}`,
-      is_start: false, is_end: false,
-      require_file: true,
-      approval_strategy: 'all_approve',
-      time_limit_days: 3,
-    },
+    properties: merged,
   })
 }
 

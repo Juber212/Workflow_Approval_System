@@ -52,9 +52,9 @@
     <!-- 主体区域：画布 + 面板 -->
     <div class="designer-body" v-loading="loading">
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
-        <NodePanel :lf="canvasRef?.getLf() ?? null" @add="handleAddNode" />
+        <NodePanel :lf="canvasRef?.getLf() ?? null" :presets="presets" @add="handleAddNode" @edit-preset="handleEditPreset" @delete-preset="handleDeletePreset" />
         <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
-        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" />
+        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" @save-as-preset="handleSaveAsPreset" />
       </div>
       <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
     </div>
@@ -89,6 +89,14 @@
         <el-button type="primary" :loading="launching" @click="handleLaunch">确认发起</el-button>
       </template>
     </el-dialog>
+
+    <!-- 预设编辑弹窗 -->
+    <PresetEditor
+      v-model="presetEditorVisible"
+      :initial="editingPreset ? editPresetToFormData(editingPreset) : pendingPresetData"
+      :editing-id="editingPreset?.id"
+      @saved="onPresetSaved"
+    />
   </div>
 </template>
 
@@ -102,7 +110,9 @@ import { createInstance } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
 import NodePanel from './designer/NodePanel.vue'
 import PropertyPanel from './designer/PropertyPanel.vue'
+import PresetEditor from './designer/PresetEditor.vue'
 import NodeListView from './designer/NodeListView.vue'
+import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
 
 const route = useRoute()
 const router = useRouter()
@@ -117,6 +127,14 @@ const undoable = ref(false)
 const redoable = ref(false)
 const viewMode = ref<'canvas' | 'list'>('canvas')
 const selectedNodeData = ref<any>(null)
+
+/** 预设列表 */
+const presets = ref<PresetItem[]>([])
+/** 预设编辑弹窗状态 */
+const presetEditorVisible = ref(false)
+const editingPreset = ref<PresetItem | null>(null)  // null = 新建，有值 = 编辑
+/** 待传递给 PresetEditor 的预填数据 */
+const pendingPresetData = ref<PresetFormData | null>(null)
 
 /** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
@@ -194,6 +212,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
+  fetchPresets() // 加载预设列表
 
   if (isNewTemplate.value) {
     // 新建模板：从 query 读取名称，画布预置开始+结束节点
@@ -246,7 +265,21 @@ function updateUndoRedoState(lf?: any) {
   redoable.value = instance.history.redoAble()
 }
 
-function handleAddNode() { canvasRef.value?.addWorkNode(); updateUndoRedoState() }
+/** 处理 NodePanel 的 add 事件 —— 普通节点 / 预设节点 */
+function handleAddNode(preset?: PresetItem) {
+  if (!preset) {
+    // 空白工作节点
+    canvasRef.value?.addWorkNode()
+  } else {
+    // 预设节点：构建 properties
+    const props = buildPresetProperties(preset)
+    // 人员失效检测
+    validatePresetUsers(preset)
+    canvasRef.value?.addWorkNode(undefined, undefined, props)
+  }
+  updateUndoRedoState()
+}
+
 function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }
 function undo() { canvasRef.value?.getLf()?.undo(); updateUndoRedoState() }
 function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
@@ -258,6 +291,115 @@ function handleBack() {
 }
 
 function handleCancelLaunch() { router.push('/flows') }
+
+// ==================== 预设相关 ====================
+
+/** 加载当前用户的预设列表 */
+async function fetchPresets() {
+  try {
+    const res = await getPresets()
+    presets.value = res.items || []
+  } catch { /* 静默失败，预设列表为空 */ }
+}
+
+/** 从 PresetItem 构建节点 properties */
+function buildPresetProperties(preset: PresetItem): Record<string, any> {
+  return {
+    name: preset.node_name,
+    is_start: false, is_end: false,
+    assignee_id: preset.assignee_id ?? null,
+    assignee_name: preset.assignee_name || null,
+    checkers: preset.checkers?.map(c => c.user_id) || null,
+    checkers_names: preset.checkers_names || null,
+    approvers: preset.approvers?.map(a => a.user_id) || null,
+    approvers_names: preset.approvers_names || null,
+    time_limit_days: preset.time_limit_days ?? null,
+    require_file: preset.require_file ?? true,
+    approval_strategy: 'all_approve',
+  }
+}
+
+/** 检测预设中的人员是否在当前系统中有效 */
+function validatePresetUsers(preset: PresetItem) {
+  // 从 UserSelector 缓存中检查（简单方案：根据 *_name 是否为空判断）
+  const missing: string[] = []
+  if (preset.assignee_id && !preset.assignee_name) {
+    missing.push(`负责人(ID:${preset.assignee_id})`)
+  }
+  // 校验人检测
+  if (preset.checkers) {
+    for (let i = 0; i < preset.checkers.length; i++) {
+      const name = preset.checkers_names?.[i]
+      if (!name) missing.push(`校验人(ID:${preset.checkers[i].user_id})`)
+    }
+  }
+  // 审批人检测
+  if (preset.approvers) {
+    for (let i = 0; i < preset.approvers.length; i++) {
+      const name = preset.approvers_names?.[i]
+      if (!name) missing.push(`审批人(ID:${preset.approvers[i].user_id})`)
+    }
+  }
+  // toast 提示
+  if (missing.length > 0) {
+    import('element-plus').then(({ ElMessage }) => {
+      ElMessage.warning(`预设「${preset.name}」中的以下人员已不可用：${missing.join('、')}`)
+    })
+  }
+}
+
+/** 打开预设编辑弹窗（新建 / 编辑） */
+function handleEditPreset(preset?: PresetItem) {
+  editingPreset.value = preset || null
+  presetEditorVisible.value = true
+}
+
+/** 删除预设 */
+async function handleDeletePreset(preset: PresetItem) {
+  try {
+    await import('element-plus').then(({ ElMessageBox }) =>
+      ElMessageBox.confirm(`确定删除预设「${preset.name}」？`, '删除确认', { type: 'warning' })
+    )
+    await deletePreset(preset.id)
+    import('element-plus').then(({ ElMessage }) => ElMessage.success('预设已删除'))
+    await fetchPresets()
+  } catch { /* 取消或失败 */ }
+}
+
+/** PropertyPanel "保存为预设"事件 */
+function handleSaveAsPreset(formData: any) {
+  editingPreset.value = null  // 新建模式
+  presetEditorVisible.value = true
+  // 将 formData 暂存，PresetEditor 打开时预填
+  pendingPresetData.value = {
+    name: formData.name || '',
+    node_name: formData.name || '',
+    assignee_id: formData.assignee_id,
+    checkers: formData.checkers?.map((id: number) => ({ user_id: id })) || null,
+    approvers: formData.approvers?.map((id: number) => ({ user_id: id })) || null,
+    time_limit_days: formData.time_limit_days,
+    require_file: formData.require_file,
+  }
+}
+
+/** PresetEditor 保存成功回调 */
+async function onPresetSaved() {
+  await fetchPresets()
+  pendingPresetData.value = null
+}
+
+/** 将 PresetItem 转为 PresetFormData（编辑场景） */
+function editPresetToFormData(preset: PresetItem): PresetFormData {
+  return {
+    name: preset.name,
+    node_name: preset.node_name,
+    assignee_id: preset.assignee_id,
+    checkers: preset.checkers,
+    approvers: preset.approvers,
+    time_limit_days: preset.time_limit_days,
+    require_file: preset.require_file,
+  }
+}
 
 /** 保存模板设计 */
 async function handleSave() {
