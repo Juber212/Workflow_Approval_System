@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 import os
 import uuid
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token, hash_password
 from app.core.exceptions import AppException
@@ -156,8 +157,8 @@ async def upload_signature(
     if user is None:
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
-    # 创建存储目录
-    upload_dir = os.path.join("storage", "signatures")
+    # 创建存储目录（使用配置中的 STORAGE_ROOT）
+    upload_dir = os.path.join(settings.STORAGE_ROOT, "signatures")
     os.makedirs(upload_dir, exist_ok=True)
 
     # 删除旧签名文件（如果存在）
