@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
-from app.api.deps import get_current_active_user, CurrentUser
+from app.models import FlowTemplate
+from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org
 from app.schemas.common import ApiResponse
 from app.schemas.instance import (
     CreateInstanceRequest,
@@ -36,7 +37,16 @@ async def launch_instance(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """发起项目 —— 从模板节点/连线复制生成实例快照"""
+    """发起项目 —— 仅本所所长可从本所模板发起"""
+
+    # 校验权限：仅本所所长
+    require_manager(current_user)
+    tpl_org = (await db.execute(
+        select(FlowTemplate.organization_id).where(FlowTemplate.id == body.template_id)
+    )).scalar_one_or_none()
+    if tpl_org is None:
+        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+    require_same_org(current_user, tpl_org)
 
     result = await create_instance(db, body, current_user)
     await db.commit()

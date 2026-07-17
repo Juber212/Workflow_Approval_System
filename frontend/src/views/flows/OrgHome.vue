@@ -10,7 +10,7 @@
           <span v-if="orgInfo.latest_update_time"> · 最近更新 {{ fmtTime(orgInfo.latest_update_time) }}</span>
         </p>
       </div>
-      <div class="page-header__actions" v-if="isManager">
+      <div class="page-header__actions" v-if="isOrgManager">
         <el-button type="primary" @click="showTemplatePicker = true">发起项目</el-button>
       </div>
     </div>
@@ -151,6 +151,7 @@
         :items="templates"
         :loading="tplLoading"
         :total="tplTotal"
+        :can-manage="isOrgManager"
         @search="handleTplSearch"
         @create="handleCreate"
         @detail="(id: number) => router.push(`/flows/detail/${id}`)"
@@ -211,6 +212,12 @@ const userStore = useUserStore()
 
 const isAdmin = computed(() => userStore.isAdmin)
 const isManager = computed(() => userStore.isManager)
+/** 当前用户是否为本所所长（仅本所 manager 可管理模板和发起流程） */
+const isOrgManager = computed(() => {
+  if (!isManager.value) return false
+  const orgId = Number(route.params.orgId)
+  return userStore.userInfo?.organization_id === orgId
+})
 /** 当前 Tab，与 URL query 同步（route.query.tab） */
 const activeTab = ref((route.query.tab as string) || 'instance')
 

@@ -47,7 +47,7 @@ const routes: RouteRecordRaw[] = [
         path: 'flows/designer/:id',
         name: 'FlowDesigner',
         component: () => import('@/views/flows/FlowDesigner.vue'),
-        meta: { title: '项目设计器' },
+        meta: { title: '项目设计器', roles: ['manager'] },
       },
       {
         path: 'flows/instances/:id',

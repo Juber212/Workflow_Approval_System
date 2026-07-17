@@ -66,3 +66,15 @@ def require_admin(current_user: CurrentUser) -> None:
     """要求系统管理员权限，否则抛出 403（供各 Admin API 复用）"""
     if not current_user.is_admin():
         raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")
+
+
+def require_manager(current_user: CurrentUser) -> None:
+    """要求所长权限，否则抛出 403（供模板/实例/设计器 API 复用）"""
+    if not current_user.is_manager():
+        raise AppException(ErrorCode.FORBIDDEN, "仅所长可执行此操作")
+
+
+def require_same_org(current_user: CurrentUser, org_id: int) -> None:
+    """要求当前用户属于指定组织，否则抛出 403（防止跨所操作）"""
+    if current_user.organization_id != org_id:
+        raise AppException(ErrorCode.FORBIDDEN, "不可跨所操作，仅本所所长可执行此操作")

@@ -9,7 +9,7 @@
         <template #header>
           <div class="tpl-card__header">
             <span class="tpl-card__title">基础信息</span>
-            <el-button type="primary" size="default" @click="$router.push(`/flows/designer/${detail.id}`)">
+            <el-button v-if="isOrgManager" type="primary" size="default" @click="$router.push(`/flows/designer/${detail.id}`)">
               编辑流程
             </el-button>
           </div>
@@ -105,13 +105,21 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getTemplateDetail, type TemplateDetail, type TemplateNodeItem } from '@/api/template'
+import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const { setBreadcrumb } = useBreadcrumb()
 const loading = ref(false)
 const detail = ref<TemplateDetail | null>(null)
+
+/** 当前用户是否为本模板所属组织的所长 */
+const isOrgManager = computed(() => {
+  if (!detail.value || !userStore.isManager) return false
+  return userStore.userInfo?.organization_id === detail.value.organization_id
+})
 
 // ========== 流程链：从边数据构建节点有序列表 ==========
 const flowChain = computed(() => {

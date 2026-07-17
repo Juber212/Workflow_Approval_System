@@ -9,7 +9,7 @@
         style="width: 220px"
         @change="emitSearch"
       />
-      <el-button type="primary" @click="$emit('create')">新建模板</el-button>
+      <el-button v-if="canManage" type="primary" @click="$emit('create')">新建模板</el-button>
     </div>
 
     <!-- 表格 -->
@@ -27,13 +27,15 @@
       <el-table-column label="操作" min-width="200" fixed="right">
         <template #default="{ row }">
           <el-button size="small" text type="primary" @click="$emit('detail', row.id)">详情</el-button>
-          <el-button size="small" text type="primary" @click="$emit('design', row.id)">设计</el-button>
-          <el-button size="small" text type="primary" @click="$emit('edit', row)">编辑</el-button>
-          <el-popconfirm title="确认删除？" @confirm="$emit('delete', row.id)">
-            <template #reference>
-              <el-button size="small" text type="danger">删除</el-button>
-            </template>
-          </el-popconfirm>
+          <template v-if="canManage">
+            <el-button size="small" text type="primary" @click="$emit('design', row.id)">设计</el-button>
+            <el-button size="small" text type="primary" @click="$emit('edit', row)">编辑</el-button>
+            <el-popconfirm title="确认删除？" @confirm="$emit('delete', row.id)">
+              <template #reference>
+                <el-button size="small" text type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -60,6 +62,8 @@ defineProps<{
   items: TemplateItem[]
   loading: boolean
   total: number
+  /** 当前用户是否可管理模板（本所所长），控制操作按钮显隐 */
+  canManage?: boolean
 }>()
 
 const emit = defineEmits<{

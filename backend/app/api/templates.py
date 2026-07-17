@@ -1,16 +1,20 @@
 """项目模板 API —— 简化版"""
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.schemas.template import TemplateCreate, TemplateUpdate
+from app.models import FlowTemplate
 from app.services.template_service import (
     get_organization_summaries, list_templates, create_template,
     get_template_detail, update_template, delete_template,
 )
-from app.api.deps import get_current_active_user, CurrentUser
+from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org
 
 router = APIRouter(prefix="/api/v1", tags=["项目模板"])
 
@@ -53,7 +57,9 @@ async def post_template(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """创建模板 —— 自动生成开始和结束节点"""
+    """创建模板 —— 仅本所所长可创建"""
+    require_manager(current_user)
+    require_same_org(current_user, data.organization_id)
     tpl = await create_template(db, data, current_user.id)
     await db.commit()
     return ApiResponse.ok({"id": tpl.id, "name": tpl.name}, message="模板创建成功")
@@ -76,7 +82,14 @@ async def put_template(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """更新模板基本信息"""
+    """更新模板基本信息 —— 仅本所所长可编辑"""
+    require_manager(current_user)
+    tpl_org = (await db.execute(
+        select(FlowTemplate.organization_id).where(FlowTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if tpl_org is None:
+        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+    require_same_org(current_user, tpl_org)
     tpl = await update_template(db, template_id, data)
     await db.commit()
     return ApiResponse.ok({"id": tpl.id, "name": tpl.name}, message="模板信息已更新")
@@ -88,7 +101,14 @@ async def del_template(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """删除模板"""
+    """删除模板 —— 仅本所所长可删除"""
+    require_manager(current_user)
+    tpl_org = (await db.execute(
+        select(FlowTemplate.organization_id).where(FlowTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if tpl_org is None:
+        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+    require_same_org(current_user, tpl_org)
     await delete_template(db, template_id)
     await db.commit()
     return ApiResponse.ok(message="模板已删除")
