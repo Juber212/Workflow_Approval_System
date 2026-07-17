@@ -35,5 +35,4 @@ class OrganizationListItem(BaseModel):
     manager_name: str | None = None  # 计算字段：所长姓名
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

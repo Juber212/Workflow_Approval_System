@@ -61,8 +61,7 @@ class UserListItem(BaseModel):
     is_active: bool = True
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class UserDetail(BaseModel):
@@ -79,5 +78,4 @@ class UserDetail(BaseModel):
     is_active: bool = True
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

@@ -11,5 +11,4 @@ class RoleListItem(BaseModel):
     description: str | None = None
     user_count: int = 0  # 拥有该角色的用户数
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

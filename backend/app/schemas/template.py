@@ -31,8 +31,7 @@ class TemplateListItem(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class TemplateDetail(BaseModel):
@@ -51,8 +50,7 @@ class TemplateDetail(BaseModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class OrgTemplateSummary(BaseModel):

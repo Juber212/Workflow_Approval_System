@@ -10,8 +10,7 @@ class ConfigItem(BaseModel):
     config_value: str
     description: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ConfigUpdateItem(BaseModel):

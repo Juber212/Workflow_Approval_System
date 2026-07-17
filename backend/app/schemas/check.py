@@ -15,8 +15,7 @@ class CheckListItem(BaseModel):
     status: str  # pending/passed/returned/terminated
     created_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class CheckDetail(BaseModel):
