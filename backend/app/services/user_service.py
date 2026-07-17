@@ -1,5 +1,4 @@
 """用户管理业务逻辑 —— 列表/新增/编辑/启禁用/重置密码"""
-import re
 
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -1,7 +1,7 @@
 """任务服务 —— 待办列表、任务详情、提交、草稿保存"""
 from datetime import datetime
 
-from sqlalchemy import select, func, or_, case
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 

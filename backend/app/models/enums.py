@@ -3,19 +3,6 @@
 import enum
 
 
-class TemplateStatus(str, enum.Enum):
-    """项目模板状态"""
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    DISABLED = "disabled"
-
-
-class VersionStatus(str, enum.Enum):
-    """版本状态"""
-    PUBLISHED = "published"
-    DISABLED = "disabled"
-
-
 class InstanceStatus(str, enum.Enum):
     """流程实例主状态"""
     CREATED = "created"

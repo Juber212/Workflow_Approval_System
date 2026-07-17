@@ -1,7 +1,7 @@
 """校验服务 —— 校验列表、详情、通过、退回"""
 from datetime import datetime
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException

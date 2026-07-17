@@ -1,7 +1,7 @@
 """Dashboard 服务 —— 全局统计数据聚合（PRD §4）"""
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func, case, text
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (

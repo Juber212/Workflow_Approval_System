@@ -6,7 +6,7 @@ import uuid
 from fastapi import UploadFile
 from datetime import datetime
 
-from sqlalchemy import select, func, text, or_, case, delete as sql_delete, update as sql_update
+from sqlalchemy import select, func, case, delete as sql_delete, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 

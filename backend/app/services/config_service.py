@@ -1,7 +1,5 @@
 """系统配置服务 —— 内存缓存 + 定期刷新"""
-import asyncio
 import logging
-from typing import Optional
 
 from sqlalchemy import select
 
@@ -16,7 +14,6 @@ class ConfigService:
     def __init__(self):
         self._cache: dict[str, SystemConfig] = {}
         self._loaded = False
-        self._refresh_task: Optional[asyncio.Task] = None
 
     @property
     def is_loaded(self) -> bool:
