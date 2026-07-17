@@ -136,10 +136,12 @@ function openEdit(row: OrgItem) {
 
 async function handleFormSubmit(data: { name: string; description: string | null }) {
   if (editingOrg.value) {
-    const org = list.value.find(o => o.name === editingOrg.value!.name)
+    const org = list.value.find(o => o.name === editingOrg.value?.name)
     if (org) {
       await updateOrganization(org.id, data)
       ElMessage.success('组织信息已更新')
+    } else {
+      ElMessage.error('组织不存在，可能已被删除')
     }
   } else {
     await createOrganization(data)

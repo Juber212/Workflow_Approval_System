@@ -220,8 +220,13 @@ function openEdit(row: UserItem) {
 
 async function handleFormSubmit(data: any) {
   if (editingUser.value) {
-    // 编辑 —— 从 initialData 中取 username 对应的 user id
-    await updateUser(list.value.find(u => u.username === editingUser.value!.username)!.id, {
+    // 编辑 —— 从列表中查找用户 ID 并更新
+    const target = list.value.find(u => u.username === editingUser.value?.username)
+    if (!target) {
+      ElMessage.error('用户不存在，可能已被删除')
+      return
+    }
+    await updateUser(target.id, {
       real_name: data.real_name,
       organization_id: data.organization_id,
       role_ids: data.role_ids,
