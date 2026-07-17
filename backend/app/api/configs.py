@@ -20,7 +20,7 @@ async def get_configs(
     """系统配置列表 —— 从内存缓存读取"""
     require_admin(current_user)
 
-    all_configs = config_service._cache
+    all_configs = config_service.get_all_items()
     items = [
         ConfigItem(
             id=cfg.id,

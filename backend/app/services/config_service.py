@@ -44,6 +44,10 @@ class ConfigService:
         """返回所有配置项 key→value 映射"""
         return {k: v.config_value for k, v in self._cache.items()}
 
+    def get_all_items(self) -> list:
+        """返回所有配置项原始对象列表（供 API 层使用）"""
+        return list(self._cache.values())
+
     async def load(self, session_factory) -> None:
         """从数据库加载全部配置到缓存"""
         async with session_factory() as session:
