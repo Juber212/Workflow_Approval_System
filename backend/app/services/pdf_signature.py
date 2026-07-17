@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models import SystemConfig, Approval, User, File
 
 
 # ─── 签名配置默认值 ────────────────────────────────────────────
@@ -30,8 +31,6 @@ _SIG_DEFAULTS = {
 
 async def _get_signature_configs(db: AsyncSession) -> dict:
     """从 system_configs 表读取签名位置配置，缺失时使用默认值"""
-    from app.models import SystemConfig
-
     keys = list(_SIG_DEFAULTS.keys())
     result = await db.execute(
         select(SystemConfig).where(SystemConfig.config_key.in_(keys))
@@ -62,7 +61,6 @@ async def apply_signatures_to_node_pdfs(
 
     返回：实际插入签名的文件数
     """
-    from app.models import Approval, User, File
 
     # 1. 查询该节点所有已通过审批（按审批时间排序，保证签名顺序一致）
     approvals_result = await db.execute(

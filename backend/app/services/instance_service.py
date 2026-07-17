@@ -394,8 +394,6 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     row = result.first()
 
     if row is None:
-        from app.core.exceptions import AppException
-        from app.core.error_codes import ErrorCode
         raise AppException(ErrorCode.NOT_FOUND, "项目不存在")
 
     instance = row[0]

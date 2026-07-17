@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.services.designer_service import (
     save_design_data, add_node, update_node, delete_node, add_edge, delete_edge,
@@ -83,8 +85,6 @@ async def post_edge(
     source_node_id = data.get("source_node_id")
     target_node_id = data.get("target_node_id")
     if not source_node_id or not target_node_id:
-        from app.core.exceptions import AppException
-        from app.core.error_codes import ErrorCode
         raise AppException(ErrorCode.VALIDATION_ERROR, "source_node_id 和 target_node_id 为必填字段")
 
     result = await add_edge(db, template_id, int(source_node_id), int(target_node_id))

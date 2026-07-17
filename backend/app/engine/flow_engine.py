@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import InstanceNode, InstanceEdge, Task
+from app.models import InstanceNode, InstanceEdge, Task, FlowInstance, Approval
 
 
 async def activate_start_node(db: AsyncSession, instance_id: int) -> None:
@@ -98,7 +98,6 @@ async def propagate_from_node(
             approvers = node.approvers or []
             if not approvers:
                 # 兜底：结束节点未配置审批人时，默认由发起人终审
-                from app.models import FlowInstance
                 inst = (
                     await db.execute(
                         select(FlowInstance).where(FlowInstance.id == instance_id)
@@ -108,7 +107,6 @@ async def propagate_from_node(
                     approvers = [{"user_id": inst.initiator_id}]
 
             if approvers:
-                from app.models import Approval
                 for approver in approvers:
                     approver_id = approver.get("user_id") if isinstance(approver, dict) else approver
                     db.add(Approval(

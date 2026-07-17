@@ -111,8 +111,6 @@ async def submit_task(
         for f in task_files:
             abs_path = None
             # 尝试找到文件真实路径（基于 STORAGE_ROOT）
-            import os
-            from app.core.config import settings
             full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
             if os.path.exists(full_path):
                 tasks.append(convert_to_pdf(full_path))
