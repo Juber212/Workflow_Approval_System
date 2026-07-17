@@ -60,30 +60,34 @@ app.add_middleware(
 
 # ================= 全局异常处理器 =================
 
+def _http_status(error_code: int) -> int:
+    """将业务错误码映射为 HTTP 状态码（前三位即 HTTP 状态码）"""
+    return error_code // 100  # 40000→400, 40101→401, 50000→500 等
+
 
 @app.exception_handler(AppException)
 async def app_exception_handler(_request: Request, exc: AppException):
-    """业务异常 → 统一错误响应"""
+    """业务异常 → 根据错误码返回对应 HTTP 状态码"""
     return JSONResponse(
-        status_code=200,
+        status_code=_http_status(exc.code),
         content=ApiResponse.fail(exc.code, exc.message, exc.data).model_dump(),
     )
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, exc: RequestValidationError):
-    """Pydantic 校验异常 → 统一错误响应"""
+    """Pydantic 校验异常 → 422 Unprocessable Entity"""
     errors = exc.errors()
     detail = "; ".join(f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in errors[:3])
     return JSONResponse(
-        status_code=200,
+        status_code=422,
         content=ApiResponse.fail(ErrorCode.VALIDATION_ERROR, detail or "参数校验失败").model_dump(),
     )
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(_request: Request, exc: Exception):
-    """未知异常 → 500，不泄露堆栈"""
+    """未知异常 → 500，不泄露内部信息"""
     import logging
     import traceback
 
@@ -92,10 +96,10 @@ async def global_exception_handler(_request: Request, exc: Exception):
     logger.error(traceback.format_exc())
 
     return JSONResponse(
-        status_code=200,
+        status_code=500,
         content=ApiResponse.fail(
             ErrorCode.INTERNAL_ERROR,
-            f"[DEBUG] {type(exc).__name__}: {exc}",
+            "服务器内部错误，请联系管理员",
         ).model_dump(),
     )
 

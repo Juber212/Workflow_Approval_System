@@ -24,20 +24,26 @@ request.interceptors.request.use(
 /** 响应拦截器 —— 统一错误处理、401 跳转登录 */
 request.interceptors.response.use(
   (response: AxiosResponse) => {
-    const { code, message } = response.data
-    if (code !== 200) {
-      ElMessage.error(message || '请求失败')
-      return Promise.reject(new Error(message))
-    }
+    // HTTP 2xx 即成功，直接返回 body
     return response.data
   },
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login'
-      return Promise.reject(error)
+    // HTTP 4xx/5xx 错误响应
+    if (error.response) {
+      const { status, data } = error.response
+      // 401 未认证 → 跳转登录
+      if (status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+        return Promise.reject(error)
+      }
+      // 提取后端返回的业务错误消息
+      const msg = data?.message || `请求失败 (${status})`
+      ElMessage.error(msg)
+      return Promise.reject(new Error(msg))
     }
-    ElMessage.error(error.message || '网络异常')
+    // 无响应的网络异常
+    ElMessage.error('网络连接异常，请检查网络')
     return Promise.reject(error)
   },
 )
