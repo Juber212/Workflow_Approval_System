@@ -62,7 +62,7 @@ defineProps<{
   total: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   search: [params: { keyword: string }]
   create: []
   detail: [id: number]
@@ -76,11 +76,10 @@ const keyword = ref('')
 const page = ref(1)
 const pageSize = ref(20)
 
+/** 搜索关键词变更时通知父组件 */
 function emitSearch() {
-  ;(getCurrentInstance()?.emit as any)('search', { keyword: keyword.value })
+  emit('search', { keyword: keyword.value })
 }
-
-import { getCurrentInstance } from 'vue'
 </script>
 
 <style lang="scss" scoped>
