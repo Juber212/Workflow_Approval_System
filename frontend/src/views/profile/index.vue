@@ -241,14 +241,12 @@ async function fetchApprovals() {
 // ========== 我发起的流程（仅所长） ==========
 const initiatedList = ref<MyInitiatedItem[]>([])
 const initiatedLoading = ref(false)
-const initiatedCount = ref(0)
 
 async function fetchInitiated() {
   initiatedLoading.value = true
   try {
     const data = await getMyInitiated({ page: 1, page_size: 50 })
     initiatedList.value = data.items
-    initiatedCount.value = data.total
   } finally { initiatedLoading.value = false }
 }
 
