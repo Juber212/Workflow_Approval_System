@@ -13,6 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import InstanceNode, InstanceEdge, Task, FlowInstance, Approval
+from app.models.enums import InstanceNodeStatus, ApprovalStatus, TaskStatus
 
 
 async def activate_start_node(db: AsyncSession, instance_id: int) -> None:
@@ -30,7 +31,7 @@ async def activate_start_node(db: AsyncSession, instance_id: int) -> None:
         return  # 不应该发生，但安全处理
 
     now = datetime.now()
-    start_node.status = "finished"
+    start_node.status = InstanceNodeStatus.FINISHED
     start_node.started_at = now
     start_node.completed_at = now
     await db.flush()
@@ -91,7 +92,7 @@ async def propagate_from_node(
 
         if node.is_end:
             # 结束节点：进入 waiting_approval，按 approvers 创建审批记录，不生成 Task
-            node.status = "waiting_approval"
+            node.status = InstanceNodeStatus.WAITING_APPROVAL
             node.started_at = datetime.now()
 
             # 为结束节点创建审批记录（发起人终审）
@@ -114,7 +115,7 @@ async def propagate_from_node(
                         node_id=node.id,
                         task_id=None,  # 结束节点无 Task
                         approver_id=approver_id,
-                        status="pending",
+                        status=ApprovalStatus.PENDING,
                     ))
 
             activated_ids.append(node.id)
@@ -122,7 +123,7 @@ async def propagate_from_node(
         else:
             # 普通工作节点：激活为 running，生成 Task
             now = datetime.now()
-            node.status = "running"
+            node.status = InstanceNodeStatus.RUNNING
             node.started_at = now
 
             # 计算 deadline（如果有 time_limit_days 且未手动指定 deadline）
@@ -135,7 +136,7 @@ async def propagate_from_node(
                     instance_id=instance_id,
                     node_id=node.id,
                     assignee_id=node.assignee_id,
-                    status="pending",
+                    status=TaskStatus.PENDING,
                 )
                 db.add(task)
 

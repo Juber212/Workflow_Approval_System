@@ -19,7 +19,7 @@ from app.models import (
     OperationLog, User, Organization,
     Task, CheckRecord, Approval, File,
 )
-from app.models.enums import UploadType
+from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus
 from app.services.file_service import ALLOWED_MIME_TYPES, MAX_FILE_SIZE
 from app.schemas.instance import (
     CreateInstanceRequest,
@@ -98,7 +98,7 @@ async def create_instance(
         contract_no=request.contract_no.strip() if request.contract_no else None,
         product_model=request.product_model.strip() if request.product_model else None,
         sales_manager=request.sales_manager.strip() if request.sales_manager else None,
-        status="created",
+        status=InstanceStatus.CREATED,
     )
     db.add(instance)
     await db.flush()
