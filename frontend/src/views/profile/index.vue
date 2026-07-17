@@ -175,6 +175,8 @@ import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime } from '@/utils/format'
+import { priLabel, roleLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
@@ -265,21 +267,13 @@ watch(activeTab, (tab) => {
   else if (tab === 'initiated') fetchInitiated()
 })
 
-// ========== 工具 ==========
-function roleLabel(r: string) {
-  const m: Record<string, string> = { system_admin: '管理员', manager: '所长', user: '用户' }
-  return m[r] || r
-}
-function formatTime(v: string | null) { return v ? v.replace('T', ' ').substring(0, 16) : '-' }
-function priLabel(p: string) { const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }; return m[p] || p }
+// ========== 工具函数（任务/校验/审批状态映射 —— 仅此组件使用） ==========
 function taskStatusClass(s: string) { return s === 'overdue' ? 'status-tag--terminated' : s === 'pending' ? 'status-tag--running' : 'status-tag--draft' }
 function taskStatusLabel(s: string) { const m: Record<string, string> = { pending: '待处理', processing: '处理中', waiting_check: '待校验', waiting_approval: '待审批', completed: '已完成' }; return m[s] || s }
 function checkStatusClass(s: string) { return s === 'pending' ? 'status-tag--running' : s === 'passed' ? 'status-tag--completed' : 'status-tag--terminated' }
 function checkStatusLabel(s: string) { const m: Record<string, string> = { pending: '待校验', passed: '已通过', returned: '已退回', terminated: '已终止' }; return m[s] || s }
 function approvalStatusClass(s: string) { return s === 'pending' ? 'status-tag--running' : s === 'approved' ? 'status-tag--completed' : 'status-tag--terminated' }
 function approvalStatusLabel(s: string) { const m: Record<string, string> = { pending: '待审批', approved: '已通过', rejected: '已退回', terminated: '已终止' }; return m[s] || s }
-function instStatusClass(s: string) { const m: Record<string, string> = { running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }; return m[s] || '' }
-function instStatusLabel(s: string) { const m: Record<string, string> = { running: '运行中', completed: '已完成', terminated: '已终止' }; return m[s] || s }
 </script>
 
 <style lang="scss" scoped>
