@@ -187,9 +187,17 @@ def _insert_signatures(
         # 叠印到目标页
         writer.pages[target_page].merge_page(stamp_page)
 
-    # 写回文件
-    with open(pdf_path, "wb") as f:
-        writer.write(f)
+    # 先写入临时文件，成功后再原子替换，防止写入失败损坏原 PDF
+    tmp_path = pdf_path + ".tmp"
+    try:
+        with open(tmp_path, "wb") as f:
+            writer.write(f)
+        os.replace(tmp_path, pdf_path)  # 原子替换（跨平台）
+    except Exception:
+        # 清理残留临时文件
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
 def _create_signature_stamp(sig_path: str, max_width: int = 150):
