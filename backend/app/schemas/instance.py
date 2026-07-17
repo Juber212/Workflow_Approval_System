@@ -40,6 +40,7 @@ class InstanceNodeBrief(BaseModel):
 class InstanceResponse(BaseModel):
     """发起实例成功响应"""
     id: int
+    name: str
     organization_id: int
     initiator_id: int
     priority: str
@@ -66,14 +67,6 @@ class InstanceListItem(BaseModel):
     initiated_at: datetime | None = None
     completed_at: datetime | None = None
     terminated_at: datetime | None = None
-
-
-class InstanceListResponse(BaseModel):
-    """实例列表分页响应"""
-    items: list[InstanceListItem]
-    total: int
-    page: int
-    page_size: int
 
 
 # ==================== 实例详情 ====================

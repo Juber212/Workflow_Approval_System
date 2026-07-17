@@ -11,7 +11,6 @@ from app.schemas.common import ApiResponse
 from app.schemas.instance import (
     CreateInstanceRequest,
     InstanceResponse,
-    InstanceListResponse,
     TerminateInstanceRequest,
     ChangePersonnelRequest,
     ChangePriorityRequest,

@@ -21,14 +21,19 @@ from app.models import (
 )
 from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus
 from app.services.file_service import ALLOWED_MIME_TYPES, MAX_FILE_SIZE
+from app.schemas.common import PaginatedData
 from app.schemas.instance import (
     CreateInstanceRequest,
+    InstanceResponse,
+    InstanceNodeBrief,
     InstanceListItem,
+    InstanceDetailResponse,
     DetailNodeInfo,
     NodeFileBrief,
     CheckRecordBrief,
     ApprovalBrief,
     LogItemBrief,
+    SupplementFileResponse,
     ChangePersonnelRequest,
     ChangePriorityRequest,
 )
@@ -182,18 +187,23 @@ async def create_instance(
     ))
     await db.flush()
 
-    return {
-        "id": instance.id, "name": instance.name,
-        "organization_id": instance.organization_id,
-        "initiator_id": instance.initiator_id,
-        "priority": instance.priority, "status": instance.status,
-        "nodes": [
-            {"id": n.id, "name": n.name, "is_start": n.is_start, "is_end": n.is_end,
-             "status": n.status, "sort_order": n.sort_order}
+    return InstanceResponse(
+        id=instance.id,
+        name=instance.name,
+        organization_id=instance.organization_id,
+        initiator_id=instance.initiator_id,
+        priority=instance.priority,
+        status=instance.status,
+        nodes=[
+            InstanceNodeBrief(
+                id=n.id, name=n.name,
+                is_start=n.is_start, is_end=n.is_end,
+                status=n.status, sort_order=n.sort_order,
+            )
             for n in instance_nodes
         ],
-        "initiated_at": instance.initiated_at,
-    }
+        initiated_at=instance.initiated_at,
+    )
 
 
 async def list_instances(
@@ -319,12 +329,12 @@ async def list_instances(
             terminated_at=instance.terminated_at,
         ))
 
-    return {
-        "items": items,
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+    return PaginatedData(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 async def _batch_get_node_stats(db: AsyncSession, instance_ids: list[int]) -> dict[int, dict]:
@@ -571,39 +581,44 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         .limit(50)
     )
     logs_result = await db.execute(logs_stmt)
-    log_items: list[dict] = []
+    log_items: list[LogItemBrief] = []
     for log, op_name in logs_result:
-        log_items.append({
-            "id": log.id,
-            "operator_type": (log.operator_type or "user").lower(),
-            "operator_id": log.operator_id,
-            "operator_name": op_name,
-            "node_id": log.node_id,
-            "operation_type": log.operation_type,
-            "round": log.round,
-            "description": log.description,
-            "detail": log.detail,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-        })
+        log_items.append(LogItemBrief(
+            id=log.id,
+            operator_type=(log.operator_type or "user").lower(),
+            operator_id=log.operator_id,
+            operator_name=op_name,
+            node_id=log.node_id,
+            operation_type=log.operation_type,
+            round=log.round,
+            description=log.description,
+            detail=log.detail,
+            created_at=log.created_at,
+        ))
 
     # ========== 7. 组装最终结果 ==========
-    return {
-        "id": instance.id, "name": instance.name, "description": instance.description,
-        "organization_id": instance.organization_id, "organization_name": org_name or "",
-        "initiator_id": instance.initiator_id, "initiator_name": initiator_name or "",
-        "priority": (instance.priority or "normal").lower(),
-        "status": (instance.status or "created").lower(),
-        "termination_reason": instance.termination_reason,
-        "contract_no": instance.contract_no,
-        "product_model": instance.product_model,
-        "sales_manager": instance.sales_manager,
-        "current_node_index": processed_count, "total_nodes": total_nodes,
-        "initiated_at": instance.initiated_at,
-        "completed_at": instance.completed_at,
-        "terminated_at": instance.terminated_at,
-        "nodes": nodes,
-        "logs": {"items": log_items, "total": len(log_items)},
-    }
+    return InstanceDetailResponse(
+        id=instance.id,
+        name=instance.name,
+        description=instance.description,
+        organization_id=instance.organization_id,
+        organization_name=org_name or "",
+        initiator_id=instance.initiator_id,
+        initiator_name=initiator_name or "",
+        priority=(instance.priority or "normal").lower(),
+        status=(instance.status or "created").lower(),
+        termination_reason=instance.termination_reason,
+        contract_no=instance.contract_no,
+        product_model=instance.product_model,
+        sales_manager=instance.sales_manager,
+        current_node_index=processed_count,
+        total_nodes=total_nodes,
+        initiated_at=instance.initiated_at,
+        completed_at=instance.completed_at,
+        terminated_at=instance.terminated_at,
+        nodes=nodes,
+        logs={"items": log_items, "total": len(log_items)},
+    )
 
 
 async def terminate_instance(
@@ -1101,21 +1116,21 @@ async def supplement_files(
     db.add(log)
 
     # ========== 7. 构建返回值 ==========
-    return {
-        "files": [
-            {
-                "id": fr.id,
-                "original_name": fr.original_name,
-                "file_size": fr.file_size,
-                "uploader_id": fr.uploader_id,
-                "uploader_name": user_name,
-                "upload_type": UploadType.SUPPLEMENT,
-                "round": fr.round,
-                "created_at": fr.created_at.isoformat() if fr.created_at else None,
-            }
+    return SupplementFileResponse(
+        files=[
+            NodeFileBrief(
+                id=fr.id,
+                original_name=fr.original_name,
+                file_size=fr.file_size,
+                uploader_id=fr.uploader_id,
+                uploader_name=user_name,
+                upload_type=UploadType.SUPPLEMENT,
+                round=fr.round,
+                created_at=fr.created_at,
+            )
             for fr in file_records
         ],
-    }
+    )
 
 
 async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
