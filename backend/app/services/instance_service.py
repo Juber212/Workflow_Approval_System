@@ -284,6 +284,15 @@ async def list_instances(
     result = await db.execute(list_stmt)
     rows = result.all()
 
+    # ========== 批量查询节点统计和当前负责人（避免 N+1） ==========
+    instance_ids = [row[0].id for row in rows]
+
+    # 单次 GROUP BY 查询所有实例的节点统计
+    node_stats_map = await _batch_get_node_stats(db, instance_ids)
+
+    # 单次查询所有实例的当前负责人
+    assignee_map = await _batch_get_current_assignees(db, instance_ids)
+
     # ========== 组装结果 ==========
     items: list[InstanceListItem] = []
     for row in rows:
@@ -291,9 +300,7 @@ async def list_instances(
         initiator_name = row[1]
         org_name = row[2]
 
-        # 批量查询节点数据（为每个实例单独查 — 后续可优化为批量查询）
-        node_stats = await _get_instance_node_stats(db, instance.id)
-        current_assignee = await _get_current_assignee_name(db, instance.id)
+        node_stats = node_stats_map.get(instance.id, {"total": 0, "processed": 0})
 
         items.append(InstanceListItem(
             id=instance.id,
@@ -306,7 +313,7 @@ async def list_instances(
             status=(instance.status or "created").lower(),
             current_node_index=node_stats["processed"],
             total_nodes=node_stats["total"],
-            current_assignee_name=current_assignee,
+            current_assignee_name=assignee_map.get(instance.id),
             initiated_at=instance.initiated_at,
             completed_at=instance.completed_at,
             terminated_at=instance.terminated_at,
@@ -320,38 +327,43 @@ async def list_instances(
     }
 
 
-async def _get_instance_node_stats(db: AsyncSession, instance_id: int) -> dict:
-    """获取实例节点统计：总节点数、已完成/跳过节点数（大小写不敏感）"""
+async def _batch_get_node_stats(db: AsyncSession, instance_ids: list[int]) -> dict[int, dict]:
+    """批量查询实例节点统计（替代逐条 N+1）"""
+    if not instance_ids:
+        return {}
     stmt = select(
+        InstanceNode.instance_id,
         func.count(InstanceNode.id).label("total"),
         func.sum(
-            func.if_(
-                func.lower(InstanceNode.status) == "finished", 1, 0
-            )
+            func.if_(func.lower(InstanceNode.status) == "finished", 1, 0)
         ).label("processed"),
-    ).where(InstanceNode.instance_id == instance_id)
+    ).where(
+        InstanceNode.instance_id.in_(instance_ids)
+    ).group_by(InstanceNode.instance_id)
 
     result = await db.execute(stmt)
-    row = result.first()
     return {
-        "total": int(row.total) if row and row.total else 0,
-        "processed": int(row.processed) if row and row.processed else 0,
+        row.instance_id: {"total": int(row.total or 0), "processed": int(row.processed or 0)}
+        for row in result.all()
     }
 
 
-async def _get_current_assignee_name(db: AsyncSession, instance_id: int) -> str | None:
-    """获取当前活跃节点（running）的负责人姓名"""
+async def _batch_get_current_assignees(db: AsyncSession, instance_ids: list[int]) -> dict[int, str | None]:
+    """批量查询实例当前活跃节点的负责人（替代逐条 N+1）"""
+    if not instance_ids:
+        return {}
+    # 子查询：每个实例取一个 running 节点的 assignee_id
     stmt = (
-        select(User.real_name)
-        .join(InstanceNode, InstanceNode.assignee_id == User.id)
+        select(InstanceNode.instance_id, User.real_name)
+        .join(User, InstanceNode.assignee_id == User.id)
         .where(
-            InstanceNode.instance_id == instance_id,
+            InstanceNode.instance_id.in_(instance_ids),
             InstanceNode.status == "running",
         )
-        .limit(1)
+        .distinct(InstanceNode.instance_id)  # 每个实例只取一条
     )
     result = await db.execute(stmt)
-    return result.scalar()
+    return {row.instance_id: row.real_name for row in result.all()}
 
 
 # ==================== 实例详情 ====================

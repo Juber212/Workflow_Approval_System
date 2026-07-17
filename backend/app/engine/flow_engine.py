@@ -9,7 +9,7 @@
 from collections import deque
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import InstanceNode, InstanceEdge, Task
@@ -150,22 +150,27 @@ async def propagate_from_node(
 async def calculate_incoming_counts(db: AsyncSession, instance_id: int) -> None:
     """根据 instance_edges 批量计算每个节点的 incoming_count（上游连线数）
 
-    发起实例时调用一次，后续不变。
+    发起实例时调用一次，后续不变。使用 GROUP BY 单次查询避免 N+1。
     """
-    # 查询所有节点
+    # 单次 GROUP BY 查询所有节点的入边数
+    count_stmt = (
+        select(
+            InstanceEdge.target_node_id,
+            func.count(InstanceEdge.id).label("cnt"),
+        )
+        .where(InstanceEdge.instance_id == instance_id)
+        .group_by(InstanceEdge.target_node_id)
+    )
+    count_result = await db.execute(count_stmt)
+    incoming_map = {row.target_node_id: row.cnt for row in count_result.all()}
+
+    # 查询所有节点并赋值
     nodes_result = await db.execute(
         select(InstanceNode).where(InstanceNode.instance_id == instance_id)
     )
     nodes = nodes_result.scalars().all()
 
-    # 对每个节点统计入边
     for node in nodes:
-        count_result = await db.execute(
-            select(InstanceEdge).where(
-                InstanceEdge.target_node_id == node.id,
-                InstanceEdge.instance_id == instance_id,
-            )
-        )
-        node.incoming_count = len(count_result.scalars().all())
+        node.incoming_count = incoming_map.get(node.id, 0)
 
     await db.flush()
