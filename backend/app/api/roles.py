@@ -9,14 +9,9 @@ from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.schemas.role import RoleListItem
 from app.models import Role, UserRole
-from app.api.deps import get_current_active_user, CurrentUser
+from app.api.deps import get_current_active_user, CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["角色管理"])
-
-
-def _require_admin(current_user: CurrentUser):
-    if not current_user.is_admin():
-        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")
 
 
 @router.get("/roles")
@@ -25,7 +20,7 @@ async def get_roles(
     db: AsyncSession = Depends(get_db),
 ):
     """角色列表 —— 含 user_count 计算字段（V1 仅查看）"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     # 查询角色
     result = await db.execute(select(Role).order_by(Role.id))

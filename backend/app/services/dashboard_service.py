@@ -187,11 +187,11 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
         near_future = now + timedelta(days=2)
 
         for node in nodes:
-            status_icon = "⚪"  # 待开始
+            status_icon = "waiting"  # 待开始
             if node.status == "finished":
-                status_icon = "✅"
+                status_icon = "done"
             elif node.status in ("running", "waiting_check", "waiting_approval"):
-                status_icon = "🔵"
+                status_icon = "active"
                 all_finished = False
                 current_node_name = node.name
                 current_assignee_name = users_map.get(node.assignee_id, "") if node.assignee_id else ""
@@ -204,7 +204,7 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
                 all_finished = False
 
             assignee_label = ""
-            if node.assignee_id and status_icon in ("🔵", "✅"):
+            if node.assignee_id and status_icon in ("active", "done"):
                 assignee_label = f" {users_map.get(node.assignee_id, '')}"
 
             progress_chain.append(f"{status_icon}{node.name}{assignee_label}")
@@ -278,7 +278,7 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[dict]:
         if dl:
             delta = (dl - now).days
             if delta < 0:
-                days_label = f"🔴已逾期 {-delta}天"
+                days_label = f"已逾期 {-delta}天"
             else:
                 days_label = f"还剩 {delta}天"
         else:

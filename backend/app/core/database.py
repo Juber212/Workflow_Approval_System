@@ -1,4 +1,4 @@
-"""数据库引擎与会话管理（将在 Task005 中完善）"""
+"""数据库引擎与会话管理"""
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase

@@ -20,15 +20,9 @@ from app.services.user_service import (
     toggle_user_status,
     reset_user_password,
 )
-from app.api.deps import get_current_active_user, CurrentUser
+from app.api.deps import get_current_active_user, CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["用户管理"])
-
-
-def _require_admin(current_user: CurrentUser):
-    """要求系统管理员权限，否则抛出 403"""
-    if not current_user.is_admin():
-        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")
 
 
 @router.get("/users")
@@ -42,7 +36,7 @@ async def get_users(
     db: AsyncSession = Depends(get_db),
 ):
     """用户列表（分页+搜索+筛选）—— 仅系统管理员"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     result = await list_users(
         db,
@@ -62,7 +56,7 @@ async def post_users(
     db: AsyncSession = Depends(get_db),
 ):
     """新增用户 —— 仅系统管理员"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     user = await create_user(db, data)
     await db.commit()
@@ -77,7 +71,7 @@ async def put_user(
     db: AsyncSession = Depends(get_db),
 ):
     """编辑用户（不可改用户名）—— 仅系统管理员"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     user = await update_user(db, user_id, data)
     await db.commit()
@@ -92,7 +86,7 @@ async def put_user_status(
     db: AsyncSession = Depends(get_db),
 ):
     """启用/禁用用户 —— 仅系统管理员"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     await toggle_user_status(db, user_id, data.is_active)
     await db.commit()
@@ -107,7 +101,7 @@ async def put_user_reset_password(
     db: AsyncSession = Depends(get_db),
 ):
     """管理员重置用户密码 —— 仅系统管理员"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     await reset_user_password(db, user_id, data.new_password)
     await db.commit()

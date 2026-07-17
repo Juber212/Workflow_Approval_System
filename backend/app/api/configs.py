@@ -8,14 +8,9 @@ from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.schemas.config import ConfigItem, ConfigBatchUpdate
 from app.services.config_service import config_service
-from app.api.deps import get_current_active_user, CurrentUser
+from app.api.deps import get_current_active_user, CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["系统配置"])
-
-
-def _require_admin(current_user: CurrentUser):
-    if not current_user.is_admin():
-        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")
 
 
 @router.get("/configs")
@@ -23,7 +18,7 @@ async def get_configs(
     current_user: CurrentUser = Depends(get_current_active_user),
 ):
     """系统配置列表 —— 从内存缓存读取"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     all_configs = config_service._cache
     items = [
@@ -46,7 +41,7 @@ async def put_configs(
     current_user: CurrentUser = Depends(get_current_active_user),
 ):
     """批量更新系统配置 —— 写 DB → 刷新缓存"""
-    _require_admin(current_user)
+    require_admin(current_user)
 
     updates = {item.id: item.config_value for item in data.items}
     updated_keys = await config_service.update(async_session_factory, updates)

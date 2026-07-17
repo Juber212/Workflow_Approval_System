@@ -60,3 +60,9 @@ async def get_current_active_user(
         raise AppException(ErrorCode.FORBIDDEN, "账号已被禁用")
 
     return current_user
+
+
+def require_admin(current_user: CurrentUser) -> None:
+    """要求系统管理员权限，否则抛出 403（供各 Admin API 复用）"""
+    if not current_user.is_admin():
+        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")

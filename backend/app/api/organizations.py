@@ -19,15 +19,9 @@ from app.services.organization_service import (
     toggle_org_status,
 )
 from app.models import Organization
-from app.api.deps import get_current_active_user, CurrentUser
+from app.api.deps import get_current_active_user, CurrentUser, require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["组织管理"])
-
-
-def _require_admin(current_user: CurrentUser):
-    """权限守卫"""
-    if not current_user.is_admin():
-        raise AppException(ErrorCode.FORBIDDEN, "仅系统管理员可执行此操作")
 
 
 @router.get("/organizations")
@@ -39,7 +33,7 @@ async def get_organizations(
     db: AsyncSession = Depends(get_db),
 ):
     """组织列表 —— 含所长姓名和用户数"""
-    _require_admin(current_user)
+    require_admin(current_user)
     result = await list_organizations(db, page=page, page_size=page_size, is_active=is_active)
     return ApiResponse.ok(result.model_dump())
 
@@ -51,7 +45,7 @@ async def post_organization(
     db: AsyncSession = Depends(get_db),
 ):
     """新增组织"""
-    _require_admin(current_user)
+    require_admin(current_user)
     org = await create_organization(db, data)
     await db.commit()
     return ApiResponse.ok({"id": org.id, "name": org.name}, message="组织创建成功")
@@ -65,7 +59,7 @@ async def put_organization(
     db: AsyncSession = Depends(get_db),
 ):
     """编辑组织"""
-    _require_admin(current_user)
+    require_admin(current_user)
     org = await update_organization(db, org_id, data)
     await db.commit()
     return ApiResponse.ok({"id": org.id, "name": org.name}, message="组织信息已更新")
@@ -79,7 +73,7 @@ async def put_org_status(
     db: AsyncSession = Depends(get_db),
 ):
     """启用/停用组织"""
-    _require_admin(current_user)
+    require_admin(current_user)
     await toggle_org_status(db, org_id, data.is_active)
     await db.commit()
     return ApiResponse.ok(message="已启用" if data.is_active else "已停用")

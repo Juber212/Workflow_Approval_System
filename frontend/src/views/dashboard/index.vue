@@ -256,15 +256,16 @@ function statusLabel(s: string) { const m: Record<string, string> = { running: '
 
 /** 提取进度链片段的节点名称（去掉 emoji 图标前缀） */
 function chainNodeLabel(seg: string): string {
-  if (seg.startsWith('✅') || seg.startsWith('🔵') || seg.startsWith('⚪')) return seg.slice(2)
+  // 去除状态前缀标识（后端返回格式："active 节点名"）
+  if (seg.startsWith('active ') || seg.startsWith('done ') || seg.startsWith('waiting ')) return seg.slice(seg.indexOf(' ') + 1)
   return seg
 }
 
 /** 返回进度链片段的 CSS 类 */
 function chainNodeClass(seg: string): string {
-  if (seg.startsWith('🔵')) return 'bt-node--active'        // 当前节点高亮
-  if (seg.startsWith('✅')) return 'bt-node--done'           // 已完成
-  return 'bt-node--wait'                                     // 待开始
+  if (seg.startsWith('active ')) return 'bt-node--active'    // 当前节点高亮
+  if (seg.startsWith('done ')) return 'bt-node--done'        // 已完成
+  return 'bt-node--wait'                                      // 待开始
 }
 </script>
 
