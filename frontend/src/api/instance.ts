@@ -151,7 +151,7 @@ export interface LogItemBrief {
   operation_type: string
   round: number
   description: string
-  detail: Record<string, any> | null
+  detail: Record<string, unknown> | null
   created_at: string | null
 }
 

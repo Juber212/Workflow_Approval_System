@@ -165,7 +165,7 @@
 
 <script setup lang="ts">
 /** 应用布局 —— 侧边栏 + 内容区（飞书风格） */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -223,14 +223,14 @@ function roleTagLabel(role: string): string {
 }
 
 /** 菜单项图标映射（Element Plus 线框风格） */
-const MENU_ICONS: Record<string, any> = {
+const MENU_ICONS: Record<string, Component> = {
   '/dashboard': Monitor,
   '/flows': Document,
   '/admin/users': Setting,
   '/profile': User,
 }
 
-interface MenuItem { path: string; label: string; icon: any }
+interface MenuItem { path: string; label: string; icon: Component }
 
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [

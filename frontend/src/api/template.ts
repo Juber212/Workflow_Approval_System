@@ -56,9 +56,9 @@ export interface TemplateNodeItem {
   assignee_name: string | null
   time_limit_days: number | null
   require_file: boolean
-  approvers: any
+  approvers: Array<{ user_id: number }> | null
   approvers_names: string[] | null
-  checkers: any
+  checkers: Array<{ user_id: number }> | null
   checkers_names: string[] | null
   approval_strategy: string
   position_x: number
