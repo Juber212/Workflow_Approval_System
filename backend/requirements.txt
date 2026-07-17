@@ -18,6 +18,9 @@ passlib[bcrypt]>=1.7.4
 pypdf>=4.3.0
 Pillow>=10.4.0
 
+# 工作日计算（中国法定节假日 + 调休）
+chinesecalendar>=1.11.0
+
 # 配置管理
 pydantic-settings>=2.6.0
 

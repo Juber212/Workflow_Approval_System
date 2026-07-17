@@ -46,7 +46,7 @@
           @options-loaded="handleOptionsLoaded"
         />
       </el-form-item>
-      <el-form-item label="时限（天）">
+      <el-form-item label="时限（工作日）">
         <el-input-number v-model="form.time_limit_days" :min="1" :max="365" placeholder="1~365" style="width:100%" />
       </el-form-item>
       <el-form-item label="文件上传">

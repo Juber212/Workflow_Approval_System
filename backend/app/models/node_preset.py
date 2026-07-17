@@ -19,7 +19,7 @@ class NodePreset(Base):
     assignee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), comment="负责人 ID")
     checkers: Mapped[dict | None] = mapped_column(JSON, comment='校验人列表 [{"user_id": N}]')
     approvers: Mapped[dict | None] = mapped_column(JSON, comment='审批人列表 [{"user_id": N}]')
-    time_limit_days: Mapped[int | None] = mapped_column(Integer, comment="完成时限（天）")
+    time_limit_days: Mapped[int | None] = mapped_column(Integer, comment="完成时限（工作日）")
     require_file: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否必须上传文件")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, comment="排序序号（预留拖拽排序）")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

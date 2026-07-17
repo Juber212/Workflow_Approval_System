@@ -17,7 +17,7 @@ class InstanceNode(Base):
     is_start: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否开始节点")
     is_end: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否结束节点")
     assignee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), comment="负责人")
-    time_limit_days: Mapped[int | None] = mapped_column(Integer, comment="完成时限天数")
+    time_limit_days: Mapped[int | None] = mapped_column(Integer, comment="完成时限（工作日）")
     deadline: Mapped[datetime | None] = mapped_column(DateTime, comment="截止时间")
     require_file: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否必须上传文件")
     approvers: Mapped[dict | None] = mapped_column(JSON, comment="审批人列表")

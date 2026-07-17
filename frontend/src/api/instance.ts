@@ -181,6 +181,35 @@ export interface InstanceDetailResponse {
 
 // ==================== API ====================
 
+// ==================== 截止日期计算 ====================
+
+/** 截止日期计算入参 */
+export interface DeadlineCalcItem {
+  node_id: number
+  time_limit_days: number | null
+}
+
+/** 截止日期计算响应 */
+export interface DeadlineCalcResult {
+  node_id: number
+  begin: string | null      // 预估开始日期 YYYY-MM-DD
+  deadline: string | null   // 截止日期 YYYY-MM-DD
+}
+
+/** 批量计算节点截止日期（跳过法定节假日和周末） */
+export async function calculateDeadlines(
+  startDate: string,
+  nodes: DeadlineCalcItem[],
+): Promise<DeadlineCalcResult[]> {
+  const res = await request.post('/utils/calculate-deadlines', {
+    start_date: startDate,
+    nodes,
+  })
+  return res.data.deadlines
+}
+
+// ==================== API ====================
+
 /** 发起项目 */
 export async function createInstance(data: CreateInstanceData): Promise<InstanceCreated> {
   const res = await request.post('/instances', data)

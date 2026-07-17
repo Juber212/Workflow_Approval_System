@@ -123,8 +123,10 @@
         </el-form-item>
 
         <!-- 完成时限 -->
+        <!-- 编辑模式：数字输入框（工作日天数） -->
         <el-form-item
-          label="完成时限（天）"
+          v-if="!launchMode"
+          label="完成时限（工作日）"
           prop="time_limit_days"
           :rules="[{ required: true, message: '请设置完成时限' }]"
         >
@@ -137,6 +139,27 @@
             style="width: 100%"
             @change="syncToNode"
           />
+        </el-form-item>
+
+        <!-- 发起模式：日期范围选择器（预估开始 → 截止，预填跳过节假日的日期） -->
+        <el-form-item
+          v-else
+          label="计划日期"
+          prop="deadlineRange"
+          :rules="[{ required: true, message: '请选择计划日期范围', trigger: 'change' }]"
+        >
+          <el-date-picker
+            v-model="form.deadlineRange"
+            type="daterange"
+            start-placeholder="预估开始"
+            end-placeholder="截止日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+            @change="syncToNode"
+          />
+          <div class="field-hint">
+            开始：发起日期 + 前序节点累计 · 截止：开始 + {{ form.time_limit_days ?? '?' }} 工作日（已跳过法定节假日和周末）
+          </div>
         </el-form-item>
 
         <el-divider content-position="left">高级设置</el-divider>
@@ -168,6 +191,10 @@ const props = defineProps<{
   lf?: any
   /** 当前选中节点的 LogicFlow 数据 */
   nodeData?: any
+  /** 是否为发起项目模式（显示日历而非数字输入框） */
+  launchMode?: boolean
+  /** 发起模式下预计算好的日期映射 { 节点模板ID → { begin, deadline } } */
+  deadlineMap?: Record<number, { begin: string; deadline: string }>
 }>()
 
 /** emit 事件 */
@@ -189,6 +216,7 @@ const form = reactive({
   approvers: [] as number[],
   approvers_names: [] as string[],
   time_limit_days: undefined as number | undefined,
+  deadlineRange: undefined as [string, string] | undefined,  // 发起模式：[begin, deadline]
   require_file: false,
 })
 
@@ -203,13 +231,16 @@ const isSystemNode = computed(() => {
 
 /** 简要判断节点是否已配置（必填字段均填写） */
 const isConfigured = computed(() => {
+  // 发起模式：检查日期范围
+  const hasDeadline = props.launchMode
+    ? (form.deadlineRange && form.deadlineRange.length === 2)
+    : (form.time_limit_days && form.time_limit_days >= 1)
   return !!(
     form.name &&
     form.assignee_id &&
     form.checkers.length > 0 &&
     form.approvers.length > 0 &&
-    form.time_limit_days &&
-    form.time_limit_days >= 1
+    hasDeadline
   )
 })
 
@@ -262,6 +293,22 @@ function loadFromNode() {
   form.approvers_names = Array.isArray(p.approvers_names) ? [...p.approvers_names] : []
   form.time_limit_days = p.time_limit_days ?? undefined
   form.require_file = p.require_file ?? false
+
+  // 发起模式：从预计算映射取 begin + deadline 填入日期范围
+  const dbId = p.db_id
+  if (props.launchMode && props.deadlineMap && dbId != null) {
+    // 优先用节点上已保存的范围（用户手动调整过的），否则用预计算值
+    const mapEntry = props.deadlineMap[dbId]
+    if (p.deadline_range && Array.isArray(p.deadline_range) && p.deadline_range.length === 2) {
+      form.deadlineRange = p.deadline_range as [string, string]
+    } else if (mapEntry) {
+      form.deadlineRange = [mapEntry.begin, mapEntry.deadline] as [string, string]
+    } else {
+      form.deadlineRange = undefined
+    }
+  } else {
+    form.deadlineRange = undefined
+  }
 }
 
 /** 同步表单 → LogicFlow 节点（即时生效，不持久化） */
@@ -285,6 +332,8 @@ function syncToNode() {
     approvers_names: form.approvers_names.length > 0 ? [...form.approvers_names] : null,
     time_limit_days: form.time_limit_days ?? null,
     require_file: form.require_file,
+    // 发起模式下保存 deadline_range，后续 handleLaunch 会收集为 node_override
+    ...(props.launchMode && form.deadlineRange?.length === 2 ? { deadline_range: form.deadlineRange } : {}),
   })
 }
 

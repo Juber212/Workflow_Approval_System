@@ -90,7 +90,7 @@
             <span class="text-muted">—</span>
           </template>
           <template v-else-if="row.time_limit_days">
-            <span class="text-ok">{{ row.time_limit_days }}天</span>
+            <span class="text-ok">{{ row.time_limit_days }}工作日</span>
           </template>
           <template v-else>
             <span class="text-warn">⚠</span>

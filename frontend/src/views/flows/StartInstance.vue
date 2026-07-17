@@ -184,7 +184,7 @@ import {
   type TemplateNodeItem,
 } from '@/api/template'
 import { getTemplateDetail } from '@/api/template'
-import { createInstance, type NodeOverride } from '@/api/instance'
+import { createInstance, calculateDeadlines, type NodeOverride } from '@/api/instance'
 import NodeOverridePanel from './components/NodeOverridePanel.vue'
 
 const router = useRouter()
@@ -266,7 +266,28 @@ async function selectTemplate(tpl: TemplateItem) {
   try {
     const detail = await getTemplateDetail(tpl.id)
     templateNodes.value = detail.nodes
-    // 简化版模板无版本体系，直接使用模板节点
+
+    // 预填每个工作节点的截止日期（跳过法定节假日 + 周末）
+    const workNodes = detail.nodes.filter(n => !n.is_start && !n.is_end)
+    if (workNodes.length > 0) {
+      const today = new Date().toISOString().slice(0, 10)  // YYYY-MM-DD
+      try {
+        const deadlines = await calculateDeadlines(
+          today,
+          workNodes.map(n => ({ node_id: n.id, time_limit_days: n.time_limit_days })),
+        )
+        const overrides: Record<number, Record<string, any>> = {}
+        for (const d of deadlines) {
+          if (d.deadline) {
+            overrides[d.node_id] = { deadline: d.deadline }
+          }
+        }
+        nodeOverrides.value = overrides
+      } catch {
+        // API 失败不阻塞，用户仍可手动选日期
+        console.warn('预填截止日期失败，请手动选择')
+      }
+    }
   } catch {
     ElMessage.error('加载模板节点信息失败')
     templateNodes.value = []

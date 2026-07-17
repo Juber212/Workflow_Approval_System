@@ -64,7 +64,7 @@
         <div class="info-grid__item">
           <div class="k">完成时限</div>
           <div class="v">
-            {{ node.time_limit_days ? node.time_limit_days + ' 天' : '未设置' }}
+            {{ node.time_limit_days ? node.time_limit_days + ' 工作日' : '未设置' }}
             <span v-if="node.deadline" class="deadline-info">
               {{ formatDeadline(node.deadline) }}
             </span>

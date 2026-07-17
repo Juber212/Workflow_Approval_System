@@ -32,7 +32,7 @@
       <div class="node-info">
         <div class="node-label">{{ preset.name }}</div>
         <div class="node-hint">
-          {{ preset.assignee_name || '未设负责人' }} · {{ preset.time_limit_days ?? '不限' }}天
+          {{ preset.assignee_name || '未设负责人' }} · {{ preset.time_limit_days ?? '不限' }}工作日
         </div>
       </div>
       <!-- hover 操作图标 -->

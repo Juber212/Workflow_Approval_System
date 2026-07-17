@@ -43,6 +43,8 @@ from app.engine.flow_engine import (
     activate_start_node,
     propagate_from_node,
 )
+from app.utils.workday import add_workdays
+from datetime import date as date_type
 
 
 async def create_instance(
@@ -160,6 +162,36 @@ async def create_instance(
             db.add(InstanceEdge(instance_id=instance.id, source_node_id=src, target_node_id=tgt))
 
     await db.flush()
+
+    # ========== 6.5 计算工作日截止日期 ==========
+    # 从发起日期起，按模板节点顺序累加每个工作节点的 time_limit_days（工作日），
+    # 用 add_workdays 跳过法定节假日和周末，提前算出所有节点的 deadline。
+    # 已通过 node_override 手动指定 deadline 的节点跳过此计算。
+    initiation_date = date_type.today()
+    cumulative_workdays = 0
+
+    # 构建节点 ID → 实例节点映射，按模板 sort_order 遍历（V1 线性流程）
+    tpl_node_order = sorted(tpl_nodes, key=lambda n: n.sort_order)
+    for tn in tpl_node_order:
+        in_id = node_id_map.get(tn.id)
+        if not in_id:
+            continue
+        inode = next((n for n in instance_nodes if n.id == in_id), None)
+        if not inode:
+            continue
+
+        # 只处理工作节点（跳过开始/结束）；已有手动 deadline 则跳过
+        if tn.is_start or tn.is_end or inode.deadline:
+            continue
+
+        wd = inode.time_limit_days or 0
+        cumulative_workdays += wd
+
+        if cumulative_workdays > 0:
+            inode.deadline = datetime.combine(
+                add_workdays(initiation_date, cumulative_workdays),
+                datetime.min.time(),
+            )
 
     # ========== 7. 计算 incoming_count + 激活 ==========
     await calculate_incoming_counts(db, instance.id)

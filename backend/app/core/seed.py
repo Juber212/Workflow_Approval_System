@@ -29,7 +29,7 @@ CONFIGS = [
     {"config_key": "max_file_size_mb", "config_value": "50", "description": "上传文件大小限制(MB)"},
     {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名X坐标"},
     {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名Y坐标"},
-    {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限(天)"},
+    {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
 ]
 
 # 默认管理员

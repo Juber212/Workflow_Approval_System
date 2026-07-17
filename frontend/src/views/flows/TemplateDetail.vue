@@ -65,7 +65,7 @@
           <el-table-column label="时限" width="90" align="center">
             <template #default="{ row }">
               <template v-if="!row.is_start && !row.is_end">
-                {{ row.time_limit_days ? row.time_limit_days + ' 天' : '不限' }}
+                {{ row.time_limit_days ? row.time_limit_days + ' 工作日' : '不限' }}
               </template>
               <span v-else class="text--muted">-</span>
             </template>

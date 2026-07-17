@@ -82,14 +82,19 @@
           <!-- 截止日期 -->
           <div class="override-row">
             <label class="override-label">截止日期</label>
-            <el-date-picker
-              :model-value="getOverride(node.id, 'deadline') ?? ''"
-              @update:model-value="(v: any) => setOverride(node.id, 'deadline', v || undefined)"
-              type="date"
-              placeholder="默认：发起日期 + {{ node.time_limit_days ?? '无' }} 天"
-              value-format="YYYY-MM-DD"
-              style="width: 280px"
-            />
+            <div>
+              <el-date-picker
+                :model-value="getOverride(node.id, 'deadline') ?? ''"
+                @update:model-value="(v: any) => handleDeadlineChange(node.id, v)"
+                type="date"
+                placeholder="默认：发起日期 + {{ node.time_limit_days ?? '无' }} 工作日（跳过节假日）"
+                value-format="YYYY-MM-DD"
+                style="width: 280px"
+              />
+              <p v-if="isWeekend(getOverride(node.id, 'deadline'))" class="override-warn">
+                ⚠ 所选日期为周末，提交时服务端将自动调整为最近的工作日（含法定节假日校验）
+              </p>
+            </div>
           </div>
 
           <!-- 重置按钮 -->
@@ -177,6 +182,20 @@ function resetNode(nodeId: number) {
   const newOverrides = { ...props.overrides }
   delete newOverrides[nodeId]
   emit('update:overrides', newOverrides)
+}
+
+/** 判断给定日期字符串是否为周末（周六或周日） */
+function isWeekend(dateStr: string | undefined): boolean {
+  if (!dateStr) return false
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return false
+  const day = d.getDay()
+  return day === 0 || day === 6
+}
+
+/** 截止日期选择变更处理 —— 用户手动选择日期后设置覆盖值 */
+function handleDeadlineChange(nodeId: number, value: any) {
+  setOverride(nodeId, 'deadline', value || undefined)
 }
 
 /** 缓存用户名 */

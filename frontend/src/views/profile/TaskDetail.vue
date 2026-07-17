@@ -39,7 +39,7 @@
             </div>
             <div class="info-grid__item">
               <div class="k">完成时限</div>
-              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '天' : '未设置' }} · {{ formatTime(detail.deadline) }}</div>
+              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }} · {{ formatTime(detail.deadline) }}</div>
             </div>
             <div class="info-grid__item">
               <div class="k">发起人</div>

@@ -126,7 +126,8 @@ async def propagate_from_node(
             node.status = InstanceNodeStatus.RUNNING
             node.started_at = now
 
-            # 计算 deadline（如果有 time_limit_days 且未手动指定 deadline）
+            # 兜底：若发起时未预计算 deadline，则按自然日估算（不跳过节假日）
+            # 正常流程在 create_instance 中已用 add_workdays 预计算，此处不应触发
             if node.time_limit_days and not node.deadline:
                 node.deadline = now + timedelta(days=node.time_limit_days)
 

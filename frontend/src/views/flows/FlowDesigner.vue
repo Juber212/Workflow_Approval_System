@@ -54,7 +54,7 @@
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
         <NodePanel :lf="canvasRef?.getLf() ?? null" :presets="presets" @add="handleAddNode" @edit-preset="handleEditPreset" @delete-preset="handleDeletePreset" />
         <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
-        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" @save-as-preset="handleSaveAsPreset" />
+        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" :launch-mode="isLaunchMode" :deadline-map="deadlineMap" @save-as-preset="handleSaveAsPreset" />
       </div>
       <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
     </div>
@@ -106,7 +106,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createTemplate, getTemplateDetail, type TemplateDetail } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
-import { createInstance } from '@/api/instance'
+import { createInstance, calculateDeadlines } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
 import NodePanel from './designer/NodePanel.vue'
 import PropertyPanel from './designer/PropertyPanel.vue'
@@ -127,6 +127,8 @@ const undoable = ref(false)
 const redoable = ref(false)
 const viewMode = ref<'canvas' | 'list'>('canvas')
 const selectedNodeData = ref<any>(null)
+/** 发起模式下预计算的日期映射（模板节点 ID → {begin, deadline}） */
+const deadlineMap = ref<Record<number, { begin: string; deadline: string }>>({})
 
 /** 预设列表 */
 const presets = ref<PresetItem[]>([])
@@ -265,6 +267,31 @@ onMounted(async () => {
         }),
       })
       updateUndoRedoState(lf)
+
+      // 发起模式：预计算每个工作节点的截止日期（跳过法定节假日和周末）
+      if (isLaunchMode.value) {
+        const workNodes = detail.nodes
+          .filter(n => !n.is_start && !n.is_end)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        if (workNodes.length > 0) {
+          const today = new Date().toISOString().slice(0, 10)
+          try {
+            const results = await calculateDeadlines(
+              today,
+              workNodes.map(n => ({ node_id: n.id, time_limit_days: n.time_limit_days })),
+            )
+            const map: Record<number, { begin: string; deadline: string }> = {}
+            for (const r of results) {
+              if (r.begin && r.deadline) {
+                map[r.node_id] = { begin: r.begin, deadline: r.deadline }
+              }
+            }
+            deadlineMap.value = map
+          } catch (err) {
+            console.warn('预填截止日期失败（后端 /utils/calculate-deadlines 可能未部署）:', err)
+          }
+        }
+      }
     }
   } catch { ElMessage.error('加载模板数据失败') }
   finally { loading.value = false }
@@ -500,7 +527,30 @@ async function handleLaunch() {
       })
     await saveDesign(templateId, { nodes, edges })
 
-    // 2. 发起项目
+    // 2. 收集节点覆盖配置（截止日期 + 人员调整）
+    const nodeOverrides: { node_id: number; deadline?: string; assignee_id?: number; checkers?: { user_id: number }[]; approvers?: { user_id: number }[] }[] = []
+    for (const n of graphData.nodes) {
+      // 只处理工作节点（有 db_id 的）且存在 deadline 属性
+      const dbId = n.properties?.db_id
+      if (dbId == null) continue
+      if (n.properties?.is_start || n.properties?.is_end) continue
+      const override: any = { node_id: Number(dbId) }
+      let hasOverride = false
+      // 截止日期覆盖（从 deadline_range 取截止日）
+      const dlRange = n.properties?.deadline_range
+      if (dlRange && Array.isArray(dlRange) && dlRange.length === 2) {
+        override.deadline = dlRange[1]  // [begin, deadline]
+        hasOverride = true
+      }
+      // 人员变更覆盖（与模板不同时才传）
+      if (n.properties?.assignee_id != null) {
+        override.assignee_id = n.properties.assignee_id
+        hasOverride = true
+      }
+      if (hasOverride) nodeOverrides.push(override)
+    }
+
+    // 3. 发起项目
     const result = await createInstance({
       template_id: templateId,
       name: launchForm.value.name.trim(),
@@ -509,6 +559,7 @@ async function handleLaunch() {
       contract_no: bizInfo.value.contract_no || undefined,
       product_model: bizInfo.value.product_model || undefined,
       sales_manager: bizInfo.value.sales_manager || undefined,
+      node_overrides: nodeOverrides.length > 0 ? nodeOverrides : undefined,
     })
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false

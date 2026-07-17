@@ -34,7 +34,7 @@ function buildNodeHtml(properties: any): string {
   const configured = isConfigured(properties)
   const name = properties?.name || '未命名节点'
   const assigneeName = properties?.assignee_name || '未设置'
-  const timeLimit = properties?.time_limit_days ? `${properties.time_limit_days} 天` : '未设置'
+  const timeLimit = properties?.time_limit_days ? `${properties.time_limit_days} 工作日` : '未设置'
   const checkerNames = properties?.checkers_names || []
   const approverNames = properties?.approvers_names || []
 
