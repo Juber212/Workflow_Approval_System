@@ -62,7 +62,7 @@ async def list_approvals(
     approvals = result.scalars().all()
 
     if not approvals:
-        return {"items": [], "total": total, "page": page, "page_size": page_size}
+        return PaginatedData(items=[], total=total, page=page, page_size=page_size)
 
     # 批量查关联数据
     node_ids = list(set(a.node_id for a in approvals))

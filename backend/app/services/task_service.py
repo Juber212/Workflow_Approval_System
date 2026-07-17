@@ -69,7 +69,7 @@ async def list_tasks(
     tasks = result.scalars().all()
 
     if not tasks:
-        return {"items": [], "total": total, "page": page, "page_size": page_size}
+        return PaginatedData(items=[], total=total, page=page, page_size=page_size)
 
     # 批量查询关联数据
     task_ids = [t.id for t in tasks]

@@ -51,7 +51,7 @@ async def list_checks(
     checks = result.scalars().all()
 
     if not checks:
-        return {"items": [], "total": total, "page": page, "page_size": page_size}
+        return PaginatedData(items=[], total=total, page=page, page_size=page_size)
 
     # 批量查 Task（获取负责人信息）
     task_ids = list(set(c.task_id for c in checks))

@@ -11,6 +11,15 @@ from app.models import (
     Organization,
     User,
 )
+from app.schemas.dashboard import (
+    DashboardData,
+    DashboardStats,
+    TaskDistItem,
+    BottleneckItem,
+    OverdueItem,
+    OrgOverview,
+    OrgOverviewInst,
+)
 
 
 async def get_dashboard_stats(db: AsyncSession) -> dict:
@@ -78,16 +87,16 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     # ─── 5. 各所流程概览 ───
     org_overview = await _get_org_overview(db)
 
-    return {
-        "stats": stats,
-        "task_distribution": task_dist,
-        "bottleneck": bottleneck,
-        "overdue_list": overdue_list,
-        "org_overview": org_overview,
-    }
+    return DashboardData(
+        stats=DashboardStats(**stats),
+        task_distribution=task_dist,
+        bottleneck=bottleneck,
+        overdue_list=overdue_list,
+        org_overview=org_overview,
+    )
 
 
-async def _get_task_distribution(db: AsyncSession, now: datetime) -> list[dict]:
+async def _get_task_distribution(db: AsyncSession, now: datetime) -> list[TaskDistItem]:
     """任务状态分布 —— 全局统计（PRD §4.4）"""
     thirty_days_ago = now - timedelta(days=30)
 
@@ -103,7 +112,7 @@ async def _get_task_distribution(db: AsyncSession, now: datetime) -> list[dict]:
         "completed": "#67C23A",
     }
 
-    result = []
+    result: list[TaskDistItem] = []
     for status in statuses:
         conditions = [Task.status == status]
         if status == "completed":
@@ -113,17 +122,17 @@ async def _get_task_distribution(db: AsyncSession, now: datetime) -> list[dict]:
             select(func.count()).select_from(Task).where(*conditions)
         )).scalar() or 0
 
-        result.append({
-            "status": status,
-            "label": labels.get(status, status),
-            "color": colors.get(status, "#909399"),
-            "count": count,
-        })
+        result.append(TaskDistItem(
+            status=status,
+            label=labels.get(status, status),
+            color=colors.get(status, "#909399"),
+            count=count,
+        ))
 
     return result
 
 
-async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict]:
+async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[BottleneckItem]:
     """流程卡点追踪 —— 运行中实例的节点进度链（PRD §4.5）"""
     # 查询所有运行中实例
     instances_result = await db.execute(
@@ -221,24 +230,24 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[dict
         finished_count = sum(1 for n in nodes if n.status == "finished")
         total_nodes = len(nodes)
 
-        items.append({
-            "instance_id": inst.id,
-            "instance_name": inst.name,
-            "organization_name": orgs.get(inst.organization_id, ""),
-            "progress_chain": progress_chain,
-            "current_node_name": current_node_name,
-            "current_assignee_name": current_assignee_name,
-            "priority": inst.priority,
-            "finished_count": finished_count,
-            "total_nodes": total_nodes,
-            "overdue_status": overdue_status,
-            "all_finished": all_finished,
-        })
+        items.append(BottleneckItem(
+            instance_id=inst.id,
+            instance_name=inst.name,
+            organization_name=orgs.get(inst.organization_id, ""),
+            progress_chain=progress_chain,
+            current_node_name=current_node_name,
+            current_assignee_name=current_assignee_name,
+            priority=inst.priority,
+            finished_count=finished_count,
+            total_nodes=total_nodes,
+            overdue_status=overdue_status,
+            all_finished=all_finished,
+        ))
 
     return items
 
 
-async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[dict]:
+async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem]:
     """超期预警列表 —— 已逾期 + 即将逾期任务（PRD §4.6）"""
     near_future = now + timedelta(days=2)
 
@@ -284,17 +293,17 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[dict]:
         else:
             days_label = "—"
 
-        items.append({
-            "task_id": task.id,
-            "instance_id": task.instance_id,
-            "instance_name": inst.name if inst else "",
-            "node_name": node.name,
-            "assignee_name": assignee.real_name if assignee else "",
-            "deadline": dl.isoformat() if dl else None,
-            "days_label": days_label,
-            "organization_name": "",  # 通过实例获取
-            "is_overdue": dl is not None and dl < now,
-        })
+        items.append(OverdueItem(
+            task_id=task.id,
+            instance_id=task.instance_id,
+            instance_name=inst.name if inst else "",
+            node_name=node.name,
+            assignee_name=assignee.real_name if assignee else "",
+            deadline=dl.isoformat() if dl else None,
+            days_label=days_label,
+            organization_name="",
+            is_overdue=dl is not None and dl < now,
+        ))
 
     # 排序：逾期从多到少，然后剩余从少到多
     items.sort(key=lambda x: (
@@ -306,7 +315,7 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[dict]:
     return items
 
 
-async def _get_org_overview(db: AsyncSession) -> list[dict]:
+async def _get_org_overview(db: AsyncSession) -> list[OrgOverview]:
     """各所流程概览 —— 按组织分组运行中实例（PRD §4.7）"""
     orgs_result = await db.execute(
         select(Organization).where(Organization.is_active == True)
@@ -357,19 +366,19 @@ async def _get_org_overview(db: AsyncSession) -> list[dict]:
         items = []
         for inst in org_insts:
             cn = current_nodes.get(inst.id)
-            items.append({
-                "id": inst.id,
-                "name": inst.name,
-                "priority": inst.priority,
-                "current_node_name": cn.name if cn else "—",
-                "current_assignee_name": users_map.get(cn.assignee_id, "") if cn and cn.assignee_id else "",
-                "status": inst.status,
-            })
-        result.append({
-            "org_id": org.id,
-            "org_name": org.name,
-            "running_count": len(items),
-            "instances": items,
-        })
+            items.append(OrgOverviewInst(
+                id=inst.id,
+                name=inst.name,
+                priority=inst.priority,
+                current_node_name=cn.name if cn else "—",
+                current_assignee_name=users_map.get(cn.assignee_id, "") if cn and cn.assignee_id else "",
+                status=inst.status,
+            ))
+        result.append(OrgOverview(
+            org_id=org.id,
+            org_name=org.name,
+            running_count=len(items),
+            instances=items,
+        ))
 
     return result
