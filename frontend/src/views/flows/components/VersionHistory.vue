@@ -33,7 +33,17 @@
 </template>
 
 <script setup lang="ts">
-import type { VersionItem } from '@/api/template'
+/** 版本历史条目（版本功能简化后保留组件，类型本地定义） */
+interface VersionItem {
+  id: number
+  version_number: number
+  status: string
+  published_at: string | null
+  has_soft_overrides: boolean
+  node_count: number
+  edge_count: number
+  published_by_name: string | null
+}
 
 defineProps<{ versions: VersionItem[] }>()
 

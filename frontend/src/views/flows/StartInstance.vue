@@ -29,7 +29,6 @@
             <div class="tpl-name">{{ tpl.name }}</div>
             <div class="tpl-meta">
               <span class="status-tag status-tag--published">已发布</span>
-              <span>v{{ tpl.current_version }}</span>
               <span>{{ tpl.node_count }} 个节点</span>
             </div>
             <div class="tpl-org">{{ tpl.organization_name }}</div>
@@ -43,7 +42,7 @@
     <div class="card" v-if="selectedTemplate">
       <div class="card__header">
         <h3 class="card__title">模板信息</h3>
-        <span class="status-tag status-tag--published">已发布 V{{ selectedTemplate.current_version }}</span>
+        <span class="status-tag status-tag--published">已发布</span>
       </div>
       <div class="card__body">
         <div class="info-grid">
@@ -198,7 +197,6 @@ const nodePanelRef = ref<InstanceType<typeof NodeOverridePanel> | null>(null)
 
 const publishedTemplates = ref<TemplateItem[]>([])
 const selectedTemplate = ref<TemplateItem | null>(null)
-const selectedVersionId = ref<number>(0)
 const templateNodes = ref<TemplateNodeItem[]>([])
 
 const form = ref({
@@ -268,17 +266,7 @@ async function selectTemplate(tpl: TemplateItem) {
   try {
     const detail = await getTemplateDetail(tpl.id)
     templateNodes.value = detail.nodes
-
-    const publishedVersion = detail.versions
-      ?.filter((v: any) => v.status === 'published')
-      .sort((a: any, b: any) => b.version_number - a.version_number)[0]
-
-    selectedVersionId.value = publishedVersion?.id ?? 0
-
-    if (!selectedVersionId.value) {
-      ElMessage.error('该模板没有已发布的版本，无法发起实例')
-      selectedTemplate.value = null
-    }
+    // 简化版模板无版本体系，直接使用模板节点
   } catch {
     ElMessage.error('加载模板节点信息失败')
     templateNodes.value = []
