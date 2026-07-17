@@ -38,7 +38,7 @@
       </el-tab-pane>
       <el-tab-pane v-if="isManager" label="我发起的流程" name="initiated">
         <template #label>
-          <span>我发起的流程<span class="tab-badge" v-if="initiatedCount > 0">{{ initiatedCount }}</span></span>
+          <span>我发起的流程</span>
         </template>
       </el-tab-pane>
     </el-tabs>
@@ -169,6 +169,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useNotificationStore } from '@/stores/notification'
 import { getTasks, type TaskListItem } from '@/api/task'
 import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
@@ -178,6 +179,7 @@ import { useBreadcrumb } from '@/composables/useBreadcrumb'
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
 const userStore = useUserStore()
+const notifyStore = useNotificationStore()
 
 const isManager = computed(() => userStore.isManager)
 const activeTab = ref('tasks')
@@ -200,6 +202,7 @@ async function fetchTasks() {
     const data = await getTasks({ status: taskStatus.value || undefined, keyword: taskKeyword.value || undefined })
     tasks.value = data.items
     taskCount.value = data.total
+    notifyStore.taskCount = data.total // 同步到全局 Store，供侧边栏使用
   } finally { taskLoading.value = false }
 }
 
@@ -215,6 +218,7 @@ async function fetchChecks() {
     const data = await getChecks({ keyword: checkKeyword.value || undefined })
     checks.value = data.items
     checkCount.value = data.total
+    notifyStore.checkCount = data.total // 同步到全局 Store，供侧边栏使用
   } finally { checkLoading.value = false }
 }
 
@@ -230,6 +234,7 @@ async function fetchApprovals() {
     const data = await getApprovals({ keyword: approvalKeyword.value || undefined })
     approvals.value = data.items
     approvalCount.value = data.total
+    notifyStore.approvalCount = data.total // 同步到全局 Store，供侧边栏使用
   } finally { approvalLoading.value = false }
 }
 
@@ -250,7 +255,10 @@ async function fetchInitiated() {
 // ========== 生命周期 ==========
 onMounted(() => {
   setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '个人中心' }])
+  // 页面加载时并行请求所有数量，确保 Tab 红点直接显示
   fetchTasks()
+  fetchChecks()
+  fetchApprovals()
 })
 
 watch(activeTab, (tab) => {

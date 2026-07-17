@@ -51,6 +51,8 @@
             :class="{ 'is-active': isMenuActive(item.path) }"
           >
             <el-icon :size="20"><component :is="item.icon" /></el-icon>
+            <!-- 个人中心小圆点：有待办/校验/审批时显示 -->
+            <span v-if="item.path === '/profile' && notifyStore.hasPending" class="sidebar-nav__dot"></span>
             <span class="sidebar-nav__label">{{ item.label }}</span>
           </router-link>
         </el-tooltip>
@@ -169,12 +171,14 @@ import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Monitor, Document, Setting, User } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { useNotificationStore } from '@/stores/notification'
 import { getMeApi, changePasswordApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const notifyStore = useNotificationStore()
 
 // ==================== 侧边栏状态 ====================
 /** 侧边栏是否折叠为图标列 */
@@ -277,6 +281,7 @@ function openPassword() { showUserPopover.value = false; showPasswordDialog.valu
 async function handleLogout() {
   showUserPopover.value = false
   await userStore.logout()
+  notifyStore.clearAll() // 清空通知计数
   router.push('/login')
 }
 
@@ -492,6 +497,7 @@ async function handleChangePassword() {
   transition: padding 0.2s ease;
 
   &__item {
+    position: relative; /* 为小圆点提供定位锚 */
     display: flex;
     align-items: center;
     gap: 10px;
@@ -514,6 +520,15 @@ async function handleChangePassword() {
   }
 
   &__label { transition: opacity 0.15s; }
+
+  /** 个人中心小圆点 —— 无数字，低调提示 */
+  &__dot {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+  }
 }
 
 /* 侧边栏底部用户区 */

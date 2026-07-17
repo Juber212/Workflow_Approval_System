@@ -66,13 +66,6 @@
         class="login-error"
       />
 
-      <!-- 演示账号提示 -->
-      <div class="login-demo">
-        <b>演示账号</b><br>
-        所长：张三 / 123456 → 通用所，可见「个人中心」<br>
-        管理员：admin / admin123 → 可见「系统管理」<br>
-        普通用户：李四 / 123456
-      </div>
     </div>
   </div>
 </template>
@@ -203,20 +196,5 @@ async function handleLogin() {
 
 .login-error {
   margin-top: 4px;
-}
-
-/* 演示账号提示 */
-.login-demo {
-  margin-top: 20px;
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
-  border-radius: 8px;  /* 统一圆角 */
-  padding: 12px 14px;
-  font-size: 12px;
-  line-height: 20px;
-
-  b {
-    font-weight: 600;
-  }
 }
 </style>
