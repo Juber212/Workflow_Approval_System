@@ -28,6 +28,9 @@ class TaskDetail(BaseModel):
     instance_id: int
     instance_name: str
     instance_status: str
+    initiator_id: int
+    initiator_name: str = ""
+    priority: str = "normal"
     node_id: int
     node_name: str
     node_description: str | None = None
@@ -40,9 +43,14 @@ class TaskDetail(BaseModel):
     time_limit_days: int | None = None
     deadline: datetime | None = None
     round: int = 1
+    total_nodes: int = 0
+    current_node_index: int = 0
+    nodes: list[dict] = []
     files: list[dict] = []
     checks: list[dict] = []
     approvals: list[dict] = []
+    rejected_type: str | None = None
+    rejected_reason: str | None = None
     submitted_at: datetime | None = None
     created_at: datetime | None = None
 

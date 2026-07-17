@@ -24,6 +24,10 @@ class ApprovalDetail(BaseModel):
     id: int
     instance_id: int
     instance_name: str
+    instance_status: str = ""
+    initiator_id: int
+    initiator_name: str = ""
+    priority: str = "normal"
     node_id: int
     node_name: str
     node_description: str | None = None
@@ -33,6 +37,10 @@ class ApprovalDetail(BaseModel):
     status: str
     opinion: str | None = None
     is_end_node: bool = False
+    # 进度条
+    total_nodes: int = 0
+    current_node_index: int = 0
+    nodes: list[dict] = []
     # 节点文件
     files: list[dict] = []
     # 校验进度

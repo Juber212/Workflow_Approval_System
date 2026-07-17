@@ -23,6 +23,12 @@ class CheckDetail(BaseModel):
     id: int
     instance_id: int
     instance_name: str
+    instance_status: str = ""
+    initiator_id: int
+    initiator_name: str = ""
+    submitter_id: int
+    submitter_name: str = ""
+    priority: str = "normal"
     node_id: int
     node_name: str
     task_id: int
@@ -30,6 +36,10 @@ class CheckDetail(BaseModel):
     checker_name: str = ""
     status: str
     opinion: str | None = None
+    # 进度条
+    total_nodes: int = 0
+    current_node_index: int = 0
+    nodes: list[dict] = []
     # 当前节点文件
     files: list[dict] = []
     # 负责人备注

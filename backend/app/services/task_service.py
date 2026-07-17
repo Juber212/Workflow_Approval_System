@@ -18,6 +18,8 @@ from app.models import (
     Approval,
 )
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
+from app.schemas.common import PaginatedData
+from app.schemas.task import TaskListItem, TaskDetail
 
 
 async def list_tasks(
@@ -87,7 +89,7 @@ async def list_tasks(
     users_result = await db.execute(select(User).where(User.id.in_(initiator_ids)))
     users_map = {u.id: u for u in users_result.scalars().all()}
 
-    items = []
+    items: list[TaskListItem] = []
     for t in tasks:
         node = nodes_map.get(t.node_id)
         inst = insts_map.get(t.instance_id)
@@ -101,22 +103,22 @@ async def list_tasks(
             delta = (dl - now).days
             days_remaining = max(0, delta)
 
-        items.append({
-            "id": t.id,
-            "instance_id": t.instance_id,
-            "instance_name": inst.name if inst else "",
-            "node_id": t.node_id,
-            "node_name": node.name if node else "",
-            "initiator_name": initiator.real_name if initiator else "",
-            "status": t.status,
-            "deadline": dl.isoformat() if dl else None,
-            "is_overdue": is_overdue,
-            "days_remaining": days_remaining,
-            "priority": inst.priority if inst else "normal",
-            "created_at": t.created_at.isoformat() if t.created_at else None,
-        })
+        items.append(TaskListItem(
+            id=t.id,
+            instance_id=t.instance_id,
+            instance_name=inst.name if inst else "",
+            node_id=t.node_id,
+            node_name=node.name if node else "",
+            initiator_name=initiator.real_name if initiator else "",
+            status=t.status,
+            deadline=dl,
+            is_overdue=is_overdue,
+            days_remaining=days_remaining,
+            priority=inst.priority if inst else "normal",
+            created_at=t.created_at,
+        ))
 
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return PaginatedData(items=items, total=total, page=page, page_size=page_size)
 
 
 async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) -> dict:
@@ -214,29 +216,29 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
                 rejected_type = "check"
                 rejected_reason = returned_check.opinion
 
-    return {
-        "id": t.id,
-        "instance_id": t.instance_id,
-        "instance_name": inst.name,
-        "instance_status": inst.status,
-        "initiator_id": inst.initiator_id,
-        "initiator_name": initiator.real_name if initiator else "",
-        "priority": (inst.priority or "normal").lower(),
-        "node_id": t.node_id,
-        "node_name": node.name,
-        "node_description": node.description,
-        "node_status": node.status,
-        "assignee_id": t.assignee_id,
-        "assignee_name": assignee.real_name if assignee else "",
-        "status": t.status,
-        "assignee_note": t.assignee_note,
-        "require_file": node.require_file,
-        "time_limit_days": node.time_limit_days,
-        "deadline": node.deadline.isoformat() if node.deadline else None,
-        "round": node.round,
-        "total_nodes": total_nodes,
-        "current_node_index": current_node_index,
-        "nodes": [
+    return TaskDetail(
+        id=t.id,
+        instance_id=t.instance_id,
+        instance_name=inst.name,
+        instance_status=inst.status,
+        initiator_id=inst.initiator_id,
+        initiator_name=initiator.real_name if initiator else "",
+        priority=(inst.priority or "normal").lower(),
+        node_id=t.node_id,
+        node_name=node.name,
+        node_description=node.description,
+        node_status=node.status,
+        assignee_id=t.assignee_id,
+        assignee_name=assignee.real_name if assignee else "",
+        status=t.status,
+        assignee_note=t.assignee_note,
+        require_file=node.require_file,
+        time_limit_days=node.time_limit_days,
+        deadline=node.deadline,
+        round=node.round,
+        total_nodes=total_nodes,
+        current_node_index=current_node_index,
+        nodes=[
             {
                 "id": n.id, "name": n.name,
                 "is_start": n.is_start, "is_end": n.is_end,
@@ -245,7 +247,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             }
             for n in all_nodes
         ],
-        "files": [
+        files=[
             {
                 "id": f.id,
                 "original_name": f.original_name,
@@ -257,7 +259,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             }
             for f in files
         ],
-        "checks": [
+        checks=[
             {
                 "id": c.id,
                 "checker_id": c.checker_id,
@@ -268,7 +270,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             }
             for c in checks
         ],
-        "approvals": [
+        approvals=[
             {
                 "id": a.id,
                 "approver_id": a.approver_id,
@@ -280,11 +282,11 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             }
             for a in approvals
         ],
-        "rejected_type": rejected_type,
-        "rejected_reason": rejected_reason,
-        "submitted_at": t.submitted_at.isoformat() if t.submitted_at else None,
-        "created_at": t.created_at.isoformat() if t.created_at else None,
-    }
+        rejected_type=rejected_type,
+        rejected_reason=rejected_reason,
+        submitted_at=t.submitted_at,
+        created_at=t.created_at,
+    )
 
 
 async def save_draft(db: AsyncSession, task_id: int, current_user_id: int, note: str | None) -> None:

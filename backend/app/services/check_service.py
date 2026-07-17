@@ -17,6 +17,8 @@ from app.models import (
     OperationLog,
 )
 from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, OperatorType
+from app.schemas.common import PaginatedData
+from app.schemas.check import CheckListItem, CheckDetail
 
 
 async def list_checks(
@@ -69,26 +71,26 @@ async def list_checks(
     users_result = await db.execute(select(User).where(User.id.in_(assignee_ids)))
     users_map = {u.id: u for u in users_result.scalars().all()}
 
-    items = []
+    items: list[CheckListItem] = []
     for c in checks:
         task = tasks_map.get(c.task_id)
         node = nodes_map.get(task.node_id) if task else None
         inst = insts_map.get(c.instance_id)
         assignee = users_map.get(task.assignee_id) if task else None
 
-        items.append({
-            "id": c.id,
-            "instance_id": c.instance_id,
-            "instance_name": inst.name if inst else "",
-            "node_id": c.node_id,
-            "node_name": node.name if node else "",
-            "task_id": c.task_id,
-            "submitter_name": assignee.real_name if assignee else "",
-            "status": c.status,
-            "created_at": c.created_at.isoformat() if c.created_at else None,
-        })
+        items.append(CheckListItem(
+            id=c.id,
+            instance_id=c.instance_id,
+            instance_name=inst.name if inst else "",
+            node_id=c.node_id,
+            node_name=node.name if node else "",
+            task_id=c.task_id,
+            submitter_name=assignee.real_name if assignee else "",
+            status=c.status,
+            created_at=c.created_at,
+        ))
 
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return PaginatedData(items=items, total=total, page=page, page_size=page_size)
 
 
 async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int) -> dict:
@@ -137,26 +139,26 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         cu = await db.execute(select(User).where(User.id.in_(checker_ids)))
         checker_users = {u.id: u for u in cu.scalars().all()}
 
-    return {
-        "id": c.id,
-        "instance_id": c.instance_id,
-        "instance_name": inst.name,
-        "instance_status": inst.status,
-        "initiator_id": inst.initiator_id,
-        "initiator_name": initiator.real_name if initiator else "",
-        "submitter_id": task.assignee_id,
-        "submitter_name": submitter.real_name if submitter else "",
-        "priority": (inst.priority or "normal").lower(),
-        "node_id": c.node_id,
-        "node_name": node.name,
-        "task_id": c.task_id,
-        "checker_id": c.checker_id,
-        "checker_name": checker_user.real_name if checker_user else "",
-        "status": c.status,
-        "opinion": c.opinion,
-        "total_nodes": total_nodes,
-        "current_node_index": current_node_index,
-        "nodes": [
+    return CheckDetail(
+        id=c.id,
+        instance_id=c.instance_id,
+        instance_name=inst.name,
+        instance_status=inst.status,
+        initiator_id=inst.initiator_id,
+        initiator_name=initiator.real_name if initiator else "",
+        submitter_id=task.assignee_id,
+        submitter_name=submitter.real_name if submitter else "",
+        priority=(inst.priority or "normal").lower(),
+        node_id=c.node_id,
+        node_name=node.name,
+        task_id=c.task_id,
+        checker_id=c.checker_id,
+        checker_name=checker_user.real_name if checker_user else "",
+        status=c.status,
+        opinion=c.opinion,
+        total_nodes=total_nodes,
+        current_node_index=current_node_index,
+        nodes=[
             {
                 "id": n.id, "name": n.name,
                 "is_start": n.is_start, "is_end": n.is_end,
@@ -165,7 +167,7 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             }
             for n in all_nodes
         ],
-        "files": [
+        files=[
             {
                 "id": f.id,
                 "original_name": f.original_name,
@@ -177,8 +179,8 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             }
             for f in files
         ],
-        "assignee_note": task.assignee_note,
-        "check_progress": [
+        assignee_note=task.assignee_note,
+        check_progress=[
             {
                 "id": ac.id,
                 "checker_id": ac.checker_id,
@@ -189,9 +191,9 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             }
             for ac in all_checks
         ],
-        "decided_at": c.decided_at.isoformat() if c.decided_at else None,
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-    }
+        decided_at=c.decided_at,
+        created_at=c.created_at,
+    )
 
 
 async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str | None) -> dict:

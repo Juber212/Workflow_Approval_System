@@ -27,6 +27,8 @@ from app.models.enums import (
     CheckStatus,
     OperatorType,
 )
+from app.schemas.common import PaginatedData
+from app.schemas.approval import ApprovalListItem, ApprovalDetail
 from app.engine.flow_engine import propagate_from_node
 
 
@@ -71,24 +73,24 @@ async def list_approvals(
     insts_result = await db.execute(select(FlowInstance).where(FlowInstance.id.in_(inst_ids)))
     insts_map = {i.id: i for i in insts_result.scalars().all()}
 
-    items = []
+    items: list[ApprovalListItem] = []
     for a in approvals:
         node = nodes_map.get(a.node_id)
         inst = insts_map.get(a.instance_id)
-        items.append({
-            "id": a.id,
-            "instance_id": a.instance_id,
-            "instance_name": inst.name if inst else "",
-            "node_id": a.node_id,
-            "node_name": node.name if node else "",
-            "task_id": a.task_id,
-            "approver_id": a.approver_id,
-            "status": a.status,
-            "is_end_node": node.is_end if node else False,
-            "created_at": a.created_at.isoformat() if a.created_at else None,
-        })
+        items.append(ApprovalListItem(
+            id=a.id,
+            instance_id=a.instance_id,
+            instance_name=inst.name if inst else "",
+            node_id=a.node_id,
+            node_name=node.name if node else "",
+            task_id=a.task_id,
+            approver_id=a.approver_id,
+            status=a.status,
+            is_end_node=node.is_end if node else False,
+            created_at=a.created_at,
+        ))
 
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+    return PaginatedData(items=items, total=total, page=page, page_size=page_size)
 
 
 async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_id: int) -> dict:
@@ -198,26 +200,26 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             for n in exec_nodes_result.scalars().all()
         ]
 
-    return {
-        "id": a.id,
-        "instance_id": a.instance_id,
-        "instance_name": inst.name,
-        "instance_status": inst.status,
-        "initiator_id": inst.initiator_id,
-        "initiator_name": initiator.real_name if initiator else "",
-        "priority": (inst.priority or "normal").lower(),
-        "node_id": a.node_id,
-        "node_name": node.name,
-        "node_description": node.description,
-        "task_id": a.task_id,
-        "approver_id": a.approver_id,
-        "approver_name": approver_user.real_name if approver_user else "",
-        "status": a.status,
-        "opinion": a.opinion,
-        "is_end_node": node.is_end,
-        "total_nodes": total_nodes,
-        "current_node_index": current_node_index,
-        "nodes": [
+    return ApprovalDetail(
+        id=a.id,
+        instance_id=a.instance_id,
+        instance_name=inst.name,
+        instance_status=inst.status,
+        initiator_id=inst.initiator_id,
+        initiator_name=initiator.real_name if initiator else "",
+        priority=(inst.priority or "normal").lower(),
+        node_id=a.node_id,
+        node_name=node.name,
+        node_description=node.description,
+        task_id=a.task_id,
+        approver_id=a.approver_id,
+        approver_name=approver_user.real_name if approver_user else "",
+        status=a.status,
+        opinion=a.opinion,
+        is_end_node=node.is_end,
+        total_nodes=total_nodes,
+        current_node_index=current_node_index,
+        nodes=[
             {
                 "id": n.id, "name": n.name,
                 "is_start": n.is_start, "is_end": n.is_end,
@@ -226,7 +228,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             }
             for n in all_nodes
         ],
-        "files": [
+        files=[
             {
                 "id": f.id, "original_name": f.original_name,
                 "file_size": f.file_size,
@@ -238,13 +240,13 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             }
             for f in files
         ],
-        "check_progress": check_progress,
-        "approval_progress": approval_progress,
-        "reject_target_nodes": reject_target_nodes,
-        "signature_applied": a.signature_applied,
-        "decided_at": a.decided_at.isoformat() if a.decided_at else None,
-        "created_at": a.created_at.isoformat() if a.created_at else None,
-    }
+        check_progress=check_progress,
+        approval_progress=approval_progress,
+        reject_target_nodes=reject_target_nodes,
+        signature_applied=a.signature_applied,
+        decided_at=a.decided_at,
+        created_at=a.created_at,
+    )
 
 
 async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None) -> dict:
