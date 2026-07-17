@@ -1,5 +1,6 @@
 /** 审批 API */
 import request from './request'
+import type { PaginatedResponse } from './index'
 
 export interface ApprovalListItem {
   id: number
@@ -45,7 +46,7 @@ export interface ApprovalDetail {
 
 export async function getApprovals(params: { status?: string; keyword?: string; page?: number; page_size?: number }) {
   const res = await request.get('/approvals', { params })
-  return res.data as { items: ApprovalListItem[]; total: number; page: number; page_size: number }
+  return res.data as PaginatedResponse<ApprovalListItem>
 }
 
 export async function getApprovalDetail(id: number): Promise<ApprovalDetail> {

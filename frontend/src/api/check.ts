@@ -1,5 +1,6 @@
 /** 校验 API */
 import request from './request'
+import type { PaginatedResponse } from './index'
 
 export interface CheckListItem {
   id: number
@@ -42,7 +43,7 @@ export interface CheckDetail {
 
 export async function getChecks(params: { status?: string; keyword?: string; page?: number; page_size?: number }) {
   const res = await request.get('/checks', { params })
-  return res.data as { items: CheckListItem[]; total: number; page: number; page_size: number }
+  return res.data as PaginatedResponse<CheckListItem>
 }
 
 export async function getCheckDetail(id: number): Promise<CheckDetail> {

@@ -34,10 +34,17 @@ export interface SaveDesignData {
   edges: DesignerEdge[]
 }
 
+/** 保存设计器响应 */
+export interface SaveDesignResponse {
+  template_id: number
+  node_count: number
+  edge_count: number
+}
+
 // ==================== API ====================
 
 /** 批量保存设计器内容 */
 export async function saveDesign(templateId: number, data: SaveDesignData) {
   const res = await request.put(`/templates/${templateId}/design`, data)
-  return res.data as { template_id: number; node_count: number; edge_count: number }
+  return res.data as SaveDesignResponse
 }

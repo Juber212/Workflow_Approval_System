@@ -1,5 +1,6 @@
 /** 项目模板 API —— 简化版：无版本、无状态 */
 import request from './request'
+import type { PaginatedResponse } from './index'
 
 // ==================== 类型 ====================
 
@@ -66,6 +67,9 @@ export interface TemplateNodeItem {
   sort_order: number
 }
 
+/** 创建模板响应 */
+export interface TemplateCreated { id: number; name: string }
+
 export interface TemplateEdgeItem {
   id: number
   source_node_id: number
@@ -94,7 +98,7 @@ export async function getTemplateOrganizations(): Promise<OrgCardListResponse> {
 /** 模板列表 */
 export async function getTemplates(params: TemplateListParams = {}) {
   const res = await request.get('/templates', { params })
-  return res.data as { items: TemplateItem[]; total: number; page: number; page_size: number }
+  return res.data as PaginatedResponse<TemplateItem>
 }
 
 /** 模板详情 */
@@ -106,7 +110,7 @@ export async function getTemplateDetail(id: number): Promise<TemplateDetail> {
 /** 创建模板 */
 export async function createTemplate(data: { name: string; description?: string | null; organization_id: number }) {
   const res = await request.post('/templates', data)
-  return res.data as { id: number; name: string }
+  return res.data as TemplateCreated
 }
 
 /** 更新模板 */

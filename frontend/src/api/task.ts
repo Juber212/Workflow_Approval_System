@@ -1,5 +1,6 @@
 /** 任务 API —— 待办列表、详情、提交、草稿、文件上传 */
 import request from './request'
+import type { PaginatedResponse } from './index'
 
 // ==================== 类型 ====================
 
@@ -98,7 +99,7 @@ export async function getTasks(params: {
   page_size?: number
 }) {
   const res = await request.get('/tasks', { params })
-  return res.data as { items: TaskListItem[]; total: number; page: number; page_size: number }
+  return res.data as PaginatedResponse<TaskListItem>
 }
 
 export async function getTaskDetail(id: number): Promise<TaskDetail> {
