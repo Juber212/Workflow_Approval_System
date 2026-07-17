@@ -3,7 +3,7 @@
     <div class="login-card">
       <!-- 品牌标识区 -->
       <div class="login-brand">
-        <span class="login-logo-icon">流</span>
+        <img src="/favicon.svg?v=7" alt="logo" class="login-logo-icon" />
         <div>
           <h1 class="login-title">企业项目审批系统</h1>
           <p class="login-subtitle">Enterprise Workflow Approval System</p>
@@ -169,16 +169,9 @@ async function handleLogin() {
 }
 
 .login-logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  background: var(--color-primary);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
+  display: block;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 

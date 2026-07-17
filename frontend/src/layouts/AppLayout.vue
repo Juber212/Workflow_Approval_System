@@ -17,12 +17,14 @@
               <rect x="1.5" y="3.5" width="17" height="13" rx="3" />
               <line x1="6" y1="3.5" x2="6" y2="16.5" />
             </svg>
-            <span v-else>流</span>
+            <img v-else src="/favicon.svg?v=7" alt="logo" class="sidebar-brand__logo" />
           </span>
         </el-tooltip>
         <!-- 展开态：logo 正常链接 -->
         <template v-else>
-          <router-link to="/dashboard" class="sidebar-brand__icon sidebar-brand__icon--link">流</router-link>
+          <router-link to="/dashboard" class="sidebar-brand__icon sidebar-brand__icon--link">
+            <img src="/favicon.svg?v=7" alt="logo" class="sidebar-brand__logo" />
+          </router-link>
           <div class="sidebar-brand__text">
             <router-link to="/dashboard" class="sidebar-brand__title">项目审批系统</router-link>
             <span class="sidebar-brand__sub">Workflow Approval</span>
@@ -443,9 +445,6 @@ async function handleChangePassword() {
     justify-content: center;
     width: 36px; height: 36px;
     border-radius: 8px;
-    background: var(--color-primary);
-    color: #fff;
-    font-size: 18px; font-weight: 700;
     flex-shrink: 0;
 
     // logo 链接重置
@@ -455,9 +454,13 @@ async function handleChangePassword() {
     &--toggle {
       cursor: pointer; transition: background 0.15s;
       &:hover { background: var(--el-fill-color); }
-      // SVG 图标颜色覆盖（不要白色，和正常图标一样的中性灰）
-      svg { color: var(--el-text-color-secondary); }
     }
+  }
+
+  &__logo {
+    display: block;
+    width: 32px;
+    height: 32px;
   }
 
   &__text {
