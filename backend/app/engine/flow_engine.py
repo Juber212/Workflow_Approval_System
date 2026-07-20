@@ -116,6 +116,7 @@ async def propagate_from_node(
                         task_id=None,  # 结束节点无 Task
                         approver_id=approver_id,
                         status=ApprovalStatus.PENDING,
+                        round=node.round,  # 记录当前节点轮次
                     ))
 
             activated_ids.append(node.id)

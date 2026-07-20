@@ -10,6 +10,7 @@ from app.core.error_codes import ErrorCode
 from app.models import (
     Task,
     FlowInstance,
+    FlowTemplate,
     InstanceNode,
     Organization,
     User,
@@ -30,9 +31,21 @@ async def list_tasks(
     keyword: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    instance_type: str | None = None,  # "project" 或 "proposal"，用于区分项目/方案
 ) -> dict:
     """我的待办列表 —— 按 deadline 升序，逾期优先"""
     conditions = [Task.assignee_id == assignee_id]
+
+    # 按实例类型过滤（项目/方案）
+    if instance_type:
+        tpl_filter = FlowTemplate.type == instance_type
+        conditions.append(Task.instance_id.in_(
+            select(FlowInstance.id).where(
+                FlowInstance.template_id.in_(
+                    select(FlowTemplate.id).where(tpl_filter)
+                )
+            )
+        ))
     if status:
         conditions.append(Task.status == status)
     else:

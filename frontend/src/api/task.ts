@@ -87,6 +87,9 @@ export interface TaskApprovalItem {
   status: string
   opinion: string | null
   signature_applied: boolean
+  signature_x: number | null
+  signature_y: number | null
+  signature_page: number | null
   decided_at: string | null
 }
 
@@ -97,6 +100,7 @@ export async function getTasks(params: {
   keyword?: string
   page?: number
   page_size?: number
+  type?: string  // "project" 或 "proposal"
 }) {
   const res = await request.get('/tasks', { params })
   return res.data as PaginatedResponse<TaskListItem>

@@ -1,4 +1,4 @@
-"""项目模板模型 —— 简化版：无版本、无状态，画布即模板"""
+"""项目/方案模板模型"""
 
 from sqlalchemy import String, Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,6 +13,7 @@ class FlowTemplate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False, comment="流程名称")
     description: Mapped[str | None] = mapped_column(String(500), comment="流程描述")
+    type: Mapped[str] = mapped_column(String(20), default="project", comment="模板类型：project / proposal")
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, comment="所属组织")
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="创建人")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

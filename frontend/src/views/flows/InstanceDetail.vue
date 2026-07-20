@@ -15,13 +15,17 @@
       />
 
       <!-- 流程节点卡片列表 -->
-      <h3 class="section-title">流程节点</h3>
+      <div class="section-header">
+        <h3 class="section-title">流程节点</h3>
+        <el-button text size="small" @click="toggleExpandAll">{{ expandLabel }}</el-button>
+      </div>
       <NodeCard
         v-for="node in detail.nodes"
         :key="node.id"
         :node="node"
         :is-initiator="isInitiator"
         :instance-status="detail.status"
+        :force-expand="expandAll"
         @change-personnel="handleChangePersonnel"
         @supplement="handleSupplement"
       />
@@ -107,6 +111,10 @@ const { setBreadcrumb } = useBreadcrumb()
 // ========== 状态 ==========
 const loading = ref(false)
 const detail = ref<InstanceDetailResponse | null>(null)
+/** 全局展开控制：null=默认，true=全部展开，false=全部折叠 */
+const expandAll = ref<boolean | null>(null)
+/** 按钮文字 */
+const expandLabel = computed(() => expandAll.value === true ? '折叠全部' : '展开全部')
 const showTerminateDialog = ref(false)
 const showPriorityDialog = ref(false)
 const showPersonnelDialog = ref(false)
@@ -151,6 +159,15 @@ async function fetchDetail() {
 }
 
 // ========== 操作处理 ==========
+/** 一键展开/折叠所有节点 */
+function toggleExpandAll() {
+  if (expandAll.value === true) {
+    expandAll.value = false  // 当前全部展开 → 全部折叠
+  } else {
+    expandAll.value = true   // 当前默认或全部折叠 → 全部展开
+  }
+}
+
 /** 打开补交文件弹窗：全局入口不传 nodeId，节点卡片入口传入 nodeId */
 function handleSupplement(nodeId?: number) {
   supplementPreselectedNodeId.value = nodeId
@@ -203,11 +220,18 @@ function handlePersonnelChanged() {
   /* max-width 由 AppLayout 内容区统一控制 */
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .section-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--el-text-color-primary);
-  margin: 0 0 12px;
+  margin: 0;
 }
 
 .desc-text {

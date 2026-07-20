@@ -13,6 +13,10 @@ class NodeOverride(BaseModel):
     deadline: str | None = Field(None, description="截止日期，ISO 格式如 2026-07-21")
     checkers: list[dict] | None = Field(None, description="校验人列表 [{\"user_id\": 1}]")
     approvers: list[dict] | None = Field(None, description="审批人列表 [{\"user_id\": 1}]")
+    require_signature: bool | None = Field(None, description="是否要求签批")
+    signature_x: float | None = Field(None, description="签名 X 坐标")
+    signature_y: float | None = Field(None, description="签名 Y 坐标")
+    signature_page: int | None = Field(None, description="签名页码")
 
 
 class CreateInstanceRequest(BaseModel):
@@ -25,6 +29,7 @@ class CreateInstanceRequest(BaseModel):
     product_model: str | None = Field(None, max_length=100, description="产品型号")
     sales_manager: str | None = Field(None, max_length=50, description="销售经理")
     node_overrides: list[NodeOverride] | None = Field(None, description="节点覆盖配置（可选）")
+    proposal_id: int | None = Field(None, description="关联的方案 ID（可选）")
 
 
 class InstanceNodeBrief(BaseModel):
@@ -90,6 +95,7 @@ class CheckRecordBrief(BaseModel):
     checker_name: str = ""
     status: str
     opinion: str | None = None
+    round: int = 1
     decided_at: datetime | None = None
 
 
@@ -101,6 +107,10 @@ class ApprovalBrief(BaseModel):
     status: str
     opinion: str | None = None
     signature_applied: bool = False
+    signature_x: float | None = None
+    signature_y: float | None = None
+    signature_page: int | None = None
+    round: int = 1
     decided_at: datetime | None = None
 
 
@@ -120,6 +130,10 @@ class DetailNodeInfo(BaseModel):
     checkers: list[dict] | None = None
     approvers: list[dict] | None = None
     require_file: bool = False
+    require_signature: bool = True
+    signature_x: float = 400
+    signature_y: float = 100
+    signature_page: int = -1
     approval_strategy: str = "all_approve"
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -157,6 +171,8 @@ class InstanceDetailResponse(BaseModel):
     contract_no: str | None = None
     product_model: str | None = None
     sales_manager: str | None = None
+    proposal_id: int | None = None      # 关联的方案 ID
+    proposal_name: str | None = None    # 关联的方案名称
     current_node_index: int = 0
     total_nodes: int = 0
     initiated_at: datetime | None = None

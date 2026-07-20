@@ -51,9 +51,11 @@
             :class="{ 'is-active': isMenuActive(item.path) }"
           >
             <el-icon :size="20"><component :is="item.icon" /></el-icon>
-            <!-- 个人中心小圆点：有待办/校验/审批时显示 -->
-            <span v-if="item.path === '/profile' && notifyStore.hasPending" class="sidebar-nav__dot"></span>
             <span class="sidebar-nav__label">{{ item.label }}</span>
+            <!-- 个人中心红色圆形数字徽章 -->
+            <span v-if="item.path === '/profile' && notifyStore.totalPending > 0" class="sidebar-nav__badge">
+              {{ notifyStore.totalPending > 99 ? '99+' : notifyStore.totalPending }}
+            </span>
           </router-link>
         </el-tooltip>
       </nav>
@@ -165,14 +167,17 @@
 
 <script setup lang="ts">
 /** 应用布局 —— 侧边栏 + 内容区（飞书风格） */
-import { ref, computed, watch, type Component } from 'vue'
+import { ref, computed, watch, onMounted, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { Monitor, Document, Setting, User } from '@element-plus/icons-vue'
+import { Monitor, Document, Setting, User, Files } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
 import { getMeApi, changePasswordApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
+import { getTasks } from '@/api/task'
+import { getChecks } from '@/api/check'
+import { getApprovals } from '@/api/approval'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
@@ -226,6 +231,7 @@ function roleTagLabel(role: string): string {
 const MENU_ICONS: Record<string, Component> = {
   '/dashboard': Monitor,
   '/flows': Document,
+  '/proposals': Files,
   '/admin/users': Setting,
   '/profile': User,
 }
@@ -240,6 +246,7 @@ const menuItems = computed<MenuItem[]>(() => {
   if (isAdmin.value) {
     items.push({ path: '/admin/users', label: '系统管理', icon: MENU_ICONS['/admin/users'] })
   } else {
+    items.push({ path: '/proposals', label: '方案管理', icon: MENU_ICONS['/proposals'] })
     items.push({ path: '/profile', label: '个人中心', icon: MENU_ICONS['/profile'] })
   }
   return items
@@ -250,8 +257,31 @@ function isMenuActive(base: string): boolean {
   const p = route.path
   if (base === '/admin/users') return p.startsWith('/admin')
   if (base === '/profile') return p.startsWith('/profile')
+  if (base === '/proposals') return p.startsWith('/proposals')
   return p === base || p.startsWith(base + '/')
 }
+
+// ==================== 通知计数 ====================
+
+/** 页面加载时主动拉取通知计数（非管理员），确保侧边栏徽章始终显示 */
+async function refreshNotifyCounts() {
+  if (isAdmin.value) return // 管理员无个人中心，无需拉取
+  try {
+    const [tasks, checks, approvals] = await Promise.all([
+      getTasks({ page_size: 1 }),
+      getChecks({ page_size: 1 }),
+      getApprovals({ page_size: 1 }),
+    ])
+    notifyStore.setCounts(tasks.total, checks.total, approvals.total)
+  } catch { /* 失败不影响页面使用 */ }
+}
+
+onMounted(refreshNotifyCounts)
+
+/** 路由变化时自动刷新徽章数字（用户操作后跳转时及时更新） */
+watch(() => route.path, () => {
+  refreshNotifyCounts()
+})
 
 // ==================== 用户 Popover ====================
 const showUserPopover = ref(false)
@@ -521,13 +551,17 @@ async function handleChangePassword() {
 
   &__label { transition: opacity 0.15s; }
 
-  /** 个人中心小圆点 —— 无数字，低调提示 */
-  &__dot {
-    position: absolute;
-    top: 8px; right: 8px;
-    width: 6px; height: 6px;
+  /** 个人中心红色圆形数字徽章 */
+  &__badge {
+    width: 20px; height: 20px;
     border-radius: 50%;
-    background: var(--el-color-primary);
+    background: var(--el-color-danger);
+    color: #fff;
+    font-size: 11px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-left: auto;
   }
 }
 

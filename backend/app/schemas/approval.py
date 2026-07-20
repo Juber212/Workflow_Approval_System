@@ -14,6 +14,7 @@ class ApprovalListItem(BaseModel):
     approver_id: int
     status: str  # pending/approved/rejected/terminated
     is_end_node: bool = False
+    round: int = 1
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -50,6 +51,13 @@ class ApprovalDetail(BaseModel):
     # 驳回目标候选（仅结束节点）
     reject_target_nodes: list[dict] = []
     signature_applied: bool = False
+    # 节点签批配置（用于前端判断是否弹出签名预览 + 默认位置）
+    require_signature: bool = True
+    signature_x: float = 400
+    signature_y: float = 100
+    signature_page: int = -1
+    # 当前审批人的签名图片 URL
+    current_signature_url: str | None = None
     decided_at: datetime | None = None
     created_at: datetime | None = None
 
@@ -59,3 +67,7 @@ class ApprovalAction(BaseModel):
     opinion: str | None = Field(None, max_length=500, description="审批意见")
     # 仅结束节点终审总驳回时需要
     target_node_id: int | None = Field(None, description="总驳回目标节点 ID（仅结束节点审批）")
+    # 签批：审批人微调后的签名位置（仅通过时有效）
+    signature_x: float | None = Field(None, description="调整后的签名 X 坐标")
+    signature_y: float | None = Field(None, description="调整后的签名 Y 坐标")
+    signature_page: int | None = Field(None, description="选择的签名页码")

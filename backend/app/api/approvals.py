@@ -17,6 +17,7 @@ async def get_approvals(
     keyword: str | None = Query(None, description="实例名称搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    type: str | None = Query(None, description="实例类型：project / proposal"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -28,6 +29,7 @@ async def get_approvals(
         keyword=keyword,
         page=page,
         page_size=page_size,
+        instance_type=type,
     )
     return ApiResponse.ok(result)
 
@@ -51,7 +53,12 @@ async def approve(
     db: AsyncSession = Depends(get_db),
 ):
     """审批通过 —— 签名 + 流程推进"""
-    result = await approval_service.approve(db, approval_id, current_user.id, data.opinion)
+    result = await approval_service.approve(
+        db, approval_id, current_user.id, data.opinion,
+        signature_x=data.signature_x,
+        signature_y=data.signature_y,
+        signature_page=data.signature_page,
+    )
     await db.commit()
     return ApiResponse.ok(result, message=result.get("message", "审批通过"))
 

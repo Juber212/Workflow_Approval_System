@@ -1,6 +1,7 @@
 """项目 API —— 发起、查询、终止、换人、优先级、补交文件"""
 
 from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -29,6 +30,20 @@ from app.services.instance_service import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["项目"])
+
+
+@router.get("/instances/check-name")
+async def check_instance_name(
+    name: str = Query(..., min_length=1, description="待检测的项目名称"),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_active_user),
+):
+    """检测项目名称是否已被使用"""
+    from app.models import FlowInstance
+    existing = (await db.execute(
+        select(FlowInstance.id).where(FlowInstance.name == name.strip())
+    )).scalar_one_or_none()
+    return ApiResponse.ok({"exists": existing is not None})
 
 
 @router.post("/instances")
@@ -95,20 +110,25 @@ async def my_initiated_instances(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    type: str | None = Query(None, description="实例类型：project / proposal"),
 ):
     """我发起的流程 —— 所长查看自己发起的所有实例（PRD §7.5）"""
-    from app.models import FlowInstance
+    from app.models import FlowInstance, FlowTemplate
     from sqlalchemy import select, func
 
-    # 直接用简单查询，按发起时间倒序
-    count_stmt = select(func.count()).select_from(FlowInstance).where(
-        FlowInstance.initiator_id == current_user.id
-    )
+    conditions = [FlowInstance.initiator_id == current_user.id]
+    # 按类型过滤
+    if type:
+        conditions.append(FlowInstance.template_id.in_(
+            select(FlowTemplate.id).where(FlowTemplate.type == type)
+        ))
+
+    count_stmt = select(func.count()).select_from(FlowInstance).where(*conditions)
     total = (await db.execute(count_stmt)).scalar() or 0
 
     stmt = (
         select(FlowInstance)
-        .where(FlowInstance.initiator_id == current_user.id)
+        .where(*conditions)
         .order_by(FlowInstance.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

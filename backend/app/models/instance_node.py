@@ -1,6 +1,6 @@
 """实例节点模型（运行时状态）"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON, Float
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -23,6 +23,10 @@ class InstanceNode(Base):
     approvers: Mapped[dict | None] = mapped_column(JSON, comment="审批人列表")
     checkers: Mapped[dict | None] = mapped_column(JSON, comment="校验人列表")
     approval_strategy: Mapped[str] = mapped_column(String(30), default="all_approve", comment="审批策略")
+    require_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否要求签批（审批通过后签名上PDF）")
+    signature_x: Mapped[float] = mapped_column(Float, default=400, comment="签名默认X坐标（距左边）")
+    signature_y: Mapped[float] = mapped_column(Float, default=100, comment="签名默认Y坐标（距底部）")
+    signature_page: Mapped[int] = mapped_column(Integer, default=-1, comment="签名默认页码（-1=最后一页）")
     status: Mapped[str] = mapped_column(String(20), default="waiting", comment="节点状态")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, comment="排序序号")
     incoming_count: Mapped[int] = mapped_column(Integer, default=0, comment="汇合节点上游连线数")

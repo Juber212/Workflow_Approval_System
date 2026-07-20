@@ -68,6 +68,7 @@ class OrgOverview(BaseModel):
 class DashboardData(BaseModel):
     """Dashboard 完整响应数据"""
     stats: DashboardStats = DashboardStats()
+    proposal_stats: DashboardStats = DashboardStats()  # 方案统计（同结构，含义不同）
     task_distribution: list[TaskDistItem] = []
     bottleneck: list[BottleneckItem] = []
     overdue_list: list[OverdueItem] = []

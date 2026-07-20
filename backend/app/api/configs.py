@@ -28,7 +28,7 @@ async def get_configs(
             config_value=cfg.config_value,
             description=cfg.description,
         ).model_dump()
-        for cfg in all_configs.values()
+        for cfg in all_configs
     ]
     # 按 id 排序
     items.sort(key=lambda x: x["id"])

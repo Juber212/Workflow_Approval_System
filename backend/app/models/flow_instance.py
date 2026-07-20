@@ -21,6 +21,7 @@ class FlowInstance(Base):
     contract_no: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="合同号")
     product_model: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="产品型号")
     sales_manager: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="销售经理")
+    proposal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=True, comment="关联的方案ID（仅项目类型可用）")
     status: Mapped[str] = mapped_column(String(20), default="created", comment="主状态")
     termination_reason: Mapped[str | None] = mapped_column(String(500), comment="终止原因")
     initiated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, comment="发起时间")

@@ -56,6 +56,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '项目详情' },
       },
       {
+        path: 'proposals',
+        name: 'Proposals',
+        component: () => import('@/views/proposals/ProposalManagement.vue'),
+        meta: { title: '方案管理' },
+      },
+      {
+        path: 'proposals/organization/:orgId',
+        name: 'OrgProposalHome',
+        component: () => import('@/views/proposals/OrgProposalHome.vue'),
+        meta: { title: '所内方案' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/profile/index.vue'),

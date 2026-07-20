@@ -10,6 +10,10 @@ export interface NodeOverride {
   deadline?: string | null
   checkers?: { user_id: number }[]
   approvers?: { user_id: number }[]
+  require_signature?: boolean
+  signature_x?: number
+  signature_y?: number
+  signature_page?: number
 }
 
 /** 发起项目请求 */
@@ -22,6 +26,7 @@ export interface CreateInstanceData {
   product_model?: string | null
   sales_manager?: string | null
   node_overrides?: NodeOverride[]
+  proposal_id?: number | null  // 关联的已完成方案 ID（可选）
 }
 
 /** 发起项目响应 */
@@ -103,6 +108,7 @@ export interface CheckRecordBrief {
   checker_name: string
   status: string
   opinion: string | null
+  round: number
   decided_at: string | null
 }
 
@@ -114,6 +120,10 @@ export interface ApprovalBrief {
   status: string
   opinion: string | null
   signature_applied: boolean
+  signature_x: number | null
+  signature_y: number | null
+  signature_page: number | null
+  round: number
   decided_at: string | null
 }
 
@@ -133,6 +143,10 @@ export interface DetailNodeInfo {
   checkers: { user_id: number; user_name?: string }[] | null
   approvers: { user_id: number; user_name?: string }[] | null
   require_file: boolean
+  require_signature: boolean
+  signature_x: number
+  signature_y: number
+  signature_page: number
   approval_strategy: string
   started_at: string | null
   completed_at: string | null
@@ -170,6 +184,8 @@ export interface InstanceDetailResponse {
   contract_no: string | null
   product_model: string | null
   sales_manager: string | null
+  proposal_id: number | null    // 关联的方案 ID
+  proposal_name: string | null  // 关联的方案名称
   current_node_index: number
   total_nodes: number
   initiated_at: string | null
@@ -252,7 +268,7 @@ export interface MyInitiatedItem {
   created_at: string | null
 }
 
-export async function getMyInitiated(params: { page?: number; page_size?: number }): Promise<{ items: MyInitiatedItem[]; total: number }> {
+export async function getMyInitiated(params: { page?: number; page_size?: number; type?: string }): Promise<{ items: MyInitiatedItem[]; total: number }> {
   const res = await request.get('/instances/my-initiated', { params })
   return res.data
 }

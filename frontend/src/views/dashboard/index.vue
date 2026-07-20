@@ -30,6 +30,29 @@
       </div>
     </div>
 
+    <!-- ====== 方案统计卡片 ====== -->
+    <div class="section-divider">
+      <h3 class="section-label">方案概览</h3>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card stat-card--primary" @click="$router.push('/proposals')">
+        <div class="stat-card__num stat-card__num--primary">{{ data.proposal_stats.overdue_warnings }}</div>
+        <div class="stat-card__label">方案总数</div>
+      </div>
+      <div class="stat-card stat-card--warning">
+        <div class="stat-card__num stat-card__num--warning">{{ data.proposal_stats.running_instances }}</div>
+        <div class="stat-card__label">进行中方案</div>
+      </div>
+      <div class="stat-card stat-card--success">
+        <div class="stat-card__num stat-card__num--success">{{ data.proposal_stats.archived_total }}</div>
+        <div class="stat-card__label">已完成方案</div>
+      </div>
+      <div class="stat-card stat-card--info">
+        <div class="stat-card__num stat-card__num--info">{{ data.proposal_stats.archived_this_month }}</div>
+        <div class="stat-card__label">本月完成方案</div>
+      </div>
+    </div>
+
     <!-- ====== 超期预警 ====== -->
     <div class="card">
       <div class="card__header"><span class="card__title">⚠️ 超期预警</span></div>
@@ -175,6 +198,7 @@ const ORG_COLORS = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA
 
 const data = reactive<DashboardData>({
   stats: { running_instances: 0, archived_total: 0, archived_this_month: 0, overdue_warnings: 0 },
+  proposal_stats: { running_instances: 0, archived_total: 0, archived_this_month: 0, overdue_warnings: 0 },
   task_distribution: [],
   bottleneck: [],
   overdue_list: [],
@@ -287,6 +311,7 @@ function chainNodeClass(seg: string): string {
   &__num--success { color: var(--el-color-success); }
   &__num--info    { color: #409EFF; }
   &__num--danger  { color: var(--el-color-danger); }
+  &__num--warning { color: var(--el-color-warning); }
 
   &__label { font-size: 14px; color: var(--el-text-color-secondary); margin-top: 6px; }
 
@@ -295,6 +320,7 @@ function chainNodeClass(seg: string): string {
   &--success { border-bottom-color: var(--el-color-success); }
   &--info    { border-bottom-color: #409EFF; }
   &--danger  { border-bottom-color: var(--el-color-danger); }
+  &--warning { border-bottom-color: var(--el-color-warning); }
 }
 
 /* ─── 双栏 ─── */

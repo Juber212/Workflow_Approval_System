@@ -31,10 +31,10 @@ async def get_organization_summaries(
     if not org_ids:
         return [], 0
 
-    # 批量模板数
+    # 批量模板数（排除方案模板）
     tpl_count_stmt = (
         select(FlowTemplate.organization_id, func.count(FlowTemplate.id))
-        .where(FlowTemplate.organization_id.in_(org_ids))
+        .where(FlowTemplate.organization_id.in_(org_ids), FlowTemplate.type != "proposal")
         .group_by(FlowTemplate.organization_id)
     )
     tpl_rows = (await db.execute(tpl_count_stmt)).all()
@@ -49,10 +49,10 @@ async def get_organization_summaries(
     inst_rows = (await db.execute(inst_count_stmt)).all()
     inst_map = {oid: cnt for oid, cnt in inst_rows}
 
-    # 批量最近更新时间
+    # 批量最近更新时间（排除方案模板）
     tpl_time_stmt = (
         select(FlowTemplate.organization_id, func.max(FlowTemplate.updated_at))
-        .where(FlowTemplate.organization_id.in_(org_ids))
+        .where(FlowTemplate.organization_id.in_(org_ids), FlowTemplate.type != "proposal")
         .group_by(FlowTemplate.organization_id)
     )
     tpl_time_rows = (await db.execute(tpl_time_stmt)).all()
@@ -103,8 +103,8 @@ async def list_templates(
     db: AsyncSession, *, page: int = 1, page_size: int = 20,
     organization_id: int | None = None, keyword: str | None = None,
 ) -> PaginatedData:
-    """分页查询模板列表"""
-    conditions = []
+    """分页查询模板列表 —— 排除方案模板"""
+    conditions = [FlowTemplate.type != "proposal"]  # 方案模板不在项目模板列表中显示
     if organization_id:
         conditions.append(FlowTemplate.organization_id == organization_id)
     if keyword:
@@ -312,6 +312,9 @@ def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = Non
         "approvers_names": approvers_names,
         "checkers": node.checkers, "checkers_names": checkers_names,
         "approval_strategy": node.approval_strategy,
+        "require_signature": node.require_signature,
+        "signature_x": node.signature_x, "signature_y": node.signature_y,
+        "signature_page": node.signature_page,
         "position_x": node.position_x, "position_y": node.position_y,
         "sort_order": node.sort_order,
     }

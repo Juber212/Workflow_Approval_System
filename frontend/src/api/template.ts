@@ -62,6 +62,10 @@ export interface TemplateNodeItem {
   checkers: Array<{ user_id: number }> | null
   checkers_names: string[] | null
   approval_strategy: string
+  require_signature: boolean
+  signature_x: number
+  signature_y: number
+  signature_page: number
   position_x: number
   position_y: number
   sort_order: number

@@ -82,6 +82,7 @@
           <div v-for="c in detail.check_progress" :key="c.id" class="progress-row">
             <span>{{ c.checker_name }}</span>
             <span class="status-tag" :class="checkStatusClass(c.status)">{{ checkStatusLabel(c.status) }}</span>
+            <span v-if="c.round > 1" class="round-tag">#{{ c.round }}</span>
             <span v-if="c.opinion" class="opinion">「{{ c.opinion }}」</span>
           </div>
         </div>

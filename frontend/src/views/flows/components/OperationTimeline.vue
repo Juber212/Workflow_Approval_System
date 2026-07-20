@@ -1,11 +1,16 @@
 <template>
   <!-- 操作日志时间线 -->
   <div class="card" v-if="logs && logs.length > 0">
-    <div class="card__header">
+    <div class="card__header" style="cursor:pointer" @click="collapsed = !collapsed">
       <h3 class="card__title">操作日志</h3>
-      <span class="card__extra" v-if="total > logs.length">共 {{ total }} 条</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="card__extra" v-if="total > logs.length">共 {{ total }} 条</span>
+        <el-icon :class="{ 'is-rotated': !collapsed }" class="toggle-arrow">
+          <ArrowDown />
+        </el-icon>
+      </div>
     </div>
-    <div class="card__body">
+    <div class="card__body" v-show="!collapsed">
       <el-timeline>
         <el-timeline-item
           v-for="log in logs"
@@ -29,12 +34,17 @@
 
 <script setup lang="ts">
 /** 操作日志时间线 —— 使用 el-timeline 展示操作记录 */
+import { ref } from 'vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import type { LogItemBrief } from '@/api/instance'
 
 defineProps<{
   logs: LogItemBrief[]
   total?: number
 }>()
+
+/** 默认折叠 */
+const collapsed = ref(true)
 
 /** 操作类型中文映射 */
 function logTypeLabel(type: string): string {
@@ -73,6 +83,16 @@ function formatTime(val: string | null): string {
 .card__extra {
   font-size: 12px;
   color: var(--el-text-color-secondary);
+}
+
+.toggle-arrow {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  transition: transform 0.2s;
+
+  &.is-rotated {
+    transform: rotate(180deg);
+  }
 }
 
 .log-content {

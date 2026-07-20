@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 _NODE_UPDATABLE_FIELDS = [
     "name", "description", "assignee_id", "time_limit_days",
     "require_file", "approvers", "checkers", "approval_strategy",
+    "require_signature", "signature_x", "signature_y", "signature_page",
     "position_x", "position_y", "sort_order",
 ]
 

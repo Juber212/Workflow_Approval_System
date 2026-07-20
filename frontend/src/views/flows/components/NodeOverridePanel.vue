@@ -97,6 +97,47 @@
             </div>
           </div>
 
+          <!-- 文档签批 -->
+          <div class="override-row">
+            <label class="override-label">文档签批</label>
+            <div>
+              <el-switch
+                :model-value="getOverride(node.id, 'require_signature') ?? node.require_signature ?? true"
+                @update:model-value="(v: boolean) => setOverride(node.id, 'require_signature', v)"
+                active-text="需要签批"
+                inactive-text="无需签批"
+              />
+            </div>
+          </div>
+
+          <!-- 签名位置（开启签批时显示） -->
+          <template v-if="(getOverride(node.id, 'require_signature') ?? node.require_signature ?? true)">
+            <div class="override-row">
+              <label class="override-label">签名X坐标</label>
+              <el-input-number
+                :model-value="getOverride(node.id, 'signature_x') ?? node.signature_x ?? 400"
+                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_x', v)"
+                :min="0" :max="800" style="width: 200px"
+              />
+            </div>
+            <div class="override-row">
+              <label class="override-label">签名Y坐标</label>
+              <el-input-number
+                :model-value="getOverride(node.id, 'signature_y') ?? node.signature_y ?? 100"
+                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_y', v)"
+                :min="0" :max="800" style="width: 200px"
+              />
+            </div>
+            <div class="override-row">
+              <label class="override-label">签名页码</label>
+              <el-input-number
+                :model-value="getOverride(node.id, 'signature_page') ?? node.signature_page ?? -1"
+                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_page', v)"
+                :min="-1" :max="100" style="width: 200px"
+              />
+            </div>
+          </template>
+
           <!-- 重置按钮 -->
           <div class="override-row">
             <el-button text type="warning" size="small" @click="resetNode(node.id)">

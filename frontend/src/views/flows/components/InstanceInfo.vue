@@ -52,6 +52,15 @@
           <span style="font-size:13px;color:var(--el-text-color-secondary)"> / {{ detail.total_nodes }}</span>
         </div>
       </div>
+      <!-- 关联方案（有值才展示） -->
+      <div class="info-grid__item" v-if="detail.proposal_id">
+        <div class="k">关联方案</div>
+        <div class="v">
+          <router-link :to="`/flows/instances/${detail.proposal_id}`" class="proposal-link">
+            {{ detail.proposal_name || `方案 #${detail.proposal_id}` }}
+          </router-link>
+        </div>
+      </div>
       <!-- 业务信息（有值才展示） -->
       <div class="info-grid__item" v-if="detail.contract_no">
         <div class="k">合同号</div>
@@ -207,6 +216,14 @@ function formatTime(val: string | null): string {
   &.priority--high   { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
   &.priority--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
   &.priority--low    { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
+
+// 关联方案链接
+.proposal-link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  font-weight: 500;
+  &:hover { text-decoration: underline; }
 }
 
 // 数字等宽

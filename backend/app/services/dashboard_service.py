@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     FlowInstance,
+    FlowTemplate,
     InstanceNode,
     Task,
     Organization,
@@ -36,35 +37,49 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # ─── 1. 四大统计卡片（全局） ───
+    # 获取方案模板 ID 集合（用于区分项目/方案）
+    proposal_tpl_ids = set(
+        row[0] for row in (await db.execute(
+            select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
+        )).all()
+    )
 
-    # 进行中实例
+    # 项目实例过滤条件：非方案模板
+    not_proposal = FlowInstance.template_id.notin_(proposal_tpl_ids) if proposal_tpl_ids else True
+
+    # ─── 1. 项目四大统计卡片 ───
+
     running_count = (await db.execute(
-        select(func.count()).select_from(FlowInstance).where(FlowInstance.status == "running")
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.status == "running", not_proposal
+        )
     )).scalar() or 0
 
-    # 已完成实例
     archived_count = (await db.execute(
-        select(func.count()).select_from(FlowInstance).where(FlowInstance.status == "completed")
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.status == "completed", not_proposal
+        )
     )).scalar() or 0
 
-    # 本月完成
     archived_this_month = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
             FlowInstance.status == "completed",
             FlowInstance.completed_at >= month_start,
+            not_proposal,
         )
     )).scalar() or 0
 
-    # 超期预警：已逾期 + 即将逾期（2天内）的 Task
     near_future = now + timedelta(days=2)
     overdue_count = (await db.execute(
         select(func.count()).select_from(Task).join(
             InstanceNode, Task.node_id == InstanceNode.id
+        ).join(
+            FlowInstance, Task.instance_id == FlowInstance.id
         ).where(
             Task.status.notin_(["completed", "terminated"]),
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
+            not_proposal,
         )
     )).scalar() or 0
 
@@ -74,6 +89,40 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         "archived_this_month": archived_this_month,
         "overdue_warnings": overdue_count,
     }
+
+    # ─── 1b. 方案四大统计卡片 ───
+    is_proposal = FlowInstance.template_id.in_(proposal_tpl_ids) if proposal_tpl_ids else False
+
+    prop_total = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(is_proposal)
+    )).scalar() or 0
+
+    prop_running = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.status == "running", is_proposal
+        )
+    )).scalar() or 0
+
+    prop_completed = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.status == "completed", is_proposal
+        )
+    )).scalar() or 0
+
+    prop_this_month = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.status == "completed",
+            FlowInstance.completed_at >= month_start,
+            is_proposal,
+        )
+    )).scalar() or 0
+
+    proposal_stats = DashboardStats(
+        running_instances=prop_running,
+        archived_total=prop_completed,
+        archived_this_month=prop_this_month,
+        overdue_warnings=prop_total,
+    )
 
     # ─── 2. 任务状态分布 ───
     task_dist = await _get_task_distribution(db, now)
@@ -89,6 +138,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
 
     return DashboardData(
         stats=DashboardStats(**stats),
+        proposal_stats=proposal_stats,
         task_distribution=task_dist,
         bottleneck=bottleneck,
         overdue_list=overdue_list,
@@ -307,9 +357,9 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem
 
     # 排序：逾期从多到少，然后剩余从少到多
     items.sort(key=lambda x: (
-        not x["is_overdue"],
-        -(abs((datetime.fromisoformat(x["deadline"]) - now).days) if x["deadline"] else 0) if x["is_overdue"] else 999,
-        abs((datetime.fromisoformat(x["deadline"]) - now).days) if x["deadline"] and not x["is_overdue"] else 999,
+        not x.is_overdue,
+        -(abs((datetime.fromisoformat(x.deadline) - now).days) if x.deadline else 0) if x.is_overdue else 999,
+        abs((datetime.fromisoformat(x.deadline) - now).days) if x.deadline and not x.is_overdue else 999,
     ))
 
     return items

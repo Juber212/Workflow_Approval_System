@@ -8,6 +8,8 @@ import os
 
 from PIL import Image
 
+from app.core.config import settings
+
 # 限流信号量（全局，2 并发）
 _semaphore = asyncio.Semaphore(2)
 
@@ -69,7 +71,7 @@ async def _libreoffice_convert(input_path: str) -> str | None:
     for attempt in range(2):
         try:
             proc = await asyncio.create_subprocess_exec(
-                "libreoffice",
+                settings.LIBREOFFICE_PATH,
                 "--headless",
                 "--convert-to", "pdf",
                 "--outdir", output_dir,

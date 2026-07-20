@@ -87,6 +87,7 @@ async def list_checks(
             task_id=c.task_id,
             submitter_name=assignee.real_name if assignee else "",
             status=c.status,
+            round=c.round or 1,
             created_at=c.created_at,
         ))
 
@@ -128,9 +129,12 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     )
     files = files_result.scalars().all()
 
-    # 并行校验进度
+    # 并行校验进度（排除被系统终止的记录）
     all_checks_result = await db.execute(
-        select(CheckRecord).where(CheckRecord.task_id == c.task_id).order_by(CheckRecord.id)
+        select(CheckRecord).where(
+            CheckRecord.task_id == c.task_id,
+            CheckRecord.status != CheckStatus.TERMINATED,
+        ).order_by(CheckRecord.id)
     )
     all_checks = all_checks_result.scalars().all()
     checker_ids = [ac.checker_id for ac in all_checks]
@@ -187,6 +191,7 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
                 "checker_name": checker_users.get(ac.checker_id).real_name if checker_users.get(ac.checker_id) else "",
                 "status": ac.status,
                 "opinion": ac.opinion,
+                "round": ac.round or 1,
                 "decided_at": ac.decided_at.isoformat() if ac.decided_at else None,
             }
             for ac in all_checks
@@ -251,6 +256,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     task_id=c.task_id,
                     approver_id=a.get("user_id") if isinstance(a, dict) else a,  # a 是 int 时即为 user_id
                     status=ApprovalStatus.PENDING,
+                    round=node.round,  # 记录当前节点轮次
                 )
                 db.add(approval)
 
@@ -278,10 +284,13 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     c.opinion = opinion
     c.decided_at = now
 
-    # 终止当前 task 的全部校验记录（新轮次重新生成）
+    # 终止当前轮次其他待校验记录（保留历史轮次已决记录）
     await db.execute(
         update(CheckRecord)
-        .where(CheckRecord.task_id == c.task_id)
+        .where(
+            CheckRecord.task_id == c.task_id,
+            CheckRecord.status == CheckStatus.PENDING,
+        )
         .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
     # 当前这条保持 returned（不被覆盖）

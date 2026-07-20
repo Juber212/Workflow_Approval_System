@@ -174,6 +174,29 @@
           />
         </el-form-item>
 
+        <!-- 是否要求签批 -->
+        <el-form-item label="文档签批">
+          <el-switch
+            v-model="form.require_signature"
+            active-text="需要签批"
+            inactive-text="无需签批"
+            @change="syncToNode"
+          />
+        </el-form-item>
+
+        <!-- 签名位置（签批开启时显示） -->
+        <template v-if="form.require_signature">
+          <el-form-item label="签名X坐标">
+            <el-input-number v-model="form.signature_x" :min="0" :max="800" style="width:100%" @change="syncToNode" />
+          </el-form-item>
+          <el-form-item label="签名Y坐标">
+            <el-input-number v-model="form.signature_y" :min="0" :max="800" style="width:100%" @change="syncToNode" />
+          </el-form-item>
+          <el-form-item label="签名页码（-1=最后一页）">
+            <el-input-number v-model="form.signature_page" :min="-1" :max="100" style="width:100%" @change="syncToNode" />
+          </el-form-item>
+        </template>
+
       </el-form>
     </div>
   </div>
@@ -218,6 +241,10 @@ const form = reactive({
   time_limit_days: undefined as number | undefined,
   deadlineRange: undefined as [string, string] | undefined,  // 发起模式：[begin, deadline]
   require_file: false,
+  require_signature: true,
+  signature_x: 400,
+  signature_y: 100,
+  signature_page: -1,
 })
 
 /** 用户名称缓存 —— 从 UserSelector options-loaded 事件积累 */
@@ -293,6 +320,10 @@ function loadFromNode() {
   form.approvers_names = Array.isArray(p.approvers_names) ? [...p.approvers_names] : []
   form.time_limit_days = p.time_limit_days ?? undefined
   form.require_file = p.require_file ?? false
+  form.require_signature = p.require_signature ?? true
+  form.signature_x = p.signature_x ?? 400
+  form.signature_y = p.signature_y ?? 100
+  form.signature_page = p.signature_page ?? -1
 
   // 发起模式：从预计算映射取 begin + deadline 填入日期范围
   const dbId = p.db_id
@@ -332,6 +363,10 @@ function syncToNode() {
     approvers_names: form.approvers_names.length > 0 ? [...form.approvers_names] : null,
     time_limit_days: form.time_limit_days ?? null,
     require_file: form.require_file,
+    require_signature: form.require_signature,
+    signature_x: form.signature_x,
+    signature_y: form.signature_y,
+    signature_page: form.signature_page,
     // 发起模式下保存 deadline_range，后续 handleLaunch 会收集为 node_override
     ...(props.launchMode && form.deadlineRange?.length === 2 ? { deadline_range: form.deadlineRange } : {}),
   })

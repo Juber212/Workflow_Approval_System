@@ -63,6 +63,7 @@ export interface OrgOverview {
 
 export interface DashboardData {
   stats: DashboardStats
+  proposal_stats: DashboardStats  // 方案统计
   task_distribution: TaskDistItem[]
   bottleneck: BottleneckItem[]
   overdue_list: OverdueItem[]

@@ -130,7 +130,8 @@
             >
               <div class="record-item__main">
                 <span class="record-user">{{ c.checker_name }}</span>
-                <span class="record-status" :class="checkStatusClass(c.status)">{{ c.status === 'passed' ? '已通过' : c.status === 'rejected' ? '已退回' : c.status }}</span>
+                <span class="record-status" :class="checkStatusClass(c.status)">{{ checkStatusLabel(c.status) }}</span>
+                <span class="record-round" v-if="c.round > 1">#{{ c.round }}</span>
               </div>
               <div v-if="c.opinion" class="record-item__opinion">「{{ c.opinion }}」</div>
               <div class="record-item__time" v-if="c.decided_at">{{ formatTime(c.decided_at) }}</div>
@@ -152,6 +153,7 @@
               <div class="record-item__main">
                 <span class="record-user">{{ a.approver_name }}</span>
                 <span class="record-status" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
+                <span class="record-round" v-if="a.round > 1">#{{ a.round }}</span>
                 <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
               </div>
               <div v-if="a.opinion" class="record-item__opinion">「{{ a.opinion }}」</div>
@@ -173,7 +175,7 @@
 
 <script setup lang="ts">
 /** 节点卡片 —— 折叠展示节点配置、文件、校验、审批详情 */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ArrowDown, Document } from '@element-plus/icons-vue'
 import type { DetailNodeInfo } from '@/api/instance'
 import { previewFile, downloadFile } from '@/api/task'
@@ -183,6 +185,8 @@ const props = defineProps<{
   isInitiator?: boolean
   /** 实例主状态（用于控制补交按钮可见性——仅 completed 实例可补交） */
   instanceStatus?: string
+  /** 强制展开/折叠（null=默认行为，true=全部展开，false=全部折叠） */
+  forceExpand?: boolean | null
 }>()
 
 defineEmits<{
@@ -206,13 +210,25 @@ const canSupplementNode = computed(() => {
 })
 
 // ========== 折叠状态 ==========
-/** 默认展开当前节点和已完成节点，折叠未开始节点 */
+/** 活动状态集合 —— 这些状态的节点默认展开 */
+const ACTIVE_STATUSES = ['arrived', 'running', 'waiting_check', 'waiting_approval']
+
+/** 默认：仅展开进行中的节点（开始节点永远折叠，结束节点仅进行中时展开） */
 const expanded = ref(getInitialExpand())
 
 function getInitialExpand(): boolean {
   const s = (props.node.status || '').toLowerCase()
-  return s === 'arrived' || s === 'running' || s === 'finished' || props.node.is_start
+  // 开始节点永远不自动展开
+  if (props.node.is_start) return false
+  // 进行中的节点自动展开（含终审阶段的结束节点）
+  return ACTIVE_STATUSES.includes(s)
 }
+
+/** 监听全局展开/折叠按钮 */
+watch(() => props.forceExpand, (val) => {
+  if (val === true) expanded.value = true
+  else if (val === false) expanded.value = false
+})
 
 // ========== 节点序号 ==========
 const indexLabel = computed(() => {
@@ -320,9 +336,14 @@ const supplementFiles = computed(() =>
 function checkStatusClass(status: string): string {
   const s = (status || '').toLowerCase()
   if (s === 'passed') return 'status--pass'
-  if (s === 'rejected') return 'status--reject'
+  if (s === 'returned') return 'status--reject'
   if (s === 'terminated') return 'status--terminated'
   return ''
+}
+
+function checkStatusLabel(status: string): string {
+  const m: Record<string, string> = { pending: '待校验', passed: '已通过', returned: '已退回' }
+  return m[(status || '').toLowerCase()] || status
 }
 
 function approvalStatusClass(status: string): string {
@@ -638,7 +659,7 @@ function formatFileSize(bytes: number | null): string {
     background: var(--el-color-success-light-9);
   }
 
-  &.record--rejected {
+  &.record--rejected, &.record--returned {
     border-left-color: var(--el-color-danger);
     background: var(--el-color-danger-light-9);
   }
@@ -661,6 +682,15 @@ function formatFileSize(bytes: number | null): string {
       &.status--pass { color: var(--el-color-success); }
       &.status--reject { color: var(--el-color-danger); }
       &.status--terminated { color: var(--el-color-info); }
+    }
+
+    .record-round {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--el-text-color-placeholder);
+      background: var(--el-fill-color);
+      padding: 0 5px;
+      border-radius: 999px;
     }
   }
 

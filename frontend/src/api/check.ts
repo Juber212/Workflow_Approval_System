@@ -11,6 +11,7 @@ export interface CheckListItem {
   task_id: number
   submitter_name: string
   status: string
+  round: number
   created_at: string | null
 }
 
@@ -36,7 +37,7 @@ export interface CheckDetail {
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
   files: { id: number; original_name: string; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   assignee_note: string | null
-  check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]
+  check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; round: number; decided_at: string | null }[]
   decided_at: string | null
   created_at: string | null
 }

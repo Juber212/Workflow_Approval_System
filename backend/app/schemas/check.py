@@ -13,6 +13,7 @@ class CheckListItem(BaseModel):
     task_id: int
     submitter_name: str = ""  # 节点负责人姓名
     status: str  # pending/passed/returned/terminated
+    round: int = 1
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

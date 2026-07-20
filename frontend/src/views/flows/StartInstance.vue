@@ -86,16 +86,13 @@
           <el-form-item label="项目名称" prop="name">
             <el-input
               v-model="form.name"
-              placeholder="请输入项目名称（2-100字符）"
+              placeholder="合同号(产品型号)，可手动修改"
               maxlength="100"
               show-word-limit
               style="max-width: 480px"
-              @blur="handleNameBlur"
+              @input="onNameInput"
+              @blur="checkDuplicateName"
             />
-            <div class="name-hint" v-if="form.name.trim().length >= 2">
-              <el-icon><InfoFilled /></el-icon>
-              <span>建议使用唯一、易识别的名称，方便后续查找与追踪</span>
-            </div>
           </el-form-item>
 
           <el-form-item label="补充说明">
@@ -110,12 +107,43 @@
             />
           </el-form-item>
 
+          <el-form-item label="合同号" style="max-width: 480px">
+            <el-input v-model="form.contract_no" placeholder="合同号" maxlength="100" @change="onBusinessFieldChange" />
+          </el-form-item>
+
+          <el-form-item label="产品型号" style="max-width: 480px">
+            <el-input v-model="form.product_model" placeholder="产品型号" maxlength="100" @change="onBusinessFieldChange" />
+          </el-form-item>
+
+          <el-form-item label="销售经理" style="max-width: 480px">
+            <el-input v-model="form.sales_manager" placeholder="销售经理" maxlength="50" />
+          </el-form-item>
+
           <el-form-item label="优先级" style="max-width: 280px">
             <el-select v-model="form.priority" style="width: 100%">
               <el-option label="🔴 紧急" value="urgent" />
               <el-option label="🟠 高" value="high" />
               <el-option label="🔵 普通" value="normal" />
               <el-option label="🟢 低" value="low" />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="关联方案" style="max-width: 480px">
+            <el-select
+              v-model="selectedProposalId"
+              placeholder="选择已完成的方案（可选）"
+              style="width: 100%"
+              clearable
+              filterable
+              :disabled="completedProposals.length === 0"
+              :no-data-text="completedProposals.length === 0 ? '该组织暂无已完成方案' : '无匹配方案'"
+            >
+              <el-option
+                v-for="p in completedProposals"
+                :key="p.id"
+                :label="p.name"
+                :value="p.id"
+              />
             </el-select>
           </el-form-item>
         </el-form>
@@ -176,7 +204,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { InfoFilled } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import {
   getTemplates,
@@ -185,6 +212,8 @@ import {
 } from '@/api/template'
 import { getTemplateDetail } from '@/api/template'
 import { createInstance, calculateDeadlines, type NodeOverride } from '@/api/instance'
+import { getProposals } from '@/api/proposal'
+import request from '@/api/request'
 import NodeOverridePanel from './components/NodeOverridePanel.vue'
 
 const router = useRouter()
@@ -198,10 +227,19 @@ const nodePanelRef = ref<InstanceType<typeof NodeOverridePanel> | null>(null)
 const publishedTemplates = ref<TemplateItem[]>([])
 const selectedTemplate = ref<TemplateItem | null>(null)
 const templateNodes = ref<TemplateNodeItem[]>([])
+/** 当前组织下已完成的方案（供项目发起时选择关联） */
+const completedProposals = ref<{ id: number; name: string }[]>([])
+const selectedProposalId = ref<number | null>(null)
+
+/** 用户是否手动修改过项目名称（用于控制自动写入逻辑） */
+const userEditedName = ref(false)
 
 const form = ref({
   name: '',
   description: '',
+  contract_no: '',
+  product_model: '',
+  sales_manager: '',
   priority: 'normal' as string,
 })
 
@@ -231,6 +269,37 @@ watch(nodeOverrides, () => {
   setTimeout(refreshNodeIssues, 100)
 }, { deep: true })
 
+/** 合同号 / 产品型号变更 → 自动写入项目名称（用户手动编辑后不再覆盖） */
+function onBusinessFieldChange() {
+  if (userEditedName.value) return
+  const cn = form.value.contract_no.trim()
+  const pm = form.value.product_model.trim()
+  if (cn && pm) {
+    form.value.name = `${cn}(${pm})`
+  } else if (cn) {
+    form.value.name = cn
+  } else if (pm) {
+    form.value.name = pm
+  }
+}
+
+/** 名称输入框手动编辑时，解除自动写入 */
+function onNameInput() {
+  userEditedName.value = true
+}
+
+/** 名称失焦时检测重复 */
+async function checkDuplicateName() {
+  const name = form.value.name.trim()
+  if (name.length < 2) return
+  try {
+    const res = await request.get('/instances/check-name', { params: { name } })
+    if (res.data?.exists) {
+      ElMessage.warning(`项目名称「${name}」已存在，建议修改为唯一名称`)
+    }
+  } catch { /* 检测失败不阻塞 */ }
+}
+
 // ========== 方法 ==========
 
 async function loadTemplates() {
@@ -245,10 +314,6 @@ async function loadTemplates() {
   }
 }
 
-function handleNameBlur() {
-  refreshNodeIssues()
-}
-
 function refreshNodeIssues() {
   if (nodePanelRef.value && typeof nodePanelRef.value.validate === 'function') {
     nodeIssues.value = nodePanelRef.value.validate()
@@ -259,9 +324,17 @@ async function selectTemplate(tpl: TemplateItem) {
   selectedTemplate.value = tpl
   form.value.name = ''
   form.value.description = ''
+  form.value.contract_no = ''
+  form.value.product_model = ''
+  form.value.sales_manager = ''
   form.value.priority = 'normal'
+  userEditedName.value = false
   nodeOverrides.value = {}
   nodeIssues.value = []
+  selectedProposalId.value = null
+
+  // 加载该组织下已完成的方案
+  loadCompletedProposals(tpl.organization_id)
 
   try {
     const detail = await getTemplateDetail(tpl.id)
@@ -294,6 +367,16 @@ async function selectTemplate(tpl: TemplateItem) {
   }
 }
 
+/** 加载该组织下已完成的方案（供项目关联选择） */
+async function loadCompletedProposals(orgId: number) {
+  try {
+    const data = await getProposals({ organization_id: orgId, status: 'completed', page_size: 100 })
+    completedProposals.value = (data.items || []).map(p => ({ id: p.id, name: p.name }))
+  } catch {
+    completedProposals.value = []
+  }
+}
+
 async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid || !selectedTemplate.value) return
@@ -319,6 +402,10 @@ async function handleSubmit() {
       if (config.approvers_ids?.length > 0) {
         override.approvers = config.approvers_ids.map((id: number) => ({ user_id: id }))
       }
+      if (config.require_signature !== undefined) override.require_signature = config.require_signature
+      if (config.signature_x !== undefined) override.signature_x = config.signature_x
+      if (config.signature_y !== undefined) override.signature_y = config.signature_y
+      if (config.signature_page !== undefined) override.signature_page = config.signature_page
       overrides.push(override)
     }
 
@@ -326,8 +413,12 @@ async function handleSubmit() {
       template_id: selectedTemplate.value.id,
       name: form.value.name.trim(),
       description: form.value.description?.trim() || null,
+      contract_no: form.value.contract_no?.trim() || null,
+      product_model: form.value.product_model?.trim() || null,
+      sales_manager: form.value.sales_manager?.trim() || null,
       priority: form.value.priority,
       node_overrides: overrides.length > 0 ? overrides : undefined,
+      proposal_id: selectedProposalId.value || undefined,
     })
 
     ElMessage.success(`流程「${result.name}」发起成功`)
@@ -387,19 +478,5 @@ async function handleSubmit() {
     }
   }
 
-  // 名称唯一性提示
-  .name-hint {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-
-    .el-icon {
-      font-size: 14px;
-      color: var(--el-color-info);
-    }
-  }
 }
 </style>

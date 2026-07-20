@@ -183,3 +183,26 @@ async def upload_signature(
         {"signature_url": f"/storage/signatures/{safe_name}"},
         message="签名图片已上传",
     )
+
+
+@router.get("/users/{user_id}/signature-image")
+async def get_signature_image(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取用户签名图片 —— 返回文件流，供前端 img 标签直接使用"""
+    from fastapi.responses import FileResponse
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None or not user.signature_image:
+        raise AppException(ErrorCode.NOT_FOUND, "用户未上传签名图片")
+
+    # signature_image 可能已含 STORAGE_ROOT 前缀（上传时写入完整相对路径）
+    full_path = user.signature_image if os.path.isabs(user.signature_image) else os.path.join(settings.STORAGE_ROOT, user.signature_image)
+    # 如果 STORAGE_ROOT 已被包含，避免重复拼接
+    if not os.path.exists(full_path):
+        full_path = user.signature_image  # 直接尝试原路径
+    if not os.path.exists(full_path):
+        raise AppException(ErrorCode.NOT_FOUND, "签名文件不存在")
+
+    return FileResponse(full_path, media_type="image/png")

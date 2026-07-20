@@ -105,6 +105,7 @@ async def create_instance(
         contract_no=request.contract_no.strip() if request.contract_no else None,
         product_model=request.product_model.strip() if request.product_model else None,
         sales_manager=request.sales_manager.strip() if request.sales_manager else None,
+        proposal_id=request.proposal_id,
         status=InstanceStatus.CREATED,
     )
     db.add(instance)
@@ -122,6 +123,19 @@ async def create_instance(
         time_limit_days = node_override.get("time_limit_days") or tn.time_limit_days
         approvers = node_override.get("approvers") or tn.approvers
         checkers = node_override.get("checkers") or tn.checkers
+        # 签批字段：发起覆盖 > 模板默认值（None=未覆盖，使用模板值）
+        require_signature = node_override.get("require_signature")
+        if require_signature is None:
+            require_signature = tn.require_signature
+        signature_x = node_override.get("signature_x")
+        if signature_x is None:
+            signature_x = tn.signature_x
+        signature_y = node_override.get("signature_y")
+        if signature_y is None:
+            signature_y = tn.signature_y
+        signature_page = node_override.get("signature_page")
+        if signature_page is None:
+            signature_page = tn.signature_page
 
         # 结束节点：审批人默认设为发起人（发起人终审）
         if tn.is_end and not approvers:
@@ -143,6 +157,10 @@ async def create_instance(
             time_limit_days=time_limit_days,
             deadline=deadline,
             require_file=tn.require_file,
+            require_signature=require_signature,
+            signature_x=signature_x,
+            signature_y=signature_y,
+            signature_page=signature_page,
             approvers=approvers,
             checkers=checkers,
             approval_strategy=tn.approval_strategy,
@@ -269,6 +287,8 @@ async def list_instances(
         )
         .join(Initiator, FlowInstance.initiator_id == Initiator.id)
         .join(Org, FlowInstance.organization_id == Org.id)
+        .join(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
+        .where(FlowTemplate.type == "project")  # 项目列表排除方案实例
     )
 
     # ========== 筛选条件 ==========
@@ -515,7 +535,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         checks_stmt = (
             select(CheckRecord, User.real_name.label("checker_name"))
             .join(User, CheckRecord.checker_id == User.id)
-            .where(CheckRecord.node_id.in_(node_ids))
+            .where(CheckRecord.node_id.in_(node_ids), CheckRecord.status != CheckStatus.TERMINATED)
             .order_by(CheckRecord.created_at)
         )
         checks_result = await db.execute(checks_stmt)
@@ -529,6 +549,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
                     checker_name=c_name or "",
                     status=(c.status or "pending").lower(),
                     opinion=c.opinion,
+                    round=c.round or 1,
                     decided_at=c.decided_at,
                 )
             )
@@ -539,7 +560,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         approvals_stmt = (
             select(Approval, User.real_name.label("approver_name"))
             .join(User, Approval.approver_id == User.id)
-            .where(Approval.node_id.in_(node_ids))
+            .where(Approval.node_id.in_(node_ids), Approval.status != ApprovalStatus.TERMINATED)
             .order_by(Approval.created_at)
         )
         approvals_result = await db.execute(approvals_stmt)
@@ -554,6 +575,10 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
                     status=(a.status or "pending").lower(),
                     opinion=a.opinion,
                     signature_applied=a.signature_applied,
+                    signature_x=a.signature_x,
+                    signature_y=a.signature_y,
+                    signature_page=a.signature_page,
+                    round=a.round or 1,
                     decided_at=a.decided_at,
                 )
             )
@@ -596,6 +621,10 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             checkers=_normalize_personnel(n.checkers, user_name_map),
             approvers=_normalize_personnel(n.approvers, user_name_map),
             require_file=n.require_file,
+            require_signature=n.require_signature,
+            signature_x=n.signature_x,
+            signature_y=n.signature_y,
+            signature_page=n.signature_page,
             approval_strategy=n.approval_strategy,
             started_at=n.started_at,
             completed_at=n.completed_at,
@@ -628,7 +657,15 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             created_at=log.created_at,
         ))
 
-    # ========== 7. 组装最终结果 ==========
+    # ========== 7. 关联方案名称 ==========
+    proposal_name: str | None = None
+    if instance.proposal_id:
+        prop = (await db.execute(
+            select(FlowInstance.name).where(FlowInstance.id == instance.proposal_id)
+        )).scalar_one_or_none()
+        proposal_name = prop
+
+    # ========== 8. 组装最终结果 ==========
     return InstanceDetailResponse(
         id=instance.id,
         name=instance.name,
@@ -643,6 +680,8 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         contract_no=instance.contract_no,
         product_model=instance.product_model,
         sales_manager=instance.sales_manager,
+        proposal_id=instance.proposal_id,
+        proposal_name=proposal_name,
         current_node_index=processed_count,
         total_nodes=total_nodes,
         initiated_at=instance.initiated_at,
@@ -859,6 +898,7 @@ async def change_personnel(
                     task_id=0,  # 换人时可能无 task
                     checker_id=uid,
                     status="pending",
+                    round=node.round,  # 记录当前节点轮次
                 ))
 
             changes.append(f"校验人: {_describe_change(old_ids, new_ids)}")
@@ -894,6 +934,7 @@ async def change_personnel(
                     task_id=None,
                     approver_id=uid,
                     status="pending",
+                    round=node.round,  # 记录当前节点轮次
                 ))
 
             changes.append(f"审批人: {_describe_change(old_ids, new_ids)}")

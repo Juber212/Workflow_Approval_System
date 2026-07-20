@@ -2,9 +2,13 @@ import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 
+/** API 基础 URL（不含 /api/v1 后缀） */
+export const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1$/, '') || ''
+
 /** Axios 实例 —— 统一 baseURL、超时、拦截器 */
+const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const request: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: BASE,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 })

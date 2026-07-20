@@ -14,8 +14,8 @@ from app.schemas.task import TaskSaveDraft, TaskSubmit
 from app.services import task_service, file_service
 from app.services.pdf_converter import convert_to_pdf
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, CheckRecord, File, OperationLog
-from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus
+from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog
+from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
 from sqlalchemy import select
 
 router = APIRouter(prefix="/api/v1", tags=["任务"])
@@ -27,6 +27,7 @@ async def get_tasks(
     keyword: str | None = Query(None, description="实例名称搜索"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    type: str | None = Query(None, description="实例类型：project / proposal"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -38,6 +39,7 @@ async def get_tasks(
         keyword=keyword,
         page=page,
         page_size=page_size,
+        instance_type=type,
     )
     return ApiResponse.ok(result)
 
@@ -109,36 +111,37 @@ async def submit_task(
     if task_files:
         tasks = []
         for f in task_files:
-            abs_path = None
-            # 尝试找到文件真实路径（基于 STORAGE_ROOT）
             full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
             if os.path.exists(full_path):
-                tasks.append(convert_to_pdf(full_path))
+                # 把转换任务和对应的 DB 记录绑定，方便后续更新路径
+                tasks.append((f, convert_to_pdf(full_path)))
 
         if tasks:
-            results = await asyncio.gather(*tasks)
-            # 检查是否有失败
-            for r in results:
+            # 并发执行所有转换，返回 (File记录, PDF路径或None)
+            results = await asyncio.gather(*[t for _, t in tasks])
+            file_records = [f for f, _ in tasks]
+
+            for i, r in enumerate(results):
                 if r is None:
                     convert_failed = True
                     break
 
-            # 更新文件记录：mime_type → application/pdf
+            # 转换成功：同步更新 file_path、stored_name、mime_type
             if not convert_failed:
-                for f in task_files:
+                for f in file_records:
+                    f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
+                    f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
                     f.mime_type = "application/pdf"
 
     if convert_failed:
         await db.rollback()
         raise AppException(ErrorCode.INTERNAL_ERROR, "文件转换失败，请检查文件格式后重试")
 
-    # 状态推进：Task → waiting_check、Node → waiting_check
-    task.status = TaskStatus.WAITING_CHECK
-    node.status = InstanceNodeStatus.WAITING_CHECK
-
-    # 按 checkers 创建 CheckRecord
+    # 按 checkers 创建 CheckRecord，空校验人则跳过校验环节
     checkers = node.checkers or []
     if checkers:
+        task.status = TaskStatus.WAITING_CHECK
+        node.status = InstanceNodeStatus.WAITING_CHECK
         for ch in checkers:
             checker_id = ch.get("user_id") if isinstance(ch, dict) else ch  # ch 是 int 时即为 user_id
             check_rec = CheckRecord(
@@ -147,8 +150,24 @@ async def submit_task(
                 task_id=task_id,
                 checker_id=checker_id,
                 status=CheckStatus.PENDING,
+                round=node.round,  # 记录当前节点轮次
             )
             db.add(check_rec)
+    else:
+        # 无校验人：直接进入等待审批，按 approvers 创建 Approval 记录
+        task.status = TaskStatus.WAITING_APPROVAL
+        node.status = InstanceNodeStatus.WAITING_APPROVAL
+        approvers = node.approvers or []
+        for a in approvers:
+            approver_id = a.get("user_id") if isinstance(a, dict) else a
+            db.add(Approval(
+                instance_id=task.instance_id,
+                node_id=task.node_id,
+                task_id=task_id,
+                approver_id=approver_id,
+                status=ApprovalStatus.PENDING,
+                round=node.round,
+            ))
 
     # 操作日志
     db.add(OperationLog(
@@ -163,7 +182,7 @@ async def submit_task(
     ))
 
     await db.commit()
-    return ApiResponse.ok(message="任务已提交，等待校验")
+    return ApiResponse.ok(message="任务已提交，等待校验" if checkers else "任务已提交，等待审批")
 
 
 @router.post("/tasks/{task_id}/files")

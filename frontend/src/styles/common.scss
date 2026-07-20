@@ -107,6 +107,19 @@
   &--pending  { color: var(--el-color-warning);   background: var(--el-color-warning-light-9); }
 }
 
+// ========== 轮次标签 ==========
+.round-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--el-text-color-placeholder);
+  background: var(--el-fill-color);
+  line-height: 18px;
+}
+
 // ========== 信息网格（4 列） ==========
 .info-grid {
   display: grid;

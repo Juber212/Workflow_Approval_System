@@ -14,6 +14,7 @@ from app.models import (
     InstanceNode,
     InstanceEdge,
     FlowInstance,
+    FlowTemplate,
     User,
     File,
     CheckRecord,
@@ -40,9 +41,20 @@ async def list_approvals(
     keyword: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    instance_type: str | None = None,  # "project" 或 "proposal"
 ) -> dict:
     """我的审批列表 —— 默认 pending"""
     conditions = [Approval.approver_id == approver_id]
+
+    # 按实例类型过滤
+    if instance_type:
+        conditions.append(Approval.instance_id.in_(
+            select(FlowInstance.id).where(
+                FlowInstance.template_id.in_(
+                    select(FlowTemplate.id).where(FlowTemplate.type == instance_type)
+                )
+            )
+        ))
     if status:
         conditions.append(Approval.status == status)
     else:
@@ -87,6 +99,7 @@ async def list_approvals(
             approver_id=a.approver_id,
             status=a.status,
             is_end_node=node.is_end if node else False,
+            round=a.round or 1,
             created_at=a.created_at,
         ))
 
@@ -140,10 +153,13 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         )
         file_node_names = {row[0]: row[1] for row in fn_result.all()}
 
-    # 校验进度
+    # 校验进度（排除被系统终止的记录）
     if a.task_id:
         checks_result = await db.execute(
-            select(CheckRecord).where(CheckRecord.task_id == a.task_id).order_by(CheckRecord.id)
+            select(CheckRecord).where(
+                CheckRecord.task_id == a.task_id,
+                CheckRecord.status != CheckStatus.TERMINATED,
+            ).order_by(CheckRecord.id)
         )
         checks = checks_result.scalars().all()
         checker_ids = [c.checker_id for c in checks]
@@ -156,6 +172,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
                 "id": c.id, "checker_id": c.checker_id,
                 "checker_name": checker_users.get(c.checker_id).real_name if checker_users.get(c.checker_id) else "",
                 "status": c.status, "opinion": c.opinion,
+                "round": c.round or 1,
                 "decided_at": c.decided_at.isoformat() if c.decided_at else None,
             }
             for c in checks
@@ -179,6 +196,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             "approver_name": approver_users.get(ap.approver_id).real_name if approver_users.get(ap.approver_id) else "",
             "status": ap.status, "opinion": ap.opinion,
             "signature_applied": ap.signature_applied,
+            "round": ap.round or 1,
             "decided_at": ap.decided_at.isoformat() if ap.decided_at else None,
         }
         for ap in all_apprs
@@ -244,12 +262,19 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         approval_progress=approval_progress,
         reject_target_nodes=reject_target_nodes,
         signature_applied=a.signature_applied,
+        # 节点签批配置（前端判断是否弹出签名预览）
+        require_signature=node.require_signature,
+        signature_x=node.signature_x,
+        signature_y=node.signature_y,
+        signature_page=node.signature_page,
+        # 当前审批人的签名图片 URL（API 端点，前端可直接用于 img src）
+        current_signature_url=f"/api/v1/auth/users/{a.approver_id}/signature-image" if approver_user and approver_user.signature_image else None,
         decided_at=a.decided_at,
         created_at=a.created_at,
     )
 
 
-async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None) -> dict:
+async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None, signature_x: float | None = None, signature_y: float | None = None, signature_page: int | None = None) -> dict:
     """审批通过 —— 含签名处理 + 流程推进"""
     a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
     if a is None:
@@ -263,6 +288,13 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     a.status = ApprovalStatus.APPROVED
     a.opinion = opinion
     a.decided_at = now
+    # 保存审批人微调后的签名位置
+    if signature_x is not None:
+        a.signature_x = signature_x
+    if signature_y is not None:
+        a.signature_y = signature_y
+    if signature_page is not None:
+        a.signature_page = signature_page
 
     # 操作日志
     log = OperationLog(
@@ -284,7 +316,8 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             Approval.status == ApprovalStatus.PENDING,
         )
     )
-    if pending_apprs.scalars().all():
+    remaining = pending_apprs.scalars().all()
+    if remaining:
         return {"all_approved": False, "message": "审批通过，等待其他审批人"}
 
     # 全部审批通过 → 标记当前节点的 Task 为 completed
@@ -298,23 +331,32 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     # 全部审批通过 → 签名上 PDF → 推进流程
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
 
-    # 实际签名插入：将审批人签名图片写入节点 PDF 文件
-    from app.services.pdf_signature import apply_signatures_to_node_pdfs
-    signed_count = await apply_signatures_to_node_pdfs(db, node.id)
-    if signed_count > 0:
-        # 标记签名已应用
-        await db.execute(
-            update(Approval)
-            .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
-            .values(signature_applied=True)
-        )
+    # 签批：仅当节点开启 require_signature 时才将签名图片写入 PDF
+    if node.require_signature:
+        from app.services.pdf_signature import apply_signatures_to_node_pdfs
+        signed_count = await apply_signatures_to_node_pdfs(db, node.id)
+        if signed_count > 0:
+            await db.execute(
+                update(Approval)
+                .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
+                .values(signature_applied=True)
+            )
     await db.flush()
 
-    if node.is_end:
+    from app.models import FlowTemplate
+
+    # 查询实例，判断是否为方案（方案工作节点审批通过后直接完成，跳过结束节点）
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
+    is_proposal = False
+    if not node.is_end:
+        tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == inst.template_id))).scalar_one_or_none()
+        is_proposal = tpl is not None and tpl.type == "proposal"
+
+    if node.is_end or is_proposal:
         # 结束节点 → 流程完成
+        # 方案工作节点全部审批通过 → 直接完成（跳过结束节点终审）
         node.status = InstanceNodeStatus.FINISHED
         node.completed_at = now
-        inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
         inst.status = InstanceStatus.COMPLETED
         inst.completed_at = now
         return {"all_approved": True, "instance_completed": True, "message": "流程已完成"}
@@ -395,6 +437,42 @@ async def reject(
             )
             db.add(new_task)
 
+        # 重置目标节点之后、终审节点（含）的所有下游节点为 waiting
+        downstream_result = await db.execute(
+            select(InstanceNode).where(
+                InstanceNode.instance_id == a.instance_id,
+                InstanceNode.sort_order > target_node.sort_order,
+                InstanceNode.sort_order <= node.sort_order,
+            ).order_by(InstanceNode.sort_order)
+        )
+        for dn in downstream_result.scalars().all():
+            # 删除下游节点文件
+            dn_files = await db.execute(select(File).where(File.node_id == dn.id))
+            for f in dn_files.scalars().all():
+                abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
+                if os.path.exists(abs_path):
+                    os.remove(abs_path)
+                await db.delete(f)
+            # 终止下游节点未完成的 Task
+            await db.execute(
+                update(Task).where(
+                    Task.node_id == dn.id,
+                    Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.WAITING_CHECK, TaskStatus.WAITING_APPROVAL]),
+                ).values(status=TaskStatus.TERMINATED)
+            )
+            # 重置节点状态（轮次 +1，表示又一次经过此节点）
+            dn.round += 1
+            dn.status = InstanceNodeStatus.WAITING
+            dn.started_at = None
+            dn.completed_at = None
+
+        # 终止终审节点其余待审批记录
+        await db.execute(
+            update(Approval)
+            .where(Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
+            .values(status=ApprovalStatus.TERMINATED, decided_at=now)
+        )
+
         # 记录日志
         log = OperationLog(
             instance_id=a.instance_id,
@@ -422,10 +500,13 @@ async def reject(
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
 
-        # 终止全部校验记录（新轮次重新生成）
+        # 终止当前轮次待校验记录（保留历史轮次已决记录）
         await db.execute(
             update(CheckRecord)
-            .where(CheckRecord.task_id == a.task_id)
+            .where(
+                CheckRecord.task_id == a.task_id,
+                CheckRecord.status == CheckStatus.PENDING,
+            )
             .values(status=CheckStatus.TERMINATED, decided_at=now)
         )
 

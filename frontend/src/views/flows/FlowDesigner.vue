@@ -258,7 +258,7 @@ onMounted(async () => {
         return 'work-node'
       }
       lf.renderRawData({
-        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy } })),
+        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy, require_signature: n.require_signature, signature_x: n.signature_x, signature_y: n.signature_y, signature_page: n.signature_page } })),
         edges: detail.edges.map(e => {
           const ptsList = pointsStrToList(e.points)
           return ptsList
@@ -464,6 +464,10 @@ async function handleSave() {
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
+      require_signature: n.properties?.require_signature ?? true,
+      signature_x: n.properties?.signature_x ?? 400,
+      signature_y: n.properties?.signature_y ?? 100,
+      signature_page: n.properties?.signature_page ?? -1,
       position_x: Math.round(n.x), position_y: Math.round(n.y),
       sort_order: n.properties?.sort_order ?? 0,
     }))
@@ -515,6 +519,10 @@ async function handleLaunch() {
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
+      require_signature: n.properties?.require_signature ?? true,
+      signature_x: n.properties?.signature_x ?? 400,
+      signature_y: n.properties?.signature_y ?? 100,
+      signature_page: n.properties?.signature_page ?? -1,
       position_x: Math.round(n.x), position_y: Math.round(n.y),
       sort_order: n.properties?.sort_order ?? 0,
     }))
