@@ -15,6 +15,7 @@ from app.models import (
     File,
     Approval,
     OperationLog,
+    Signature,
 )
 from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, OperatorType
 from app.schemas.common import PaginatedData
@@ -175,6 +176,7 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             {
                 "id": f.id,
                 "original_name": f.original_name,
+                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
                 "file_size": f.file_size,
                 "uploader_name": "",
                 "upload_type": f.upload_type,
@@ -196,13 +198,22 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             }
             for ac in all_checks
         ],
+        # 节点签批配置（前端判断是否弹出签名预览）
+        require_assignee_signature=node.require_assignee_signature,
+        require_checker_signature=node.require_checker_signature,
+        require_approver_signature=node.require_approver_signature,
+        signature_x=node.signature_x,
+        signature_y=node.signature_y,
+        signature_page=node.signature_page,
+        # 当前校验人的签名图片 URL
+        current_signature_url=f"/api/v1/auth/users/{c.checker_id}/signature-image" if checker_user and checker_user.signature_image else None,
         decided_at=c.decided_at,
         created_at=c.created_at,
     )
 
 
-async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str | None) -> dict:
-    """校验通过 —— 检查全部通过后触发审批生成"""
+async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str | None, signatures: list[dict] | None = None) -> dict:
+    """校验通过 —— 支持签批 + 全部通过后批量写入 PDF"""
     c = (await db.execute(select(CheckRecord).where(CheckRecord.id == check_id))).scalar_one_or_none()
     if c is None:
         raise AppException(ErrorCode.NOT_FOUND, "校验记录不存在")
@@ -216,6 +227,28 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     c.opinion = opinion
     c.decided_at = now
 
+    # 保存签名记录到 signatures 表（暂不写 PDF，等全部校验通过后批量写入）
+    sig_ids: list[int] = []
+    if signatures:
+        for idx, sig in enumerate(signatures):
+            sig_record = Signature(
+                file_id=sig["file_id"],
+                signer_id=current_user_id,
+                role_type="checker",
+                source_id=check_id,
+                node_id=c.node_id,
+                signature_x=sig.get("signature_x", 400),
+                signature_y=sig.get("signature_y", 100),
+                signature_page=sig.get("signature_page", -1),
+                signature_width=sig.get("signature_width"),
+                signature_height=sig.get("signature_height"),
+                applied=False,  # 等全部校验通过后批量写入
+                sort_order=idx,
+            )
+            db.add(sig_record)
+            await db.flush()
+            sig_ids.append(sig_record.id)
+
     # 记录操作日志
     log = OperationLog(
         instance_id=c.instance_id,
@@ -224,7 +257,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
         operator_id=current_user_id,
         operation_type="check_pass",
         round=c.task_id,
-        description=f"校验通过",
+        description=f"校验通过" + ("（已签名）" if sig_ids else ""),
     )
     db.add(log)
     await db.flush()
@@ -239,10 +272,24 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     has_pending = all_pending.scalars().all()
 
     if not has_pending:
-        # 全部校验通过 → 推进到审批阶段
-        task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
+        # 全部校验通过 → 批量写入所有校验人签名到 PDF
         node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
+        if node.require_checker_signature:
+            # 查询该节点本轮次所有校验人的 pending 签名
+            all_checker_sigs_result = await db.execute(
+                select(Signature).where(
+                    Signature.node_id == c.node_id,
+                    Signature.role_type == "checker",
+                    Signature.applied == False,
+                )
+            )
+            all_checker_sigs = all_checker_sigs_result.scalars().all()
+            if all_checker_sigs:
+                from app.services.pdf_signature import apply_signatures_to_files
+                await apply_signatures_to_files(db, [s.id for s in all_checker_sigs])
 
+        # 推进到审批阶段
+        task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
         task.status = TaskStatus.WAITING_APPROVAL
         node.status = InstanceNodeStatus.WAITING_APPROVAL
 
@@ -254,9 +301,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     instance_id=c.instance_id,
                     node_id=c.node_id,
                     task_id=c.task_id,
-                    approver_id=a.get("user_id") if isinstance(a, dict) else a,  # a 是 int 时即为 user_id
+                    approver_id=a.get("user_id") if isinstance(a, dict) else a,
                     status=ApprovalStatus.PENDING,
-                    round=node.round,  # 记录当前节点轮次
+                    round=node.round,
                 )
                 db.add(approval)
 

@@ -144,7 +144,9 @@ async def create_proposal(
             ),
             checkers=None,  # 方案无校验环节
             approval_strategy="all_approve",
-            require_signature=tn.require_signature,
+            require_assignee_signature=tn.require_assignee_signature,
+            require_checker_signature=tn.require_checker_signature,
+            require_approver_signature=tn.require_approver_signature,
             signature_x=tn.signature_x,
             signature_y=tn.signature_y,
             signature_page=tn.signature_page,
@@ -206,8 +208,8 @@ async def create_proposal(
     }
 
 
-async def get_organization_summaries(db: AsyncSession) -> dict:
-    """获取各组织的方案统计（卡片展示用）"""
+async def get_organization_summaries(db: AsyncSession, user_org_id: int) -> dict:
+    """获取各组织的方案统计（卡片展示用）—— user_org_id 用于标记当前所属组织"""
     # 找到所有方案模板 ID
     tpl_sub = select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
 
@@ -239,6 +241,7 @@ async def get_organization_summaries(db: AsyncSession) -> dict:
             "completed_count": int(row.completed or 0),
             "terminated_count": int(row.terminated or 0),
             "latest_update_time": row.latest_update.isoformat() if row.latest_update else None,
+            "is_current_user_org": row.organization_id == user_org_id,  # 标记当前用户所属组织
         }
         for row in rows
     ]
@@ -274,12 +277,18 @@ async def list_proposals(
     result = await db.execute(stmt)
     instances = result.scalars().all()
 
-    # 批量查发起人
+    # 批量查发起人 + 组织名
     initiator_ids = list(set(inst.initiator_id for inst in instances))
     users_map: dict[int, str] = {}
     if initiator_ids:
         users_result = await db.execute(select(User).where(User.id.in_(initiator_ids)))
         users_map = {u.id: u.real_name for u in users_result.scalars().all()}
+
+    org_ids = list(set(inst.organization_id for inst in instances))
+    orgs_map: dict[int, str] = {}
+    if org_ids:
+        orgs_result = await db.execute(select(Organization).where(Organization.id.in_(org_ids)))
+        orgs_map = {o.id: o.name for o in orgs_result.scalars().all()}
 
     items = [
         ProposalListItem(
@@ -287,6 +296,7 @@ async def list_proposals(
             name=inst.name,
             description=inst.description,
             organization_id=inst.organization_id,
+            organization_name=orgs_map.get(inst.organization_id, ""),
             initiator_id=inst.initiator_id,
             initiator_name=users_map.get(inst.initiator_id, ""),
             status=inst.status,

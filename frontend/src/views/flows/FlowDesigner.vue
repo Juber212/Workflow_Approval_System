@@ -21,6 +21,8 @@
             <el-button text type="danger" @click="handleDelete">🗑 删除</el-button>
           </el-tooltip>
           <el-divider direction="vertical" />
+          <!-- 文件模板管理按钮（仅编辑已有模板时可用） -->
+          <el-button v-if="!isNewTemplate" text @click="showDocDialog = true">📄 文件模板</el-button>
           <el-tooltip content="Ctrl+S 保存" placement="bottom">
             <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
           </el-tooltip>
@@ -59,7 +61,8 @@
       <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
     </div>
 
-    <div class="view-mode-toggle">
+    <!-- 视图切换 -->
+    <div v-if="!isLaunchMode" class="view-mode-toggle">
       <el-radio-group v-model="viewMode" size="small">
         <el-radio-button value="canvas">画布</el-radio-button>
         <el-radio-button value="list">列表</el-radio-button>
@@ -70,7 +73,7 @@
     <el-dialog v-model="showLaunchDialog" title="发起项目" width="480px" @close="launchFormRef?.resetFields()">
       <el-form ref="launchFormRef" :model="launchForm" :rules="launchRules" label-width="80px" @submit.prevent>
         <el-form-item label="项目名称" prop="name">
-          <el-input v-model="launchForm.name" placeholder="请输入项目名称" maxlength="100" />
+          <el-input v-model="launchForm.name" placeholder="请输入项目名称" maxlength="100" :disabled="isLaunchMode" />
         </el-form-item>
         <el-form-item label="优先级" prop="priority">
           <el-select v-model="launchForm.priority" style="width:100%">
@@ -97,14 +100,70 @@
       :editing-id="editingPreset?.id"
       @saved="onPresetSaved"
     />
+
+    <!-- 文件模板管理弹窗 -->
+    <el-dialog
+      v-model="showDocDialog"
+      title="文件模板管理"
+      width="680px"
+      @open="handleDocDialogOpen"
+      destroy-on-close
+    >
+      <!-- 可用变量参考 -->
+      <div class="doc-var-section">
+        <h4>可用变量 <span class="doc-var-hint">（在模板中使用下列占位符，下载时自动替换为实际值）</span></h4>
+        <div class="doc-var-tags">
+          <el-tag v-for="v in docVariables" :key="v" size="small" type="info" class="doc-var-tag">{{ v }}</el-tag>
+        </div>
+      </div>
+
+      <!-- 上传区域（多文件） -->
+      <div class="doc-upload-row">
+        <el-upload
+          ref="docUploadRef"
+          :auto-upload="false"
+          multiple
+          accept=".doc,.docx,.xlsx"
+          :show-file-list="false"
+          :on-change="handleDocFilesChange"
+        >
+          <el-button type="primary" :icon="UploadFilled" :loading="uploadingDoc">上传文件模板</el-button>
+        </el-upload>
+        <span class="doc-upload-hint">支持 .doc / .docx / .xlsx，可一次多选</span>
+      </div>
+
+      <!-- 模板列表 -->
+      <el-table v-if="docTemplates.length > 0" :data="docTemplates" class="doc-table" stripe>
+        <el-table-column prop="name" label="名称" min-width="180" />
+        <el-table-column label="类型" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">
+              .{{ row.file_type }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="original_name" label="原始文件名" min-width="200" />
+        <el-table-column label="大小" width="100">
+          <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row }">
+            <el-button link type="danger" size="small" @click="handleDeleteDoc(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无文件模板，请上传" :image-size="60" />
+
+      <template #footer><el-button @click="showDocDialog = false">关闭</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, type TemplateDetail } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, uploadDocTemplate, deleteDocTemplate, type TemplateDetail, type DocTemplateItem } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance, calculateDeadlines } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
@@ -113,6 +172,7 @@ import PropertyPanel from './designer/PropertyPanel.vue'
 import PresetEditor from './designer/PresetEditor.vue'
 import NodeListView from './designer/NodeListView.vue'
 import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
+import { UploadFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -138,6 +198,85 @@ const editingPreset = ref<PresetItem | null>(null)  // null = 新建，有值 = 
 /** 待传递给 PresetEditor 的预填数据 */
 const pendingPresetData = ref<PresetFormData | null>(null)
 
+// ─── 文件模板 ───────────────────────────────────────────
+const showDocDialog = ref(false)
+const docTemplates = ref<DocTemplateItem[]>([])
+const docVariables = ref<string[]>([])
+const uploadingDoc = ref(false)
+const docUploadRef = ref()  // el-upload ref
+
+/** 弹窗打开时刷新列表 */
+async function handleDocDialogOpen() {
+  await loadDocTemplates()
+}
+
+/** 加载文件模板列表 */
+async function loadDocTemplates() {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    const data = await getDocTemplates(templateId)
+    docTemplates.value = data.items
+    docVariables.value = data.available_variables
+  } catch {
+    // 模板不存在时不报错
+  }
+}
+
+/** 获取当前模板 ID（编辑模式） */
+function currentTemplateId(): number | null {
+  const id = route.params.id
+  if (!id) return null
+  const n = Number(id)
+  return Number.isNaN(n) ? null : n
+}
+
+/** 多文件选择 → 逐个上传 */
+async function handleDocFilesChange(uploadFile: any, uploadFiles: any[]) {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  uploadingDoc.value = true
+  let successCount = 0
+  let failCount = 0
+  for (const file of uploadFiles) {
+    if (!file?.raw) continue
+    try {
+      await uploadDocTemplate(templateId, file.raw)
+      successCount++
+    } catch (e: any) {
+      failCount++
+      console.warn('[文件模板] 上传失败:', file.name, e?.response?.data?.message || e)
+    }
+  }
+  uploadingDoc.value = false
+  if (successCount > 0) ElMessage.success(`成功上传 ${successCount} 个${failCount > 0 ? `，${failCount} 个失败` : ''}`)
+  else if (failCount > 0) ElMessage.error('全部上传失败')
+  // 清空 el-upload 已选文件列表以便再次选择
+  if (docUploadRef.value) docUploadRef.value.clearFiles()
+  await loadDocTemplates()
+}
+
+/** 删除文件模板 */
+async function handleDeleteDoc(row: DocTemplateItem) {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    await ElMessageBox.confirm(`确定删除文件模板「${row.name}」？`, '确认删除', { type: 'warning' })
+    await deleteDocTemplate(templateId, row.id)
+    ElMessage.success('已删除')
+    await loadDocTemplates()
+  } catch {
+    // 用户取消
+  }
+}
+
+/** 格式化文件大小 */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 * 1024).toFixed(1) + ' MB'
+}
+
 /** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
 /** 是否为新建模板模式（还未入库，首次保存时才创建） */
@@ -149,6 +288,11 @@ const bizInfo = computed(() => ({
   product_model: (route.query.product_model as string) || '',
   sales_manager: (route.query.sales_manager as string) || '',
 }))
+/** 关联方案 ID（从路由 query 读取，传后端用数字） */
+const proposalIdFromQuery = computed(() => {
+  const v = route.query.proposal_id
+  return v ? Number(v) : null
+})
 /** 是否有业务信息可展示 */
 const hasBizInfo = computed(() =>
   bizInfo.value.contract_no !== '' || bizInfo.value.product_model !== '' || bizInfo.value.sales_manager !== ''
@@ -159,6 +303,21 @@ const launchForm = ref({ name: '', priority: 'normal' as string, description: ''
 const launchRules: FormRules = {
   name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }, { min: 2, max: 100, message: '2-100字符', trigger: 'blur' }],
 }
+
+/** 发起模式下自动生成项目名称：合同号(产品型号) */
+const autoLaunchName = computed(() => {
+  const cn = bizInfo.value.contract_no
+  const pm = bizInfo.value.product_model
+  if (!cn && !pm) return ''
+  return cn ? `${cn}(${pm})` : pm
+})
+
+/** 发起弹窗打开时，自动填入名称（发起模式下不可编辑） */
+watch(showLaunchDialog, (val) => {
+  if (val && isLaunchMode.value && autoLaunchName.value) {
+    launchForm.value.name = autoLaunchName.value
+  }
+})
 
 /** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
 const systemNodeDbIds = ref<{ start?: number; end?: number }>({})
@@ -258,7 +417,7 @@ onMounted(async () => {
         return 'work-node'
       }
       lf.renderRawData({
-        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy, require_signature: n.require_signature, signature_x: n.signature_x, signature_y: n.signature_y, signature_page: n.signature_page } })),
+        nodes: detail.nodes.map(n => ({ id: String(n.id), type: mapNodeType(n), x: n.position_x, y: n.position_y, properties: { db_id: n.id, name: n.name, is_start: n.is_start, is_end: n.is_end, assignee_id: n.assignee_id, assignee_name: n.assignee_name, time_limit_days: n.time_limit_days, require_file: n.require_file, file_folders: n.file_folders, approvers: n.approvers, approvers_names: n.approvers_names, checkers: n.checkers, checkers_names: n.checkers_names, approval_strategy: n.approval_strategy, require_assignee_signature: n.require_assignee_signature, require_checker_signature: n.require_checker_signature, require_approver_signature: n.require_approver_signature, signature_x: n.signature_x, signature_y: n.signature_y, signature_page: n.signature_page } })),
         edges: detail.edges.map(e => {
           const ptsList = pointsStrToList(e.points)
           return ptsList
@@ -463,8 +622,11 @@ async function handleSave() {
       is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
+      file_folders: n.properties?.file_folders ?? null,  // 文件提交文件夹配置
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      require_signature: n.properties?.require_signature ?? true,
+      require_assignee_signature: n.properties?.require_assignee_signature ?? true,
+      require_checker_signature: n.properties?.require_checker_signature ?? true,
+      require_approver_signature: n.properties?.require_approver_signature ?? true,
       signature_x: n.properties?.signature_x ?? 400,
       signature_y: n.properties?.signature_y ?? 100,
       signature_page: n.properties?.signature_page ?? -1,
@@ -518,8 +680,11 @@ async function handleLaunch() {
       is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
       assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
       require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
+      file_folders: n.properties?.file_folders ?? null,  // 文件提交文件夹配置
       checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      require_signature: n.properties?.require_signature ?? true,
+      require_assignee_signature: n.properties?.require_assignee_signature ?? true,
+      require_checker_signature: n.properties?.require_checker_signature ?? true,
+      require_approver_signature: n.properties?.require_approver_signature ?? true,
       signature_x: n.properties?.signature_x ?? 400,
       signature_y: n.properties?.signature_y ?? 100,
       signature_page: n.properties?.signature_page ?? -1,
@@ -567,6 +732,7 @@ async function handleLaunch() {
       contract_no: bizInfo.value.contract_no || undefined,
       product_model: bizInfo.value.product_model || undefined,
       sales_manager: bizInfo.value.sales_manager || undefined,
+      proposal_id: proposalIdFromQuery.value || undefined,
       node_overrides: nodeOverrides.length > 0 ? nodeOverrides : undefined,
     })
     ElMessage.success('流程发起成功')
@@ -594,4 +760,17 @@ async function handleLaunch() {
   &__label { font-size: 12px; color: var(--el-text-color-secondary); }
   &__value { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); }
 }
+
+/* ─── 文件模板弹窗 ─── */
+.doc-var-section {
+  margin-bottom: 16px; padding: 10px 14px; background: #f5f7fa; border-radius: 6px;
+  h4 { margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+  .doc-var-hint { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; }
+}
+.doc-var-tags { display: flex; flex-wrap: wrap; gap: 6px; .doc-var-tag { font-family: monospace; font-size: 12px; } }
+.doc-upload-row {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+  .doc-upload-hint { font-size: 12px; color: var(--el-text-color-secondary); }
+}
+.doc-table { width: 100%; }
 </style>

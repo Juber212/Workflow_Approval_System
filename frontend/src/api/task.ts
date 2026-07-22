@@ -1,6 +1,7 @@
 /** 任务 API —— 待办列表、详情、提交、草稿、文件上传 */
 import request from './request'
 import type { PaginatedResponse } from './index'
+import type { SignatureSlot } from './signature'
 
 // ==================== 类型 ====================
 
@@ -36,6 +37,7 @@ export interface TaskDetail {
   status: string
   assignee_note: string | null
   require_file: boolean
+  file_folders: Array<{ name: string; required: boolean; file_count: number | null }> | null  // 文件提交文件夹配置
   time_limit_days: number | null
   deadline: string | null
   round: number
@@ -47,6 +49,14 @@ export interface TaskDetail {
   approvals: TaskApprovalItem[]
   rejected_type: string | null  // 退回类型: "check" | "approval" | null
   rejected_reason: string | null  // 退回原因
+  // 节点签批配置（三个独立开关）
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
+  signature_x: number
+  signature_y: number
+  signature_page: number
+  current_signature_url: string | null  // 当前负责人的签名图片 URL
   submitted_at: string | null
   created_at: string | null
 }
@@ -64,9 +74,11 @@ export interface FlowNodeBrief {
 export interface TaskFileItem {
   id: number
   original_name: string
+  mime_type: string | null  // 文件 MIME 类型，用于判断是否为 PDF
   file_size: number | null
   uploader_name: string
   upload_type: string
+  folder_name: string | null  // 所属文件夹名称
   round: number
   created_at: string | null
 }
@@ -116,15 +128,31 @@ export async function saveTaskDraft(id: number, data: { assignee_note?: string |
   return res
 }
 
-export async function submitTask(id: number, data: { assignee_note?: string | null }) {
+/** 提交任务 —— 支持签名 */
+export async function submitTask(id: number, data: { assignee_note?: string | null; signatures?: SignatureSlot[] | null }) {
   const res = await request.post(`/tasks/${id}/submit`, data)
   return res
 }
 
-export async function uploadTaskFile(taskId: number, file: File) {
+/** 预提交签名准备 —— 转换文件为 PDF 并返回文件列表，供签批弹窗预览 */
+export interface PrepareSignFile {
+  id: number
+  original_name: string
+  mime_type: string | null
+  url: string
+}
+
+export async function prepareSign(taskId: number): Promise<PrepareSignFile[]> {
+  const res = await request.post(`/tasks/${taskId}/prepare-sign`)
+  return res.data.files  // res = { code, message, data: { files: [...] } }
+}
+
+/** 上传任务文件 —— 支持指定文件夹 */
+export async function uploadTaskFile(taskId: number, file: File, folderName?: string) {
   const form = new FormData()
   form.append('file', file)
-  const res = await request.post(`/tasks/${taskId}/files`, form, {
+  const params = folderName ? `?folder_name=${encodeURIComponent(folderName)}` : ''
+  const res = await request.post(`/tasks/${taskId}/files${params}`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return res.data

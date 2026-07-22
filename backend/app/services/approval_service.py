@@ -19,6 +19,7 @@ from app.models import (
     File,
     CheckRecord,
     OperationLog,
+    Signature,
 )
 from app.models.enums import (
     ApprovalStatus,
@@ -249,6 +250,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         files=[
             {
                 "id": f.id, "original_name": f.original_name,
+                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
                 "file_size": f.file_size,
                 "node_id": f.node_id,
                 "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
@@ -262,19 +264,37 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         approval_progress=approval_progress,
         reject_target_nodes=reject_target_nodes,
         signature_applied=a.signature_applied,
-        # 节点签批配置（前端判断是否弹出签名预览）
-        require_signature=node.require_signature,
+        # 节点签批配置（三个独立开关 + 默认位置）
+        require_assignee_signature=node.require_assignee_signature,
+        require_checker_signature=node.require_checker_signature,
+        require_approver_signature=node.require_approver_signature,
         signature_x=node.signature_x,
         signature_y=node.signature_y,
         signature_page=node.signature_page,
-        # 当前审批人的签名图片 URL（API 端点，前端可直接用于 img src）
+        # 当前审批人的签名图片 URL
         current_signature_url=f"/api/v1/auth/users/{a.approver_id}/signature-image" if approver_user and approver_user.signature_image else None,
+        # 本审批记录的签名明细（从 signatures 表获取）
+        signatures=[
+            {
+                "id": s.id, "file_id": s.file_id,
+                "signature_x": s.signature_x, "signature_y": s.signature_y,
+                "signature_page": s.signature_page,
+                "signature_width": s.signature_width, "signature_height": s.signature_height,
+                "applied": s.applied,
+            }
+            for s in (await db.execute(
+                select(Signature).where(
+                    Signature.source_id == approval_id,
+                    Signature.role_type == "approver",
+                )
+            )).scalars().all()
+        ],
         decided_at=a.decided_at,
         created_at=a.created_at,
     )
 
 
-async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None, signature_x: float | None = None, signature_y: float | None = None, signature_page: int | None = None) -> dict:
+async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None, signatures: list[dict] | None = None, signature_x: float | None = None, signature_y: float | None = None, signature_page: int | None = None) -> dict:
     """审批通过 —— 含签名处理 + 流程推进"""
     a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
     if a is None:
@@ -288,13 +308,61 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     a.status = ApprovalStatus.APPROVED
     a.opinion = opinion
     a.decided_at = now
-    # 保存审批人微调后的签名位置
+
+    # 兼容旧版：单签名位置参数（直接存 Approval 旧字段）
     if signature_x is not None:
         a.signature_x = signature_x
     if signature_y is not None:
         a.signature_y = signature_y
     if signature_page is not None:
         a.signature_page = signature_page
+
+    # 新版：多签名存入 signatures 表（暂不写 PDF，等全部审批通过后批量写入）
+    sig_ids: list[int] = []
+    if signatures:
+        for idx, sig in enumerate(signatures):
+            sig_record = Signature(
+                file_id=sig["file_id"],
+                signer_id=current_user_id,
+                role_type="approver",
+                source_id=approval_id,
+                node_id=a.node_id,
+                signature_x=sig.get("signature_x", 400),
+                signature_y=sig.get("signature_y", 100),
+                signature_page=sig.get("signature_page", -1),
+                signature_width=sig.get("signature_width"),
+                signature_height=sig.get("signature_height"),
+                applied=False,
+                sort_order=idx,
+            )
+            db.add(sig_record)
+            await db.flush()
+            sig_ids.append(sig_record.id)
+    # 兼容旧版：无 signatures 但有单签名位置参数 → 自动生成一条签名记录
+    elif signature_x is not None or signature_y is not None or signature_page is not None:
+        # 获取审批人的签名位置（旧版模式下，默认签在节点第一个 PDF 上）
+        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
+        pdf_files = (await db.execute(
+            select(File).where(File.node_id == a.node_id).limit(1)
+        )).scalars().all()
+        if pdf_files:
+            sig_record = Signature(
+                file_id=pdf_files[0].id,
+                signer_id=current_user_id,
+                role_type="approver",
+                source_id=approval_id,
+                node_id=a.node_id,
+                signature_x=signature_x if signature_x is not None else node.signature_x,
+                signature_y=signature_y if signature_y is not None else node.signature_y,
+                signature_page=signature_page if signature_page is not None else node.signature_page,
+                signature_width=None,
+                signature_height=None,
+                applied=False,
+                sort_order=0,
+            )
+            db.add(sig_record)
+            await db.flush()
+            sig_ids.append(sig_record.id)
 
     # 操作日志
     log = OperationLog(
@@ -304,7 +372,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         operator_id=current_user_id,
         operation_type="approve",
         round=a.task_id or 0,
-        description="审批通过" + (f"（已签名）" if a.signature_applied else ""),
+        description="审批通过" + ("（已签名）" if sig_ids else ""),
     )
     db.add(log)
     await db.flush()
@@ -331,16 +399,26 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     # 全部审批通过 → 签名上 PDF → 推进流程
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
 
-    # 签批：仅当节点开启 require_signature 时才将签名图片写入 PDF
-    if node.require_signature:
-        from app.services.pdf_signature import apply_signatures_to_node_pdfs
-        signed_count = await apply_signatures_to_node_pdfs(db, node.id)
-        if signed_count > 0:
-            await db.execute(
-                update(Approval)
-                .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
-                .values(signature_applied=True)
+    # 签批：从 signatures 表读取所有待写入的审批签名，批量写入 PDF
+    if node.require_approver_signature:
+        pending_sigs_result = await db.execute(
+            select(Signature).where(
+                Signature.node_id == node.id,
+                Signature.role_type == "approver",
+                Signature.applied == False,
             )
+        )
+        pending_sigs = pending_sigs_result.scalars().all()
+        if pending_sigs:
+            from app.services.pdf_signature import apply_signatures_to_files
+            await apply_signatures_to_files(db, [s.id for s in pending_sigs])
+
+    # 兼容旧版：标记 Approval 的旧签名字段
+    await db.execute(
+        update(Approval)
+        .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
+        .values(signature_applied=True)
+    )
     await db.flush()
 
     from app.models import FlowTemplate

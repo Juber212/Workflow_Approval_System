@@ -1,6 +1,7 @@
 /** 审批 API */
 import request from './request'
 import type { PaginatedResponse } from './index'
+import type { SignatureSlot } from './signature'
 
 export interface ApprovalListItem {
   id: number
@@ -36,17 +37,20 @@ export interface ApprovalDetail {
   total_nodes: number
   current_node_index: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
-  files: { id: number; original_name: string; file_size: number | null; node_id: number | null; node_name: string; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
+  files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; node_id: number | null; node_name: string; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; round: number; decided_at: string | null }[]
   approval_progress: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; round: number; decided_at: string | null }[]
   reject_target_nodes: { id: number; name: string; sort_order: number; status: string }[]
   signature_applied: boolean
-  // 节点签批配置
-  require_signature: boolean
+  // 节点签批配置（三个独立开关）
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
   signature_x: number
   signature_y: number
   signature_page: number
   current_signature_url: string | null
+  signatures: { id: number; file_id: number; signature_x: number; signature_y: number; signature_page: number; applied: boolean }[]
   decided_at: string | null
   created_at: string | null
 }
@@ -61,23 +65,15 @@ export async function getApprovalDetail(id: number): Promise<ApprovalDetail> {
   return res.data
 }
 
-/** 审批签批位置参数 */
-export interface SignaturePosition {
-  signature_x?: number | null
-  signature_y?: number | null
-  signature_page?: number | null
-}
-
+/** 审批通过 —— 支持多签名 */
 export async function approveApproval(
   id: number,
   opinion?: string | null,
-  sigPos?: SignaturePosition,
+  signatures?: SignatureSlot[] | null,
 ) {
   const res = await request.post(`/approvals/${id}/approve`, {
     opinion,
-    signature_x: sigPos?.signature_x ?? null,
-    signature_y: sigPos?.signature_y ?? null,
-    signature_page: sigPos?.signature_page ?? null,
+    signatures,
   })
   return res
 }

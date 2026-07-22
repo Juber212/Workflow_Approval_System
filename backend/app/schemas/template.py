@@ -53,6 +53,25 @@ class TemplateDetail(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DocTemplateItem(BaseModel):
+    """文件模板列表项"""
+    id: int
+    name: str                     # 显示名称
+    original_name: str            # 原始文件名
+    file_size: int
+    file_type: str                # docx / xlsx
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class DocTemplateListResponse(BaseModel):
+    """文件模板列表"""
+    items: list[DocTemplateItem]
+    # 可用变量列表（供管理员参考）
+    available_variables: list[str]
+
+
 class OrgTemplateSummary(BaseModel):
     """组织卡片"""
     id: int

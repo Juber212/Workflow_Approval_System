@@ -57,12 +57,15 @@ export interface TemplateNodeItem {
   assignee_name: string | null
   time_limit_days: number | null
   require_file: boolean
+  file_folders: Array<{ name: string; required: boolean; file_count: number | null }> | null  // 文件提交文件夹配置
   approvers: Array<{ user_id: number }> | null
   approvers_names: string[] | null
   checkers: Array<{ user_id: number }> | null
   checkers_names: string[] | null
   approval_strategy: string
-  require_signature: boolean
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
   signature_x: number
   signature_y: number
   signature_page: number
@@ -125,4 +128,113 @@ export async function updateTemplate(id: number, data: { name: string; descripti
 /** 删除模板 */
 export async function deleteTemplate(id: number) {
   await request.delete(`/templates/${id}`)
+}
+
+// ─── 文件模板 ───────────────────────────────────────────────
+
+/** 文件模板列表项 */
+export interface DocTemplateItem {
+  id: number
+  name: string           // 显示名称
+  original_name: string  // 原始文件名
+  file_size: number
+  file_type: string      // "docx" | "xlsx"
+  created_at: string | null
+}
+
+/** 文件模板列表响应 */
+export interface DocTemplateListResponse {
+  items: DocTemplateItem[]
+  available_variables: string[]  // 可用变量列表
+}
+
+/** 获取模板的文件模板列表 */
+export async function getDocTemplates(templateId: number): Promise<DocTemplateListResponse> {
+  const res = await request.get(`/templates/${templateId}/documents`)
+  return res.data
+}
+
+/** 上传文件模板 */
+export async function uploadDocTemplate(
+  templateId: number,
+  file: File,
+  name?: string,
+): Promise<{ id: number; name: string; file_type: string }> {
+  const form = new FormData()
+  form.append('file', file)
+  const params = name ? `?name=${encodeURIComponent(name)}` : ''
+  const res = await request.post(`/templates/${templateId}/documents${params}`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return res.data
+}
+
+/** 删除文件模板 */
+export async function deleteDocTemplate(templateId: number, docId: number): Promise<void> {
+  await request.delete(`/templates/${templateId}/documents/${docId}`)
+}
+
+/** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
+export async function downloadDocTemplate(taskId: number, docId: number): Promise<void> {
+  const token = localStorage.getItem('token')
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const resp = await fetch(`${baseUrl}/tasks/${taskId}/document-templates/${docId}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}))
+    throw new Error((errData as any).message || '下载失败')
+  }
+  const blob = await resp.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  // 从响应头解析文件名
+  const disposition = resp.headers.get('Content-Disposition') || ''
+  const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
+  const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
+  const raw = starMatch?.[1] || plainMatch?.[1] || `template-${docId}`
+  a.download = decodeURIComponent(raw)
+  a.click()
+  URL.revokeObjectURL(blobUrl)
+}
+
+// ─── 管理员文件模板管理 ──────────────────────────────────────
+
+/** 管理员文档模板列表项（含模板名和组织名） */
+export interface AdminDocTemplateItem extends DocTemplateItem {
+  template_id: number
+  template_name: string
+  organization_id: number
+  organization_name: string
+}
+
+/** 管理员文档模板列表响应 */
+export interface AdminDocTemplateListResponse {
+  items: AdminDocTemplateItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+/** 管理员获取所有文件模板 */
+export async function getAdminDocTemplates(params: {
+  organization_id?: number
+  keyword?: string
+  page?: number
+  page_size?: number
+} = {}): Promise<AdminDocTemplateListResponse> {
+  const res = await request.get('/admin/document-templates', { params })
+  return res.data
+}
+
+/** 管理员删除文件模板 */
+export async function deleteAdminDocTemplate(docId: number): Promise<void> {
+  await request.delete(`/admin/document-templates/${docId}`)
+}
+
+/** 管理员获取组织列表 */
+export async function getAdminOrganizations(): Promise<{ id: number; name: string }[]> {
+  const res = await request.get('/admin/organizations')
+  return res.data.items
 }

@@ -21,6 +21,8 @@ from app.models.approval import Approval
 from app.models.file import File
 from app.models.operation_log import OperationLog
 from app.models.node_preset import NodePreset
+from app.models.signature import Signature
+from app.models.document_template import DocumentTemplate
 
 __all__ = [
     "InstanceStatus", "Priority",
@@ -29,4 +31,5 @@ __all__ = [
     "FlowTemplate", "TemplateNode", "TemplateEdge",
     "FlowInstance", "InstanceNode", "InstanceEdge",
     "Task", "CheckRecord", "Approval", "File", "OperationLog", "NodePreset",
+    "Signature", "DocumentTemplate",
 ]

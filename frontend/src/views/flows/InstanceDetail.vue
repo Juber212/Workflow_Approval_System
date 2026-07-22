@@ -1,8 +1,8 @@
 <template>
-  <!-- 项目详情页 —— 基本信息 + 进度条 + 节点卡片 + 操作日志 -->
+  <!-- 实例详情页 —— 基本信息 + 进度条 + 节点卡片 + 操作日志（项目/方案共用） -->
   <div class="instance-detail" v-loading="loading">
     <!-- 空数据 -->
-    <el-empty v-if="!loading && !detail" description="项目不存在或无权访问" :image-size="60" />
+    <el-empty v-if="!loading && !detail" :description="`${typeLabel}不存在或无权访问`" :image-size="60" />
 
     <template v-if="detail">
       <!-- 粘性头部：基本信息 + 进度 + 操作 -->
@@ -44,6 +44,7 @@
       <OperationTimeline
         :logs="detail.logs?.items || []"
         :total="detail.logs?.total || 0"
+        :is-proposal="isProposal"
       />
 
       <!-- 终止流程确认弹窗 -->
@@ -53,6 +54,7 @@
         :instance-id="detail.id"
         :instance-name="detail.name"
         :instance-status="detail.status"
+        :is-proposal="isProposal"
         @terminated="handleTerminated"
       />
 
@@ -88,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-/** 项目详情页 —— 编排子组件，处理数据加载与用户交互 */
+/** 实例详情页 —— 项目/方案共用，根据 template_type 切换面包屑和文案 */
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -128,6 +130,11 @@ const isInitiator = computed(() => {
   return detail.value.initiator_id === userStore.userInfo.id
 })
 
+/** 是否为方案实例 */
+const isProposal = computed(() => detail.value?.template_type === 'proposal')
+/** 类型中文标签 */
+const typeLabel = computed(() => isProposal.value ? '方案' : '项目')
+
 // ========== 生命周期 ==========
 onMounted(() => {
   fetchDetail()
@@ -141,17 +148,26 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getInstanceDetail(id)
-    // 面包屑：首页 > 项目管理 > XX所 > 项目详情
+    // 面包屑：根据模板类型区分项目/方案
     if (detail.value) {
-      setBreadcrumb([
-        { label: '首页', to: '/dashboard' },
-        { label: '项目管理', to: '/flows' },
-        { label: detail.value.organization_name, to: `/flows/organization/${detail.value.organization_id}` },
-        { label: detail.value.name },
-      ])
+      if (isProposal.value) {
+        setBreadcrumb([
+          { label: '首页', to: '/dashboard' },
+          { label: '方案管理', to: '/proposals' },
+          { label: detail.value.organization_name, to: `/proposals/organization/${detail.value.organization_id}` },
+          { label: detail.value.name },
+        ])
+      } else {
+        setBreadcrumb([
+          { label: '首页', to: '/dashboard' },
+          { label: '项目管理', to: '/flows' },
+          { label: detail.value.organization_name, to: `/flows/organization/${detail.value.organization_id}` },
+          { label: detail.value.name },
+        ])
+      }
     }
   } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '加载项目详情失败'
+    const msg = err?.response?.data?.message || err?.message || '加载实例详情失败'
     ElMessage.error(msg)
   } finally {
     loading.value = false

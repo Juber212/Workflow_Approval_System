@@ -43,7 +43,7 @@
           <el-table-column prop="name" label="方案名称" min-width="160">
             <template #default="{ row }"><span class="inst-name">{{ row.name }}</span></template>
           </el-table-column>
-          <el-table-column prop="organization_name" label="所属组织" min-width="100" v-if="false" />
+          <el-table-column prop="organization_name" label="所属组织" min-width="100" />
           <el-table-column prop="initiator_name" label="发起人" min-width="80" />
           <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
           <el-table-column prop="created_at" label="发起时间" min-width="140">
@@ -54,9 +54,10 @@
               <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="80" fixed="right">
+          <el-table-column label="操作" min-width="120" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click.stop="goDetail(row.id)">查看详情</el-button>
+              <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -80,16 +81,21 @@
 
 <script setup lang="ts">
 /** 方案管理全局入口 —— 组织卡片 + 全部方案（方案库浏览，发起入口在组织内部页面） */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getProposals, getProposalOrganizations, type ProposalListItem, type ProposalOrgCardItem } from '@/api/proposal'
 import { getOrgOptions } from '@/api/admin'
+import { permanentDeleteInstance } from '@/api/instance'
+import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import ProposalOrgCardList from './ProposalOrgCardList.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
+const userStore = useUserStore()
+const isAdmin = computed(() => userStore.isAdmin)
 
 // ========== 组织卡片 ==========
 const propOrgs = ref<ProposalOrgCardItem[]>([])
@@ -124,6 +130,7 @@ async function fetchOrgs() {
       getProposalOrganizations().catch(() => ({ organizations: [] as ProposalOrgCardItem[] })),
     ])
     const statsMap = new Map(statsData.organizations.map(o => [o.id, o]))
+    const userOrgId = userStore.userInfo?.organization_id
     propOrgs.value = allOrgs.map(org => ({
       id: org.id, name: org.name,
       total_count: statsMap.get(org.id)?.total_count || 0,
@@ -131,15 +138,19 @@ async function fetchOrgs() {
       completed_count: statsMap.get(org.id)?.completed_count || 0,
       terminated_count: statsMap.get(org.id)?.terminated_count || 0,
       latest_update_time: statsMap.get(org.id)?.latest_update_time || null,
+      // 优先用接口返回值，兜底用 userStore 判断（该所无方案时接口不返回此 org）
+      is_current_user_org: statsMap.get(org.id)?.is_current_user_org || (org.id === userOrgId),
     }))
   } catch {
     // 兜底：至少显示组织列表
     try {
       const allOrgs = await getOrgOptions()
+      const userOrgId = userStore.userInfo?.organization_id
       propOrgs.value = allOrgs.map(org => ({
         id: org.id, name: org.name,
         total_count: 0, running_count: 0, completed_count: 0, terminated_count: 0,
         latest_update_time: null,
+        is_current_user_org: org.id === userOrgId,
       }))
     } catch { /* 无组织数据则空白 */ }
   }
@@ -197,6 +208,25 @@ function handleSearch() {
 
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
 function goDetail(id: number) { router.push(`/flows/instances/${id}`) }
+
+/** 管理员永久删除已终止方案 */
+async function handlePermanentDelete(row: ProposalListItem) {
+  try {
+    await ElMessageBox.confirm(
+      `确认永久删除方案「${row.name}」？此操作不可撤销，所有关联数据将被清除。`,
+      '永久删除',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
+    )
+  } catch { return }
+  try {
+    await permanentDeleteInstance(row.id)
+    ElMessage.success('方案已永久删除')
+    fetchList()
+    fetchStatusCounts()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
+  }
+}
 
 // ========== 工具 ==========
 function fmtTime(val: string | null): string {

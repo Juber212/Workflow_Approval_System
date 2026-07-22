@@ -115,6 +115,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/admin/index.vue'),
         meta: { title: '系统管理', roles: ['system_admin'] },
       },
+      {
+        path: 'admin/document-templates',
+        name: 'AdminDocTemplates',
+        component: () => import('@/views/admin/index.vue'),
+        meta: { title: '系统管理', roles: ['system_admin'] },
+      },
     ],
   },
   {

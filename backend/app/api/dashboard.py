@@ -15,5 +15,5 @@ async def get_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     """Dashboard 全局统计数据（PRD §4.3-4.7）"""
-    data = await dashboard_service.get_dashboard_stats(db)
+    data = await dashboard_service.get_dashboard_stats(db, user_id=current_user.id)
     return ApiResponse.ok(data)

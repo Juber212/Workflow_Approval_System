@@ -47,6 +47,14 @@ from app.utils.workday import add_workdays
 from datetime import date as date_type
 
 
+async def _get_type_label(db: AsyncSession, template_id: int) -> str:
+    """根据模板 ID 返回中文类型标签：'项目' 或 '方案'"""
+    tpl_type = (await db.execute(
+        select(FlowTemplate.type).where(FlowTemplate.id == template_id)
+    )).scalar_one_or_none()
+    return "方案" if tpl_type == "proposal" else "项目"
+
+
 async def create_instance(
     db: AsyncSession,
     request: CreateInstanceRequest,
@@ -123,10 +131,16 @@ async def create_instance(
         time_limit_days = node_override.get("time_limit_days") or tn.time_limit_days
         approvers = node_override.get("approvers") or tn.approvers
         checkers = node_override.get("checkers") or tn.checkers
-        # 签批字段：发起覆盖 > 模板默认值（None=未覆盖，使用模板值）
-        require_signature = node_override.get("require_signature")
-        if require_signature is None:
-            require_signature = tn.require_signature
+        # 签批字段：发起覆盖 > 模板默认值
+        require_assignee_signature = node_override.get("require_assignee_signature")
+        if require_assignee_signature is None:
+            require_assignee_signature = tn.require_assignee_signature
+        require_checker_signature = node_override.get("require_checker_signature")
+        if require_checker_signature is None:
+            require_checker_signature = tn.require_checker_signature
+        require_approver_signature = node_override.get("require_approver_signature")
+        if require_approver_signature is None:
+            require_approver_signature = tn.require_approver_signature
         signature_x = node_override.get("signature_x")
         if signature_x is None:
             signature_x = tn.signature_x
@@ -157,7 +171,10 @@ async def create_instance(
             time_limit_days=time_limit_days,
             deadline=deadline,
             require_file=tn.require_file,
-            require_signature=require_signature,
+            file_folders=tn.file_folders,  # 文件夹配置快照
+            require_assignee_signature=require_assignee_signature,
+            require_checker_signature=require_checker_signature,
+            require_approver_signature=require_approver_signature,
             signature_x=signature_x,
             signature_y=signature_y,
             signature_page=signature_page,
@@ -180,6 +197,20 @@ async def create_instance(
             db.add(InstanceEdge(instance_id=instance.id, source_node_id=src, target_node_id=tgt))
 
     await db.flush()
+
+    # ========== 6.1 创建文件提交文件夹目录（实例根目录 + 子文件夹一次性建好） ==========
+    folder_names: set[str] = set()
+    for tn in tpl_nodes:
+        if tn.file_folders and isinstance(tn.file_folders, list):
+            for folder in tn.file_folders:
+                name = (folder.get("name") or "").strip()
+                if name:
+                    folder_names.add(name)
+
+    if folder_names:
+        instance_dir = os.path.join(settings.STORAGE_ROOT, "archive", instance.name)
+        for fname in folder_names:
+            os.makedirs(os.path.join(instance_dir, fname), exist_ok=True)
 
     # ========== 6.5 计算工作日截止日期 ==========
     # 从发起日期起，按模板节点顺序累加每个工作节点的 time_limit_days（工作日），
@@ -228,7 +259,7 @@ async def create_instance(
         instance_id=instance.id,
         operator_type="user", operator_id=current_user.id,
         operation_type="initiate",
-        description=f"发起了项目「{instance.name}」",
+        description=f"发起了{await _get_type_label(db, request.template_id)}「{instance.name}」",
         detail={
             "template_id": request.template_id,
             "priority": priority,
@@ -456,7 +487,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     row = result.first()
 
     if row is None:
-        raise AppException(ErrorCode.NOT_FOUND, "项目不存在")
+        raise AppException(ErrorCode.NOT_FOUND, "实例不存在或无权访问")
 
     instance = row[0]
     initiator_name = row[1]
@@ -621,7 +652,10 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             checkers=_normalize_personnel(n.checkers, user_name_map),
             approvers=_normalize_personnel(n.approvers, user_name_map),
             require_file=n.require_file,
-            require_signature=n.require_signature,
+            file_folders=n.file_folders,  # 文件夹配置快照
+            require_assignee_signature=n.require_assignee_signature,
+            require_checker_signature=n.require_checker_signature,
+            require_approver_signature=n.require_approver_signature,
             signature_x=n.signature_x,
             signature_y=n.signature_y,
             signature_page=n.signature_page,
@@ -657,8 +691,17 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             created_at=log.created_at,
         ))
 
-    # ========== 7. 关联方案名称 ==========
+    # ========== 7. 关联方案名称 + 模板类型 ==========
     proposal_name: str | None = None
+    template_type = "project"
+    # 查询模板类型（用于前端面包屑/标题区分项目/方案）
+    tpl_result = await db.execute(
+        select(FlowTemplate.type).where(FlowTemplate.id == instance.template_id)
+    )
+    tpl_type = tpl_result.scalar_one_or_none()
+    if tpl_type:
+        template_type = tpl_type
+
     if instance.proposal_id:
         prop = (await db.execute(
             select(FlowInstance.name).where(FlowInstance.id == instance.proposal_id)
@@ -682,6 +725,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         sales_manager=instance.sales_manager,
         proposal_id=instance.proposal_id,
         proposal_name=proposal_name,
+        template_type=template_type,
         current_node_index=processed_count,
         total_nodes=total_nodes,
         initiated_at=instance.initiated_at,
@@ -717,7 +761,8 @@ async def terminate_instance(
 
     # ========== 2. 校验发起人权限 ==========
     if instance.initiator_id != current_user.id:
-        raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可终止项目")
+        type_label = await _get_type_label(db, instance.template_id)
+        raise AppException(ErrorCode.NOT_INITIATOR, f"仅发起人可终止{type_label}")
 
     # ========== 3. 校验未已终止 ==========
     if (instance.status or "").lower() == "terminated":
@@ -794,12 +839,13 @@ async def terminate_instance(
     instance.terminated_at = now
 
     # ========== 10. 记录操作日志 ==========
+    term_type_label = await _get_type_label(db, instance.template_id)
     log = OperationLog(
         instance_id=instance_id,
         operator_type="user",
         operator_id=current_user.id,
         operation_type="instance_terminated",
-        description=f"终止项目：「{instance.name}」，原因：{reason}",
+        description=f"终止{term_type_label}：「{instance.name}」，原因：{reason}",
         detail={"reason": reason, "instance_name": instance.name},
     )
     db.add(log)

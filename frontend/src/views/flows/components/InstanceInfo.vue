@@ -27,7 +27,7 @@
           type="danger"
           size="default"
           @click="$emit('terminate')"
-        >终止项目</el-button>
+        >{{ isProposal ? '终止方案' : '终止项目' }}</el-button>
       </div>
     </div>
 
@@ -97,6 +97,9 @@ defineEmits<{
   changePriority: []
   terminate: []
 }>()
+
+/** 是否为方案实例 */
+const isProposal = computed(() => props.detail.template_type === 'proposal')
 
 // ========== 状态标签 ==========
 const statusLabel = computed(() => {

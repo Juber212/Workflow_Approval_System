@@ -78,9 +78,31 @@
 
       <!-- ===== 三栏布局：文件 / 校验 / 审批（非开始/结束节点） ===== -->
       <div v-if="!node.is_start && !node.is_end" class="node-columns">
-        <!-- 文件栏（40%）—— 正常文件 + 补交文件分开展示 -->
+        <!-- 文件栏（40%）—— 支持文件夹分组展示 -->
         <div class="node-col">
-          <!-- 正常文件 -->
+          <!-- 有文件夹配置：按文件夹分组 -->
+          <template v-if="hasFolderConfig">
+            <div v-for="group in folderFileGroups" :key="group.name" class="folder-file-group">
+              <div class="node-col__title">📁 {{ group.name }}（{{ group.files.length }}）</div>
+              <div v-if="group.files.length === 0" class="node-col__empty">暂无</div>
+              <div v-else class="file-list">
+                <div v-for="f in group.files" :key="f.id" class="file-item">
+                  <div class="file-item__main">
+                    <el-icon :size="14"><Document /></el-icon>
+                    <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+                    <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
+                  </div>
+                  <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</div>
+                  <div class="file-item__actions">
+                    <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                    <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <!-- 无文件夹配置：原有平面展示 -->
+          <template v-else>
           <div class="node-col__title">📁 文件（{{ normalFiles.length }}）</div>
           <div v-if="normalFiles.length === 0" class="node-col__empty">暂无</div>
           <div v-else class="file-list">
@@ -97,6 +119,7 @@
               </div>
             </div>
           </div>
+          </template>
           <!-- 补交文件 -->
           <template v-if="supplementFiles.length > 0">
             <div class="node-col__title node-col__title--supplement">📎 补交文件（{{ supplementFiles.length }}）</div>
@@ -331,6 +354,31 @@ const normalFiles = computed(() =>
 const supplementFiles = computed(() =>
   props.node.files.filter(f => (f.upload_type || '').toLowerCase() === 'supplement')
 )
+
+/** 文件按文件夹分组（用于文件夹模式展示） */
+const folderFileGroups = computed(() => {
+  const groups: { name: string; files: typeof normalFiles.value }[] = []
+  const seen = new Map<string, number>()
+  for (const f of normalFiles.value) {
+    const key = f.folder_name || '其他文件'
+    if (seen.has(key)) {
+      groups[seen.get(key)!].files.push(f)
+    } else {
+      seen.set(key, groups.length)
+      groups.push({ name: key, files: [f] })
+    }
+  }
+  // "其他文件"放在最后
+  groups.sort((a, b) => {
+    if (a.name === '其他文件') return 1
+    if (b.name === '其他文件') return -1
+    return 0
+  })
+  return groups
+})
+const hasFolderConfig = computed(() => {
+  return props.node.file_folders && Array.isArray(props.node.file_folders) && props.node.file_folders.length > 0
+})
 
 // ========== 校验/审批状态 ==========
 function checkStatusClass(status: string): string {

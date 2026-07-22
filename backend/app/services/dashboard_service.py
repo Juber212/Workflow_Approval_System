@@ -11,6 +11,8 @@ from app.models import (
     Task,
     Organization,
     User,
+    CheckRecord,
+    Approval,
 )
 from app.schemas.dashboard import (
     DashboardData,
@@ -19,11 +21,11 @@ from app.schemas.dashboard import (
     BottleneckItem,
     OverdueItem,
     OrgOverview,
-    OrgOverviewInst,
+    MyTaskCounts,
 )
 
 
-async def get_dashboard_stats(db: AsyncSession) -> dict:
+async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> dict:
     """
     Dashboard 全局统计数据（PRD §4.3-4.7）
 
@@ -121,7 +123,8 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         running_instances=prop_running,
         archived_total=prop_completed,
         archived_this_month=prop_this_month,
-        overdue_warnings=prop_total,
+        overdue_warnings=0,  # 方案暂不做超期预警
+        total=prop_total,    # 方案总数
     )
 
     # ─── 2. 任务状态分布 ───
@@ -136,6 +139,9 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     # ─── 5. 各所流程概览 ───
     org_overview = await _get_org_overview(db)
 
+    # ─── 6. 我的待办（个人统计） ───
+    my_task_counts = await _get_my_task_counts(db, user_id) if user_id else MyTaskCounts()
+
     return DashboardData(
         stats=DashboardStats(**stats),
         proposal_stats=proposal_stats,
@@ -143,6 +149,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         bottleneck=bottleneck,
         overdue_list=overdue_list,
         org_overview=org_overview,
+        my_task_counts=my_task_counts,
     )
 
 
@@ -366,69 +373,87 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem
 
 
 async def _get_org_overview(db: AsyncSession) -> list[OrgOverview]:
-    """各所流程概览 —— 按组织分组运行中实例（PRD §4.7）"""
+    """各所流程概览 —— 按组织统计项目数（PRD §4.7）
+
+    返回每个组织的：全部项目、运行中、已完成 三组数据，
+    供前端柱状图和饼图渲染。
+    """
     orgs_result = await db.execute(
         select(Organization).where(Organization.is_active == True)
     )
     orgs = orgs_result.scalars().all()
-
     if not orgs:
         return []
 
     org_ids = [o.id for o in orgs]
 
-    # 每个组织下运行中实例
-    instances_result = await db.execute(
-        select(FlowInstance).where(
-            FlowInstance.organization_id.in_(org_ids),
-            FlowInstance.status == "running",
-        ).order_by(FlowInstance.priority.asc(), FlowInstance.initiated_at.asc())
-    )
-    instances = instances_result.scalars().all()
-    insts_by_org: dict[int, list] = {}
-    for i in instances:
-        insts_by_org.setdefault(i.organization_id, []).append(i)
-
-    # 批量获取当前节点信息
-    all_inst_ids = [i.id for i in instances]
-    current_nodes = {}
-    if all_inst_ids:
-        node_result = await db.execute(
-            select(InstanceNode).where(
-                InstanceNode.instance_id.in_(all_inst_ids),
-                InstanceNode.status.in_(["running", "waiting_check", "waiting_approval"]),
-            ).order_by(InstanceNode.sort_order).limit(len(all_inst_ids))
+    # 一次性按组织 + 状态分组统计（单个 SQL，避免 N+1）
+    from sqlalchemy import func
+    stats_stmt = (
+        select(
+            FlowInstance.organization_id,
+            FlowInstance.status,
+            func.count(FlowInstance.id),
         )
-        for n in node_result.scalars().all():
-            if n.instance_id not in current_nodes:
-                current_nodes[n.instance_id] = n
+        .where(FlowInstance.organization_id.in_(org_ids))
+        .group_by(FlowInstance.organization_id, FlowInstance.status)
+    )
+    stats_rows = (await db.execute(stats_stmt)).all()
 
-    # 批量获取当前负责人姓名
-    assignee_ids = list(set(n.assignee_id for n in current_nodes.values() if n.assignee_id))
-    users_map = {}
-    if assignee_ids:
-        users_result = await db.execute(select(User).where(User.id.in_(assignee_ids)))
-        users_map = {u.id: u.real_name for u in users_result.scalars().all()}
+    # 组织 -> {status: count}
+    org_stats: dict[int, dict[str, int]] = {}
+    for org_id, status, count in stats_rows:
+        org_stats.setdefault(org_id, {})[status] = count
 
     result = []
     for org in orgs:
-        org_insts = insts_by_org.get(org.id, [])
-        items = []
-        for inst in org_insts:
-            cn = current_nodes.get(inst.id)
-            items.append(OrgOverviewInst(
-                id=inst.id,
-                name=inst.name,
-                priority=inst.priority,
-                current_node_name=cn.name if cn else "—",
-                current_assignee_name=users_map.get(cn.assignee_id, "") if cn and cn.assignee_id else "",
-                status=inst.status,
-            ))
+        sc = org_stats.get(org.id, {})
+        running = sc.get("running", 0)
+        completed = sc.get("completed", 0)
+        total = sum(sc.values())
+
         result.append(OrgOverview(
             org_id=org.id,
             org_name=org.name,
-            running_count=len(items),
-            instances=items,
+            total_count=total,
+            running_count=running,
+            completed_count=completed,
         ))
 
     return result
+
+
+async def _get_my_task_counts(db: AsyncSession, user_id: int) -> MyTaskCounts:
+    """
+    当前用户的个人待办统计（PRD §4.8）
+
+    分别统计三张表：
+    - 待处理：tasks 表，assignee_id = 本人，status = 'pending'
+    - 待校验：check_records 表，checker_id = 本人，status = 'pending'
+    - 待审批：approvals 表，approver_id = 本人，status = 'pending'
+    """
+    # 待处理任务数（pending=刚分配未开始, processing=处理中，都算待处理）
+    pending = (await db.execute(
+        select(func.count()).select_from(Task).where(
+            Task.assignee_id == user_id,
+            Task.status.in_(["pending", "processing"]),
+        )
+    )).scalar() or 0
+
+    # 待校验数
+    checking = (await db.execute(
+        select(func.count()).select_from(CheckRecord).where(
+            CheckRecord.checker_id == user_id,
+            CheckRecord.status == "pending",
+        )
+    )).scalar() or 0
+
+    # 待审批数
+    approval = (await db.execute(
+        select(func.count()).select_from(Approval).where(
+            Approval.approver_id == user_id,
+            Approval.status == "pending",
+        )
+    )).scalar() or 0
+
+    return MyTaskCounts(pending=pending, checking=checking, approval=approval)

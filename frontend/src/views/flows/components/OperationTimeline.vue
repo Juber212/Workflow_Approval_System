@@ -38,18 +38,20 @@ import { ref } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
 import type { LogItemBrief } from '@/api/instance'
 
-defineProps<{
+const props = defineProps<{
   logs: LogItemBrief[]
   total?: number
+  isProposal?: boolean  // 是否为方案实例，用于区分操作类型文案
 }>()
 
 /** 默认折叠 */
 const collapsed = ref(true)
 
-/** 操作类型中文映射 */
+/** 操作类型中文映射 —— 根据项目/方案动态切换 */
 function logTypeLabel(type: string): string {
+  const t = props.isProposal ? '方案' : '项目'
   const map: Record<string, string> = {
-    initiate: '发起项目',
+    initiate: `发起${t}`,
     task_submit: '提交任务',
     check_pass: '校验通过',
     check_return: '校验退回',
@@ -57,7 +59,7 @@ function logTypeLabel(type: string): string {
     reject: '审批退回',
     final_reject: '终审驳回',
     instance_completed: '流程完成',
-    instance_terminated: '终止项目',
+    instance_terminated: `终止${t}`,
     personnel_changed: '人员变更',
     priority_changed: '优先级变更',
     file_supplement: '补交文件',

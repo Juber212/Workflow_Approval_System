@@ -8,6 +8,7 @@ export interface DashboardStats {
   archived_total: number
   archived_this_month: number
   overdue_warnings: number
+  total?: number  // 方案统计用：方案总数
 }
 
 export interface TaskDistItem {
@@ -20,7 +21,6 @@ export interface TaskDistItem {
 export interface BottleneckItem {
   instance_id: number
   instance_name: string
-  template_name: string
   organization_name: string
   progress_chain: string[]
   current_node_name: string
@@ -32,42 +32,29 @@ export interface BottleneckItem {
   all_finished: boolean
 }
 
-export interface OverdueItem {
-  task_id: number
-  instance_id: number
-  instance_name: string
-  node_name: string
-  assignee_name: string
-  deadline: string | null
-  days_label: string
-  organization_name: string
-  is_overdue: boolean
-}
-
-export interface OrgOverviewInst {
-  id: number
-  name: string
-  template_name: string
-  priority: string
-  current_node_name: string
-  current_assignee_name: string
-  status: string
-}
-
 export interface OrgOverview {
   org_id: number
   org_name: string
-  running_count: number
-  instances: OrgOverviewInst[]
+  total_count: number     // 全部项目数
+  running_count: number   // 运行中
+  completed_count: number // 已完成
+}
+
+/** 当前用户个人待办统计 */
+export interface MyTaskCounts {
+  pending: number    // 待处理
+  checking: number   // 待校验
+  approval: number   // 待审批
 }
 
 export interface DashboardData {
   stats: DashboardStats
-  proposal_stats: DashboardStats  // 方案统计
+  proposal_stats: DashboardStats
   task_distribution: TaskDistItem[]
   bottleneck: BottleneckItem[]
-  overdue_list: OverdueItem[]
+  overdue_list: any[]  // 保留兼容，前端不再渲染
   org_overview: OrgOverview[]
+  my_task_counts: MyTaskCounts  // 当前用户个人待办
 }
 
 // ==================== API ====================

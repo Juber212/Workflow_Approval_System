@@ -51,6 +51,6 @@ async def get_proposal_organizations(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取有方案的组织卡片数据（含各状态数量）"""
-    result = await proposal_service.get_organization_summaries(db)
+    """获取有方案的组织卡片数据（含各状态数量 + 当前所属标记）"""
+    result = await proposal_service.get_organization_summaries(db, current_user.organization_id)
     return ApiResponse.ok(result)

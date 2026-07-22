@@ -4,11 +4,12 @@
     <div
       v-for="org in orgs"
       :key="org.id"
-      class="org-card"
+      :class="['org-card', { 'is-current': org.is_current_user_org }]"
       @click="$emit('select', org.id)"
     >
       <div class="org-card__head">
         <span class="org-card__name">{{ org.name }}</span>
+        <span v-if="org.is_current_user_org" class="org-card__badge">当前所属</span>
       </div>
 
       <!-- 大号数字：方案总数 -->
@@ -57,7 +58,7 @@ function fmtTime(val: string): string {
   border-radius: 8px;
   padding: 24px;
   cursor: pointer;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.15s;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
@@ -66,6 +67,13 @@ function fmtTime(val: string): string {
   &:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
+  }
+
+  // 当前所属：蓝色边框
+  &.is-current {
+    border-color: var(--el-color-primary);
+    border-width: 2px;
+    padding: 23px; // 补偿 border 增加的 2px
   }
 
   &__head {
@@ -77,6 +85,14 @@ function fmtTime(val: string): string {
   &__name {
     font-size: 16px;
     font-weight: 600;
+  }
+
+  &__badge {
+    font-size: 12px;
+    color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    padding: 2px 10px;
+    border-radius: 999px;
   }
 
   &__metric {

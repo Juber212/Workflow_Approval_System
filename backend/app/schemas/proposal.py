@@ -19,6 +19,7 @@ class ProposalListItem(BaseModel):
     name: str
     description: str | None = None
     organization_id: int
+    organization_name: str = ""  # 所属组织名称，用于前端表格展示
     initiator_id: int
     initiator_name: str = ""
     status: str

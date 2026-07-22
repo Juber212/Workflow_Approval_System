@@ -4,11 +4,12 @@ from pydantic import BaseModel
 
 
 class DashboardStats(BaseModel):
-    """四大统计卡片"""
+    """四大统计卡片（项目用 overdue_warnings=超期预警；方案用 overdue_warnings=方案总数）"""
     running_instances: int = 0
     archived_total: int = 0
     archived_this_month: int = 0
     overdue_warnings: int = 0
+    total: int = 0  # 总数（方案卡片用）
 
 
 class TaskDistItem(BaseModel):
@@ -47,22 +48,20 @@ class OverdueItem(BaseModel):
     is_overdue: bool = False
 
 
-class OrgOverviewInst(BaseModel):
-    """各所概览——实例简要"""
-    id: int
-    name: str
-    priority: str = "normal"
-    current_node_name: str = "—"
-    current_assignee_name: str = ""
-    status: str = "running"
-
-
 class OrgOverview(BaseModel):
-    """各所流程概览"""
+    """各所流程概览（供柱状图 + 饼图）"""
     org_id: int
     org_name: str
-    running_count: int = 0
-    instances: list[OrgOverviewInst] = []
+    total_count: int = 0       # 全部项目数（所有状态）
+    running_count: int = 0     # 运行中项目数
+    completed_count: int = 0   # 已完成项目数
+
+
+class MyTaskCounts(BaseModel):
+    """当前用户的个人待办统计"""
+    pending: int = 0       # 待处理（任务 assignee_id=本人，status=pending）
+    checking: int = 0      # 待校验（check_records checker_id=本人，status=pending）
+    approval: int = 0      # 待审批（approvals approver_id=本人，status=pending）
 
 
 class DashboardData(BaseModel):
@@ -73,3 +72,4 @@ class DashboardData(BaseModel):
     bottleneck: list[BottleneckItem] = []
     overdue_list: list[OverdueItem] = []
     org_overview: list[OrgOverview] = []
+    my_task_counts: MyTaskCounts = MyTaskCounts()  # 当前用户个人待办

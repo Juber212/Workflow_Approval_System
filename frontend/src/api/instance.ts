@@ -10,7 +10,9 @@ export interface NodeOverride {
   deadline?: string | null
   checkers?: { user_id: number }[]
   approvers?: { user_id: number }[]
-  require_signature?: boolean
+  require_assignee_signature?: boolean
+  require_checker_signature?: boolean
+  require_approver_signature?: boolean
   signature_x?: number
   signature_y?: number
   signature_page?: number
@@ -97,6 +99,7 @@ export interface NodeFileBrief {
   uploader_id: number
   uploader_name: string
   upload_type: string
+  folder_name: string | null  // 所属文件夹名称
   round: number
   created_at: string | null
 }
@@ -143,7 +146,10 @@ export interface DetailNodeInfo {
   checkers: { user_id: number; user_name?: string }[] | null
   approvers: { user_id: number; user_name?: string }[] | null
   require_file: boolean
-  require_signature: boolean
+  file_folders: Array<{ name: string; required: boolean; file_count: number | null }> | null  // 文件提交文件夹配置
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
   signature_x: number
   signature_y: number
   signature_page: number
@@ -186,6 +192,7 @@ export interface InstanceDetailResponse {
   sales_manager: string | null
   proposal_id: number | null    // 关联的方案 ID
   proposal_name: string | null  // 关联的方案名称
+  template_type: string         // 模板类型：project / proposal（面包屑/标题用）
   current_node_index: number
   total_nodes: number
   initiated_at: string | null

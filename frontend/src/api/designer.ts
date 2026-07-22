@@ -1,7 +1,14 @@
-/** 项目设计器 API —— 画布数据保存 */
+/** 设计器 API —— 画布数据保存 */
 import request from './request'
 
 // ==================== 类型 ====================
+
+/** 文件提交文件夹配置 */
+export interface FileFolderConfig {
+  name: string        // 文件夹名称
+  required: boolean   // 是否必须提交
+  file_count: number | null  // 精确数量限制（null=不限）
+}
 
 /** 设计器节点数据 */
 export interface DesignerNode {
@@ -12,10 +19,13 @@ export interface DesignerNode {
   assignee_id?: number | null
   time_limit_days?: number | null
   require_file?: boolean
+  file_folders?: FileFolderConfig[] | null  // 文件提交文件夹配置
   approvers?: number[] | null
   checkers?: number[] | null
   approval_strategy?: string
-  require_signature?: boolean
+  require_assignee_signature?: boolean   // 负责人提交时是否签名
+  require_checker_signature?: boolean    // 校验人通过时是否签名
+  require_approver_signature?: boolean   // 审批人通过时是否签名
   signature_x?: number
   signature_y?: number
   signature_page?: number

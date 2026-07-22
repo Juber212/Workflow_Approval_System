@@ -246,6 +246,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         status=t.status,
         assignee_note=t.assignee_note,
         require_file=node.require_file,
+        file_folders=node.file_folders,  # 文件提交文件夹配置
         time_limit_days=node.time_limit_days,
         deadline=node.deadline,
         round=node.round,
@@ -264,9 +265,11 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             {
                 "id": f.id,
                 "original_name": f.original_name,
+                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
                 "file_size": f.file_size,
                 "uploader_name": "",
                 "upload_type": f.upload_type,
+                "folder_name": f.folder_name,  # 所属文件夹名称
                 "round": f.round,
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
@@ -297,6 +300,15 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         ],
         rejected_type=rejected_type,
         rejected_reason=rejected_reason,
+        # 节点签批配置（三个独立开关 + 默认位置）
+        require_assignee_signature=node.require_assignee_signature,
+        require_checker_signature=node.require_checker_signature,
+        require_approver_signature=node.require_approver_signature,
+        signature_x=node.signature_x,
+        signature_y=node.signature_y,
+        signature_page=node.signature_page,
+        # 当前负责人的签名图片 URL
+        current_signature_url=f"/api/v1/auth/users/{t.assignee_id}/signature-image" if assignee and assignee.signature_image else None,
         submitted_at=t.submitted_at,
         created_at=t.created_at,
     )

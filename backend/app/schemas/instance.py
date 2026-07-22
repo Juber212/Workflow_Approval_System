@@ -13,10 +13,9 @@ class NodeOverride(BaseModel):
     deadline: str | None = Field(None, description="截止日期，ISO 格式如 2026-07-21")
     checkers: list[dict] | None = Field(None, description="校验人列表 [{\"user_id\": 1}]")
     approvers: list[dict] | None = Field(None, description="审批人列表 [{\"user_id\": 1}]")
-    require_signature: bool | None = Field(None, description="是否要求签批")
-    signature_x: float | None = Field(None, description="签名 X 坐标")
-    signature_y: float | None = Field(None, description="签名 Y 坐标")
-    signature_page: int | None = Field(None, description="签名页码")
+    require_assignee_signature: bool | None = Field(None, description="负责人提交时是否签名")
+    require_checker_signature: bool | None = Field(None, description="校验人通过时是否签名")
+    require_approver_signature: bool | None = Field(None, description="审批人通过时是否签名")
 
 
 class CreateInstanceRequest(BaseModel):
@@ -84,6 +83,7 @@ class NodeFileBrief(BaseModel):
     uploader_id: int
     uploader_name: str = ""
     upload_type: str = "normal"
+    folder_name: str | None = None  # 所属文件夹名称
     round: int = 1
     created_at: datetime | None = None
 
@@ -130,7 +130,10 @@ class DetailNodeInfo(BaseModel):
     checkers: list[dict] | None = None
     approvers: list[dict] | None = None
     require_file: bool = False
-    require_signature: bool = True
+    file_folders: list | None = None  # 文件提交文件夹配置快照
+    require_assignee_signature: bool = True
+    require_checker_signature: bool = True
+    require_approver_signature: bool = True
     signature_x: float = 400
     signature_y: float = 100
     signature_page: int = -1
@@ -173,6 +176,7 @@ class InstanceDetailResponse(BaseModel):
     sales_manager: str | None = None
     proposal_id: int | None = None      # 关联的方案 ID
     proposal_name: str | None = None    # 关联的方案名称
+    template_type: str = "project"      # 模板类型：project / proposal（前端面包屑/标题用）
     current_node_index: int = 0
     total_nodes: int = 0
     initiated_at: datetime | None = None

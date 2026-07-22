@@ -7,6 +7,7 @@ export interface ProposalListItem {
   name: string
   description: string | null
   organization_id: number
+  organization_name: string  // 所属组织名称
   initiator_id: number
   initiator_name: string
   status: string
@@ -21,6 +22,7 @@ export interface ProposalOrgCardItem {
   completed_count: number
   terminated_count: number
   latest_update_time: string | null
+  is_current_user_org: boolean  // 是否为当前用户所属组织
 }
 
 export interface ProposalCreateRequest {

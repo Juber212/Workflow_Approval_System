@@ -41,6 +41,24 @@
           <el-form-item label="销售经理" required>
             <el-input v-model="pickerForm.sales_manager" placeholder="请输入销售经理姓名" maxlength="50" />
           </el-form-item>
+          <el-form-item label="关联方案">
+            <el-select
+              v-model="pickerForm.proposal_id"
+              placeholder="选择已完成的方案（可选）"
+              style="width: 100%"
+              clearable
+              filterable
+              :disabled="completedProposals.length === 0"
+              :no-data-text="completedProposals.length === 0 ? '该组织暂无已完成方案' : '无匹配方案'"
+            >
+              <el-option
+                v-for="p in completedProposals"
+                :key="p.id"
+                :label="p.name"
+                :value="p.id"
+              />
+            </el-select>
+          </el-form-item>
         </el-form>
       </template>
 
@@ -201,6 +219,7 @@ import {
   type TemplateItem,
 } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
+import { getProposals } from '@/api/proposal'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import TemplateTable from './components/TemplateTable.vue'
@@ -238,7 +257,11 @@ const pickerForm = reactive({
   contract_no: '',
   product_model: '',
   sales_manager: '',
+  proposal_id: null as number | null,
 })
+
+/** 当前组织下已完成的方案（供项目发起时选择关联） */
+const completedProposals = ref<{ id: number; name: string }[]>([])
 
 /** 确认按钮是否可用：模板已选 + 三个必填字段已填写 */
 const pickerCanConfirm = computed(() =>
@@ -256,9 +279,10 @@ function resetPickerForm() {
   pickerForm.contract_no = ''
   pickerForm.product_model = ''
   pickerForm.sales_manager = ''
+  pickerForm.proposal_id = null
 }
 
-/** 加载模板列表（限定当前所） */
+/** 加载模板列表（限定当前所）+ 已完成的方案 */
 async function fetchTemplateList() {
   pickerLoading.value = true
   try {
@@ -266,6 +290,14 @@ async function fetchTemplateList() {
     templateList.value = res.items
   } catch { /* ignore */ }
   finally { pickerLoading.value = false }
+
+  // 加载该组织下已完成的方案
+  try {
+    const data = await getProposals({ organization_id: orgId.value, status: 'completed', page_size: 100 })
+    completedProposals.value = (data.items || []).map(p => ({ id: p.id, name: p.name }))
+  } catch {
+    completedProposals.value = []
+  }
 }
 
 /** 点击模板行 → 选中模板，下方显示业务信息表单 */
@@ -283,6 +315,7 @@ function handleConfirmLaunch() {
     product_model: pickerForm.product_model.trim(),
     sales_manager: pickerForm.sales_manager.trim(),
   })
+  if (pickerForm.proposal_id) params.set('proposal_id', String(pickerForm.proposal_id))
   router.push(`/flows/designer/${selectedTplId.value}?${params.toString()}`)
 }
 

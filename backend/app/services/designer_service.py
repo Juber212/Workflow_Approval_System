@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 # 节点可更新字段（排除系统字段和自动生成字段）
 _NODE_UPDATABLE_FIELDS = [
     "name", "description", "assignee_id", "time_limit_days",
-    "require_file", "approvers", "checkers", "approval_strategy",
-    "require_signature", "signature_x", "signature_y", "signature_page",
+    "require_file", "file_folders", "approvers", "checkers", "approval_strategy",
+    "require_assignee_signature", "require_checker_signature", "require_approver_signature",
+    "signature_x", "signature_y", "signature_page",
     "position_x", "position_y", "sort_order",
 ]
 

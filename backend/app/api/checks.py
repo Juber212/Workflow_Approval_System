@@ -51,7 +51,7 @@ async def pass_check(
     db: AsyncSession = Depends(get_db),
 ):
     """校验通过 —— 全部通过后触发审批生成"""
-    result = await check_service.pass_check(db, check_id, current_user.id, data.opinion)
+    result = await check_service.pass_check(db, check_id, current_user.id, data.opinion, data.signatures)
     await db.commit()
     return ApiResponse.ok(result, message=result.get("message", "校验通过"))
 

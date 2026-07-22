@@ -40,6 +40,7 @@ class TaskDetail(BaseModel):
     status: str
     assignee_note: str | None = None
     require_file: bool = False
+    file_folders: list | None = None  # 文件提交文件夹配置（来自节点快照）
     time_limit_days: int | None = None
     deadline: datetime | None = None
     round: int = 1
@@ -51,6 +52,15 @@ class TaskDetail(BaseModel):
     approvals: list[dict] = []
     rejected_type: str | None = None
     rejected_reason: str | None = None
+    # 节点签批配置
+    require_assignee_signature: bool = True
+    require_checker_signature: bool = True
+    require_approver_signature: bool = True
+    signature_x: float = 400
+    signature_y: float = 100
+    signature_page: int = -1
+    # 当前负责人的签名图片 URL
+    current_signature_url: str | None = None
     submitted_at: datetime | None = None
     created_at: datetime | None = None
 
@@ -63,3 +73,5 @@ class TaskSaveDraft(BaseModel):
 class TaskSubmit(BaseModel):
     """提交任务"""
     assignee_note: str | None = Field(None, max_length=500, description="负责人备注")
+    # 签批：负责人选择的签名列表
+    signatures: list[dict] | None = Field(None, description="签名列表 [{file_id, signature_x, signature_y, signature_page}]")

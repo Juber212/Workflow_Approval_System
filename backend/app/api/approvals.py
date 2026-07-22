@@ -55,6 +55,7 @@ async def approve(
     """审批通过 —— 签名 + 流程推进"""
     result = await approval_service.approve(
         db, approval_id, current_user.id, data.opinion,
+        signatures=data.signatures,
         signature_x=data.signature_x,
         signature_y=data.signature_y,
         signature_page=data.signature_page,

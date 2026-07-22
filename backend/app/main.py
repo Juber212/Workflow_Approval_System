@@ -17,7 +17,7 @@ from app.api.users import router as users_router
 from app.api.organizations import router as orgs_router
 from app.api.roles import router as roles_router
 from app.api.configs import router as configs_router
-from app.api.templates import router as templates_router
+from app.api.templates import router as templates_router, admin_router as templates_admin_router
 from app.api.designer import router as designer_router
 from app.api.instances import router as instances_router
 from app.api.tasks import router as tasks_router
@@ -113,6 +113,7 @@ app.include_router(orgs_router)
 app.include_router(roles_router)
 app.include_router(configs_router)
 app.include_router(templates_router)
+app.include_router(templates_admin_router)
 app.include_router(designer_router)
 app.include_router(instances_router)
 app.include_router(tasks_router)

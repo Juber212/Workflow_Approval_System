@@ -22,8 +22,12 @@
     <!-- 顶层：项目 / 方案 切换 -->
     <div class="view-type-bar">
       <el-radio-group v-model="viewType" size="default" @change="handleViewTypeChange">
-        <el-radio-button value="project">项目</el-radio-button>
-        <el-radio-button value="proposal">方案</el-radio-button>
+        <el-radio-button value="project">
+          项目<span class="view-badge" v-if="notifyStore.projectPending > 0">{{ notifyStore.projectPending }}</span>
+        </el-radio-button>
+        <el-radio-button value="proposal">
+          方案<span class="view-badge" v-if="notifyStore.proposalPending > 0">{{ notifyStore.proposalPending }}</span>
+        </el-radio-button>
       </el-radio-group>
     </div>
 
@@ -257,6 +261,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useNotificationStore } from '@/stores/notification'
 import { getTasks, type TaskListItem } from '@/api/task'
 import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
@@ -268,6 +273,7 @@ import { priLabel, roleLabel, instStatusClass, instStatusLabel } from '@/utils/l
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
 const userStore = useUserStore()
+const notifyStore = useNotificationStore()
 
 const isManager = computed(() => userStore.isManager)
 
@@ -446,6 +452,15 @@ function approvalStatusLabel(s: string) { const m: Record<string, string> = { pe
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; border-radius: 9px;
   background: var(--el-color-danger); color: #fff; font-size: 11px; padding: 0 5px; margin-left: 4px;
+}
+
+/* 项目/方案 radio-button 红点数字徽章 */
+.view-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--el-color-danger); color: #fff; font-size: 11px; font-weight: 600;
+  padding: 0 5px; margin-left: 4px;
+  vertical-align: middle;
 }
 
 .list-toolbar { display: flex; gap: 12px; margin-bottom: 16px; }

@@ -1,6 +1,7 @@
 /** 校验 API */
 import request from './request'
 import type { PaginatedResponse } from './index'
+import type { SignatureSlot } from './signature'
 
 export interface CheckListItem {
   id: number
@@ -35,9 +36,17 @@ export interface CheckDetail {
   total_nodes: number
   current_node_index: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
-  files: { id: number; original_name: string; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
+  files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
   assignee_note: string | null
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; round: number; decided_at: string | null }[]
+  // 节点签批配置
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
+  signature_x: number
+  signature_y: number
+  signature_page: number
+  current_signature_url: string | null
   decided_at: string | null
   created_at: string | null
 }
@@ -52,8 +61,9 @@ export async function getCheckDetail(id: number): Promise<CheckDetail> {
   return res.data
 }
 
-export async function passCheck(id: number, opinion?: string | null) {
-  const res = await request.post(`/checks/${id}/pass`, { opinion })
+/** 校验通过 —— 支持签名 */
+export async function passCheck(id: number, opinion?: string | null, signatures?: SignatureSlot[] | null) {
+  const res = await request.post(`/checks/${id}/pass`, { opinion, signatures })
   return res
 }
 

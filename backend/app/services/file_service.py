@@ -33,8 +33,9 @@ async def upload_file(
     task_id: int,
     upload_file_obj: UploadFile,
     current_user_id: int,
+    folder_name: str | None = None,  # 所属文件夹名称
 ) -> dict:
-    """上传文件到任务"""
+    """上传文件到任务 —— 支持文件夹分组"""
     # 校验任务
     task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
     if task is None:
@@ -57,13 +58,20 @@ async def upload_file(
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one()
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
-    # 创建存储目录
-    archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", inst.name)
-    os.makedirs(archive_dir, exist_ok=True)
-
     # 生成唯一文件名
     ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
     stored_name = f"{uuid.uuid4().hex}{ext}"
+
+    # 创建存储目录（有文件夹时存入子目录，否则存入实例根目录）
+    if folder_name:
+        archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", inst.name, folder_name)
+        file_path_rel = os.path.join("archive", inst.name, folder_name, stored_name)
+    else:
+        archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", inst.name)
+        file_path_rel = os.path.join("archive", inst.name, stored_name)
+    os.makedirs(archive_dir, exist_ok=True)
+
+    # 写入物理文件
     file_path = os.path.join(archive_dir, stored_name)
 
     # 写入文件
@@ -78,9 +86,10 @@ async def upload_file(
         round=node.round,
         uploader_id=current_user_id,
         upload_type=UploadType.NORMAL,
+        folder_name=folder_name,  # 所属文件夹
         original_name=upload_file_obj.filename or "unknown",
         stored_name=stored_name,
-        file_path=os.path.join("archive", inst.name, stored_name),
+        file_path=file_path_rel,
         file_size=len(contents),
         mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
     )

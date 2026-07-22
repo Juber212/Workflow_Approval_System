@@ -13,10 +13,14 @@ from app.schemas.common import ApiResponse
 from app.schemas.task import TaskSaveDraft, TaskSubmit
 from app.services import task_service, file_service
 from app.services.pdf_converter import convert_to_pdf
+from app.services.document_service import (
+    resolve_template_variables, fill_template, get_doc_template_abs_path,
+)
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog
+from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog, Signature, DocumentTemplate, FlowInstance
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
 from sqlalchemy import select
+from urllib.parse import quote
 
 router = APIRouter(prefix="/api/v1", tags=["任务"])
 
@@ -88,8 +92,39 @@ async def submit_task(
 
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
-    # 前置校验：require_file
-    if node.require_file:
+    # 前置校验：文件提交规则
+    # 有文件夹配置时按文件夹规则校验，否则沿用 require_file 布尔开关（向后兼容）
+    folders_config = node.file_folders or []
+    if folders_config:
+        # 查询当前轮次的所有文件
+        current_files = (await db.execute(
+            select(File).where(File.task_id == task_id, File.round == node.round)
+        )).scalars().all()
+
+        # 按文件夹分组统计
+        folder_counts: dict[str, int] = {}
+        for f in current_files:
+            fn = f.folder_name or ""
+            folder_counts[fn] = folder_counts.get(fn, 0) + 1
+
+        # 逐文件夹校验规则
+        errors: list[str] = []
+        for folder in folders_config:
+            name = (folder.get("name") or "").strip()
+            if not name:
+                continue
+            required = folder.get("required", False)
+            count = folder.get("file_count")  # None=不限，N=精确数量
+            actual = folder_counts.get(name, 0)
+
+            if required and actual == 0:
+                errors.append(f"文件夹「{name}」必须至少提交 1 个文件")
+            elif required and count is not None and actual != count:
+                errors.append(f"文件夹「{name}」需要提交 {count} 个文件，当前已提交 {actual} 个")
+
+        if errors:
+            raise AppException(ErrorCode.BAD_REQUEST, "；".join(errors))
+    elif node.require_file:
         files = (await db.execute(
             select(File).where(File.task_id == task_id, File.round == node.round)
         )).scalars().all()
@@ -136,6 +171,33 @@ async def submit_task(
     if convert_failed:
         await db.rollback()
         raise AppException(ErrorCode.INTERNAL_ERROR, "文件转换失败，请检查文件格式后重试")
+
+    # 负责人签批：即时写入 PDF（负责人单人操作，无并发风险）
+    sig_ids: list[int] = []
+    if data.signatures and node.require_assignee_signature:
+        for idx, sig in enumerate(data.signatures):
+            sig_record = Signature(
+                file_id=sig["file_id"],
+                signer_id=current_user.id,
+                role_type="assignee",
+                source_id=task_id,
+                node_id=task.node_id,
+                signature_x=sig.get("signature_x", node.signature_x),
+                signature_y=sig.get("signature_y", node.signature_y),
+                signature_page=sig.get("signature_page", node.signature_page),
+                signature_width=sig.get("signature_width"),
+                signature_height=sig.get("signature_height"),
+                applied=False,
+                sort_order=idx,
+            )
+            db.add(sig_record)
+            await db.flush()
+            sig_ids.append(sig_record.id)
+
+        # 即时写入 PDF
+        if sig_ids:
+            from app.services.pdf_signature import apply_signatures_to_files
+            await apply_signatures_to_files(db, sig_ids)
 
     # 按 checkers 创建 CheckRecord，空校验人则跳过校验环节
     checkers = node.checkers or []
@@ -185,15 +247,87 @@ async def submit_task(
     return ApiResponse.ok(message="任务已提交，等待校验" if checkers else "任务已提交，等待审批")
 
 
+@router.post("/tasks/{task_id}/prepare-sign")
+async def prepare_sign(
+    task_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """预提交：转换文件为 PDF 并返回文件列表，供签批预览弹框使用
+
+    将任务所有文件转为 PDF（Word/Excel/图片 → PDF），更新 DB 记录，
+    返回 PDF 文件列表。用户签批确认后再调用 submit 提交。
+    """
+    import os
+    from datetime import datetime
+
+    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if task.assignee_id != current_user.id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可操作")
+    if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
+        raise AppException(ErrorCode.FORBIDDEN, "当前状态不可操作")
+
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+
+    # PDF 转换（并发 + 限流），与 submit 逻辑一致
+    task_files = (await db.execute(
+        select(File).where(File.task_id == task_id, File.round == node.round)
+    )).scalars().all()
+
+    if task_files:
+        tasks = []
+        for f in task_files:
+            full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
+            if os.path.exists(full_path):
+                tasks.append((f, convert_to_pdf(full_path)))
+
+        if tasks:
+            results = await asyncio.gather(*[t for _, t in tasks])
+            file_records = [f for f, _ in tasks]
+
+            for i, r in enumerate(results):
+                if r is None:
+                    await db.rollback()
+                    raise AppException(ErrorCode.INTERNAL_ERROR, "文件转换失败，请检查文件格式后重试")
+
+            # 转换成功：更新 file_path、stored_name、mime_type
+            for f in file_records:
+                f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
+                f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
+                f.mime_type = "application/pdf"
+
+    await db.commit()
+
+    # 重新查询更新后的文件列表返回给前端
+    updated_files = (await db.execute(
+        select(File).where(File.task_id == task_id, File.round == node.round)
+    )).scalars().all()
+
+    return ApiResponse.ok({
+        "files": [
+            {
+                "id": f.id,
+                "original_name": f.original_name,
+                "mime_type": f.mime_type,
+                "url": f"/api/v1/files/{f.id}/download",
+            }
+            for f in updated_files
+        ],
+    })
+
+
 @router.post("/tasks/{task_id}/files")
 async def upload_task_file(
     task_id: int,
     file: UploadFile = FastAPIFile(...),
+    folder_name: str | None = Query(None, description="文件夹名称"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """上传文件到任务"""
-    result = await file_service.upload_file(db, task_id, file, current_user.id)
+    """上传文件到任务 —— 支持文件夹分组"""
+    result = await file_service.upload_file(db, task_id, file, current_user.id, folder_name)
     await db.commit()
     return ApiResponse.ok(result, message="文件上传成功")
 
@@ -246,6 +380,122 @@ async def download_file(
         headers={
             "Content-Disposition": (
                 f'{disp}; filename="{ascii_fallback}"; '
+                f"filename*=UTF-8''{encoded}"
+            ),
+        },
+    )
+
+
+@router.get("/tasks/{task_id}/document-templates")
+async def list_task_document_templates(
+    task_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取任务可用的文件模板列表 —— 根据 Task 所属实例的模板 ID 查找"""
+    from app.schemas.template import DocTemplateItem, DocTemplateListResponse
+
+    # 校验 Task 存在且当前用户有权访问
+    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if task.assignee_id != current_user.id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可查看")
+
+    # 通过实例获取 template_id
+    instance = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == task.instance_id)
+    )).scalar_one_or_none()
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+
+    # 查询该模板的所有文件模板
+    docs = (await db.execute(
+        select(DocumentTemplate)
+        .where(DocumentTemplate.template_id == instance.template_id)
+        .order_by(DocumentTemplate.created_at.desc())
+    )).scalars().all()
+
+    items = [
+        {
+            "id": d.id, "name": d.name, "original_name": d.original_name,
+            "file_size": d.file_size, "file_type": d.file_type,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        }
+        for d in docs
+    ]
+
+    return ApiResponse.ok({"items": items})
+
+
+@router.get("/tasks/{task_id}/document-templates/{doc_id}/download")
+async def download_document_template(
+    task_id: int,
+    doc_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """下载文件模板 —— 系统自动替换 {{占位符}} 为实例实际值
+
+    支持 .docx（Word）和 .xlsx（Excel）格式。
+    变量替换在内存中完成，不修改原模板文件。
+    """
+    from fastapi.responses import Response
+
+    # 1. 校验 Task 存在且当前用户有权访问
+    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if task.assignee_id != current_user.id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可下载模板")
+
+    # 2. 查文档模板
+    doc = (await db.execute(
+        select(DocumentTemplate).where(DocumentTemplate.id == doc_id)
+    )).scalar_one_or_none()
+    if doc is None:
+        raise AppException(ErrorCode.NOT_FOUND, "文件模板不存在")
+
+    # 3. 查模板是否属于该 Task 对应的流程模板
+    instance = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == task.instance_id)
+    )).scalar_one_or_none()
+    if instance is None or instance.template_id != doc.template_id:
+        raise AppException(ErrorCode.FORBIDDEN, "该文件模板不属于此项目")
+
+    # 4. 解析变量 → 实际值
+    replacements = await resolve_template_variables(db, doc_id, task_id)
+
+    # 5. 加载模板文件 → 替换 → 返回内存流
+    abs_path = get_doc_template_abs_path(doc)
+    if not os.path.exists(abs_path):
+        raise AppException(ErrorCode.NOT_FOUND, "模板文件不存在于磁盘")
+
+    try:
+        output = fill_template(abs_path, doc.file_type, replacements)
+    except Exception as e:
+        logger = __import__('logging').getLogger(__name__)
+        logger.warning(f"[文件模板] 下载失败: doc_id={doc_id}, task_id={task_id}, err={e}")
+        raise AppException(ErrorCode.INTERNAL_ERROR, "模板文件处理失败，请检查模板格式")
+
+    # 6. 确定 MIME 类型并返回
+    mime_map = {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    mime = mime_map.get(doc.file_type, "application/octet-stream")
+
+    # 文件名：原始模板名（保留扩展名），URL 编码
+    name_part, ext = os.path.splitext(doc.original_name)
+    encoded = quote(name_part, safe='') + ext
+    ascii_fallback = f"template{ext}"
+
+    return Response(
+        content=output.getvalue(),
+        media_type=mime,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_fallback}"; '
                 f"filename*=UTF-8''{encoded}"
             ),
         },

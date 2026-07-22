@@ -52,8 +52,11 @@
           >
             <el-icon :size="20"><component :is="item.icon" /></el-icon>
             <span class="sidebar-nav__label">{{ item.label }}</span>
-            <!-- 个人中心红色圆形数字徽章 -->
-            <span v-if="item.path === '/profile' && notifyStore.totalPending > 0" class="sidebar-nav__badge">
+            <!-- 个人中心通知红点 -->
+            <!-- 折叠态：无数字小红点（绝对定位到图标右上角） -->
+            <span v-if="item.path === '/profile' && notifyStore.hasPending && isCollapsed" class="sidebar-nav__dot" />
+            <!-- 展开态：带数字红色圆形徽章 -->
+            <span v-if="item.path === '/profile' && notifyStore.totalPending > 0 && !isCollapsed" class="sidebar-nav__badge">
               {{ notifyStore.totalPending > 99 ? '99+' : notifyStore.totalPending }}
             </span>
           </router-link>
@@ -242,11 +245,11 @@ const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { path: '/dashboard', label: '首页', icon: MENU_ICONS['/dashboard'] },
     { path: '/flows', label: '项目管理', icon: MENU_ICONS['/flows'] },
+    { path: '/proposals', label: '方案管理', icon: MENU_ICONS['/proposals'] },
   ]
   if (isAdmin.value) {
     items.push({ path: '/admin/users', label: '系统管理', icon: MENU_ICONS['/admin/users'] })
   } else {
-    items.push({ path: '/proposals', label: '方案管理', icon: MENU_ICONS['/proposals'] })
     items.push({ path: '/profile', label: '个人中心', icon: MENU_ICONS['/profile'] })
   }
   return items
@@ -267,12 +270,22 @@ function isMenuActive(base: string): boolean {
 async function refreshNotifyCounts() {
   if (isAdmin.value) return // 管理员无个人中心，无需拉取
   try {
-    const [tasks, checks, approvals] = await Promise.all([
+    // 并行拉取：合计用于侧边栏徽章，分类型用于项目/方案 radio-button 徽章
+    const [tasks, checks, approvals, projectTasks, proposalTasks, projectApprovals, proposalApprovals] = await Promise.all([
       getTasks({ page_size: 1 }),
       getChecks({ page_size: 1 }),
       getApprovals({ page_size: 1 }),
+      getTasks({ page_size: 1, type: 'project' }),
+      getTasks({ page_size: 1, type: 'proposal' }),
+      getApprovals({ page_size: 1, type: 'project' }),
+      getApprovals({ page_size: 1, type: 'proposal' }),
     ])
     notifyStore.setCounts(tasks.total, checks.total, approvals.total)
+    // 方案无校验步骤，项目待处理 = 项目任务 + 校验 + 项目审批
+    notifyStore.setTypedCounts(
+      projectTasks.total + checks.total + projectApprovals.total,
+      proposalTasks.total + proposalApprovals.total,
+    )
   } catch { /* 失败不影响页面使用 */ }
 }
 
@@ -325,9 +338,10 @@ const userInfoDetail = ref<{
 } | null>(null)
 const uploadingSignature = ref(false)
 
+/** 签名预览 URL：通过后端 API 获取（自动查找用户真实签名文件路径） */
 const signaturePreviewUrl = computed(() => {
   if (!userInfoDetail.value?.user_id) return ''
-  return `/api/v1/storage/signatures/${userInfoDetail.value.user_id}.png?t=${Date.now()}`
+  return `/api/v1/auth/users/${userInfoDetail.value.user_id}/signature-image?t=${Date.now()}`
 })
 
 async function refreshUserInfoDetail() {
@@ -351,13 +365,71 @@ async function refreshUserInfoDetail() {
 
 watch(showUserInfoDialog, async (val) => { if (val) await refreshUserInfoDetail() })
 
+/** Canvas 压缩签名图片到 400×120 范围内（高清存储，CSS 缩小后预览清晰），返回压缩后的 File
+ *
+ * 关键改进：
+ * - 不涂白底（canvas 默认透明），保留签名透明背景
+ * - 检测竖图（高度 > 宽度）自动旋转 90° 转为横条
+ */
+function compressSignatureImage(file: File): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const maxW = 400, maxH = 120
+      let w = img.width, h = img.height
+
+      // 竖图检测：高度 > 宽度 → 旋转 90° 转为横条（EXIF 旋转信息在 Canvas 中丢失后的补偿）
+      const needRotate = h > w
+      if (needRotate) {
+        ;[w, h] = [h, w]  // 交换宽高
+      }
+
+      const ratio = Math.min(maxW / w, maxH / h, 1.0)  // 只缩小不放大
+      w = Math.round(w * ratio)
+      h = Math.round(h * ratio)
+
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      const ctx = canvas.getContext('2d')!
+
+      // 透明背景（canvas 默认透明，不 fillRect 白底）
+      if (needRotate) {
+        // 两步法：先旋转绘制到临时 canvas，再缩放到目标 canvas（避免坐标变换出错）
+        const tmp = document.createElement('canvas')
+        tmp.width = img.height; tmp.height = img.width  // 交换宽高作为旋转后尺寸
+        const tctx = tmp.getContext('2d')!
+        tctx.translate(img.height, 0)
+        tctx.rotate(Math.PI / 2)
+        tctx.drawImage(img, 0, 0)  // 自然尺寸绘制，填满旋转后的临时 canvas
+        // 缩放至目标尺寸（维持比例，无白底）
+        ctx.drawImage(tmp, 0, 0, w, h)
+      } else {
+        ctx.drawImage(img, 0, 0, w, h)
+      }
+
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error('压缩失败'))
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' }))
+      }, 'image/png')
+    }
+    img.onerror = () => reject(new Error('图片加载失败'))
+    img.src = URL.createObjectURL(file)
+  })
+}
+
 async function handleSignatureUpload(file: File): Promise<boolean> {
   if (file.size > 500 * 1024) { ElMessage.error('签名图片不能超过 500KB'); return false }
   const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
   if (!allowed.includes(file.type)) { ElMessage.error('仅支持 PNG/JPG/GIF/WebP 格式'); return false }
   uploadingSignature.value = true
   try {
-    await uploadSignatureApi(file)
+    // 前端先压缩到 200×60 范围，统一转为 PNG
+    const compressed = await compressSignatureImage(file)
+    const result = await uploadSignatureApi(compressed)
+    // 使用后端返回的签名 URL 更新预览
+    if (result.signature_url) {
+      userInfoDetail.value!.has_signature = true
+    }
     ElMessage.success('签名图片已上传')
     await refreshUserInfoDetail()
   } catch (err: any) {
@@ -551,7 +623,7 @@ async function handleChangePassword() {
 
   &__label { transition: opacity 0.15s; }
 
-  /** 个人中心红色圆形数字徽章 */
+  /** 个人中心红色圆形数字徽章（展开态） */
   &__badge {
     width: 20px; height: 20px;
     border-radius: 50%;
@@ -562,6 +634,16 @@ async function handleChangePassword() {
     flex-shrink: 0;
     line-height: 1;
     margin-left: auto;
+  }
+
+  /** 无数字小红点（折叠态，绝对定位到图标右上角） */
+  &__dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--el-color-danger);
   }
 }
 

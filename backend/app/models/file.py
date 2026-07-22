@@ -17,6 +17,7 @@ class File(Base):
     round: Mapped[int] = mapped_column(Integer, default=1, comment="文件所属轮次")
     uploader_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="上传人")
     upload_type: Mapped[str] = mapped_column(String(20), default="normal", comment="上传类型")
+    folder_name: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="所属文件夹名称")
     original_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="原始文件名")
     stored_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="存储文件名（UUID）")
     file_path: Mapped[str] = mapped_column(String(500), nullable=False, comment="最终PDF存储相对路径")

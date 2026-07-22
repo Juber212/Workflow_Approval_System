@@ -97,21 +97,31 @@
             </div>
           </div>
 
-          <!-- 文档签批 -->
+          <!-- 签批配置（三个独立开关） -->
           <div class="override-row">
-            <label class="override-label">文档签批</label>
-            <div>
-              <el-switch
-                :model-value="getOverride(node.id, 'require_signature') ?? node.require_signature ?? true"
-                @update:model-value="(v: boolean) => setOverride(node.id, 'require_signature', v)"
-                active-text="需要签批"
-                inactive-text="无需签批"
-              />
+            <label class="override-label">签批配置</label>
+            <div class="sig-switches">
+              <el-checkbox
+                :model-value="getOverride(node.id, 'require_assignee_signature') ?? node.require_assignee_signature ?? true"
+                @update:model-value="(v: boolean) => setOverride(node.id, 'require_assignee_signature', v)"
+              >负责人签名</el-checkbox>
+              <el-checkbox
+                :model-value="getOverride(node.id, 'require_checker_signature') ?? node.require_checker_signature ?? true"
+                @update:model-value="(v: boolean) => setOverride(node.id, 'require_checker_signature', v)"
+              >校验人签名</el-checkbox>
+              <el-checkbox
+                :model-value="getOverride(node.id, 'require_approver_signature') ?? node.require_approver_signature ?? true"
+                @update:model-value="(v: boolean) => setOverride(node.id, 'require_approver_signature', v)"
+              >审批人签名</el-checkbox>
             </div>
           </div>
 
-          <!-- 签名位置（开启签批时显示） -->
-          <template v-if="(getOverride(node.id, 'require_signature') ?? node.require_signature ?? true)">
+          <!-- 签名位置（至少一个开关开启时显示） -->
+          <template v-if="
+            (getOverride(node.id, 'require_assignee_signature') ?? node.require_assignee_signature ?? true) ||
+            (getOverride(node.id, 'require_checker_signature') ?? node.require_checker_signature ?? true) ||
+            (getOverride(node.id, 'require_approver_signature') ?? node.require_approver_signature ?? true)
+          ">
             <div class="override-row">
               <label class="override-label">签名X坐标</label>
               <el-input-number
@@ -387,6 +397,13 @@ export default { name: 'NodeOverridePanel' }
       color: var(--el-color-danger);
       margin: 4px 0 0 0;
       line-height: 1.4;
+    }
+
+    .sig-switches {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      line-height: 32px;
     }
   }
 

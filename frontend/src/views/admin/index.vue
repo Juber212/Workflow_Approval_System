@@ -15,6 +15,7 @@
       <el-tab-pane label="组织管理" name="organizations" />
       <el-tab-pane label="角色管理" name="roles" />
       <el-tab-pane label="系统配置" name="config" />
+      <el-tab-pane label="文件模板" name="document-templates" />
     </el-tabs>
 
     <!-- 根据当前 Tab 渲染对应组件 -->
@@ -22,6 +23,7 @@
     <OrganizationManagement v-else-if="activeTab === 'organizations'" />
     <RoleManagement v-else-if="activeTab === 'roles'" />
     <ConfigManagement v-else-if="activeTab === 'config'" />
+    <DocTemplateManagement v-else-if="activeTab === 'document-templates'" />
     <el-empty v-else :description="tabPlaceholder[activeTab] || '即将实现'" />
   </div>
 </template>
@@ -34,6 +36,7 @@ import UserManagement from './UserManagement.vue'
 import OrganizationManagement from './OrganizationManagement.vue'
 import RoleManagement from './RoleManagement.vue'
 import ConfigManagement from './ConfigManagement.vue'
+import DocTemplateManagement from './DocTemplateManagement.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,6 +52,7 @@ const activeTab = computed(() => {
   if (path.includes('/organizations')) return 'organizations'
   if (path.includes('/roles')) return 'roles'
   if (path.includes('/config')) return 'config'
+  if (path.includes('/document-templates')) return 'document-templates'
   return 'users'
 })
 

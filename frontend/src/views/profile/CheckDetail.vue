@@ -101,27 +101,62 @@
       </div>
       <el-alert v-else :type="detail.status === 'passed' ? 'success' : 'warning'" :title="detail.status === 'passed' ? '已校验通过' : '已校验退回'" :closable="false" show-icon />
     </template>
+
+    <!-- 签名预览弹框 -->
+    <SignaturePreviewDialog
+      v-if="detail"
+      v-model="showSignatureDialog"
+      :pdf-files="pdfFiles"
+      :auth-token="AUTH_TOKEN()"
+      :sig-url="detail.current_signature_url"
+      :default-x="detail.signature_x"
+      :default-y="detail.signature_y"
+      :default-page="detail.signature_page"
+      @confirm="onSignatureConfirm"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCheckDetail, passCheck, returnCheck, type CheckDetail } from '@/api/check'
 import { previewFile, downloadFile } from '@/api/task'
+import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
+import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
+const AUTH_TOKEN = () => localStorage.getItem('token') || ''
 
 const loading = ref(false)
 const detail = ref<CheckDetail | null>(null)
 const opinion = ref('')
 const passing = ref(false)
 const returning = ref(false)
+
+// 签批弹框
+const showSignatureDialog = ref(false)
+const sigSlots = ref<SignatureSlot[] | null>(null)
+
+/** PDF 文件列表（供签批弹框使用）
+
+优先用 mime_type 判断是否为 PDF，兜底用文件名后缀。
+校验时文件已由负责人提交时转换为 PDF。 */
+const pdfFiles = computed(() => {
+  if (!detail.value) return []
+  return (detail.value.files as any[])
+    .filter(f => f.mime_type === 'application/pdf' || (f.original_name || '').toLowerCase().endsWith('.pdf'))
+    .map(f => ({
+      file_id: (f as any).id,
+      name: (f as any).original_name || '',
+      url: `/api/v1/files/${(f as any).id}/download`,
+    }))
+})
 
 onMounted(async () => {
   setBreadcrumb([
@@ -137,12 +172,41 @@ onMounted(async () => {
 
 async function handlePass() {
   if (!detail.value) return
+  // 节点要求校验人签批 → 检查签名图片
+  if (detail.value.require_checker_signature) {
+    if (detail.value.current_signature_url) {
+      sigSlots.value = null
+      showSignatureDialog.value = true
+      return
+    } else {
+      try {
+        await ElMessageBox.alert('该节点要求校验人签批，但您尚未上传签名图片，请先上传。', '无法签批', {
+          confirmButtonText: '前往上传',
+          type: 'warning',
+        })
+        router.push('/profile?tab=signature')
+        return
+      } catch { return }
+    }
+  }
+  await doPass()
+}
+
+async function doPass() {
+  if (!detail.value) return
   passing.value = true
   try {
-    await passCheck(detail.value.id, opinion.value || null)
+    await passCheck(detail.value.id, opinion.value || null, sigSlots.value)
     ElMessage.success('校验通过')
     router.push('/profile')
   } finally { passing.value = false }
+}
+
+/** 签批预览确认回调 */
+function onSignatureConfirm(slots: SignatureSlot[]) {
+  sigSlots.value = slots
+  showSignatureDialog.value = false
+  doPass()
 }
 
 async function handleReturn() {

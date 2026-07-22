@@ -141,6 +141,7 @@
     <SignaturePreviewDialog
       v-if="detail"
       v-model="showSignatureDialog"
+      :pdf-files="pdfFiles"
       :pdf-urls="pdfPreviewUrls"
       :auth-token="AUTH_TOKEN()"
       :sig-url="detail.current_signature_url"
@@ -155,9 +156,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getApprovalDetail, approveApproval, rejectApproval, type ApprovalDetail } from '@/api/approval'
 import { previewFile, downloadFile } from '@/api/task'
+import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { useUserStore } from '@/stores/user'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
@@ -179,17 +181,25 @@ const rejecting = ref(false)
 
 // 签批预览弹框
 const showSignatureDialog = ref(false)
-const sigConfirmPos = ref<{ signature_x: number; signature_y: number; signature_page: number } | null>(null)
+const sigSlots = ref<SignatureSlot[] | null>(null)
 
-/** 构建 PDF 文件预览 URL（供签名预览弹框使用） */
-const pdfPreviewUrls = computed(() => {
-  if (!detail.value) return [] as string[]
-  const pdfs = (detail.value.files as any[]).filter(f => {
-    const name = (f.original_name || '').toLowerCase()
-    return name.endsWith('.pdf')
-  })
-  return pdfs.map(f => `/api/v1/files/${(f as any).id}/download`)
+/** PDF 文件列表（供签批弹框使用）
+
+优先用 mime_type 判断是否为 PDF，兜底用文件名后缀。
+审批时文件已由负责人提交时转换为 PDF。 */
+const pdfFiles = computed(() => {
+  if (!detail.value) return []
+  return (detail.value.files as any[])
+    .filter(f => f.mime_type === 'application/pdf' || (f.original_name || '').toLowerCase().endsWith('.pdf'))
+    .map(f => ({
+      file_id: (f as any).id,
+      name: (f as any).original_name || '',
+      url: `/api/v1/files/${(f as any).id}/download`,
+    }))
 })
+
+/** 构建 PDF 文件预览 URL（旧版兼容） */
+const pdfPreviewUrls = computed(() => pdfFiles.value.map(f => f.url))
 
 /** 终审：按节点分组文件 */
 interface FileItem { id: number; node_id: number | null; node_name: string; original_name: string; file_size: number | null }
@@ -219,17 +229,26 @@ onMounted(async () => {
 
 async function handleApprove() {
   if (!detail.value) return
-  // 节点要求签批 + 用户有签名图片 → 弹出签批预览弹框
-  if (detail.value.require_signature && detail.value.current_signature_url) {
-    sigConfirmPos.value = null
-    showSignatureDialog.value = true
-    return
+  // 节点要求审批人签批 → 检查签名图片
+  if (detail.value.require_approver_signature) {
+    if (detail.value.current_signature_url) {
+      sigSlots.value = null
+      showSignatureDialog.value = true
+      return
+    } else {
+      try {
+        await ElMessageBox.alert('该节点要求审批人签批，但您尚未上传签名图片，请先上传。', '无法签批', {
+          confirmButtonText: '前往上传',
+          type: 'warning',
+        })
+        router.push('/profile?tab=signature')
+        return
+      } catch { return }
+    }
   }
-  // 无需签批或未上传签名 → 直接通过
   await doApprove()
 }
 
-/** 执行审批通过（签批弹框确认后或无需签批） */
 async function doApprove() {
   if (!detail.value) return
   approving.value = true
@@ -237,20 +256,16 @@ async function doApprove() {
     await approveApproval(
       detail.value.id,
       opinion.value || null,
-      sigConfirmPos.value ? {
-        signature_x: sigConfirmPos.value.signature_x,
-        signature_y: sigConfirmPos.value.signature_y,
-        signature_page: sigConfirmPos.value.signature_page,
-      } : undefined,
+      sigSlots.value,
     )
     ElMessage.success('审批通过')
     router.push('/profile')
   } finally { approving.value = false }
 }
 
-/** 签批预览确认回调 */
-function onSignatureConfirm(pos: { signature_x: number; signature_y: number; signature_page: number }) {
-  sigConfirmPos.value = pos
+/** 签批预览确认回调 —— 新版支持多文档多签名 */
+function onSignatureConfirm(slots: SignatureSlot[]) {
+  sigSlots.value = slots
   showSignatureDialog.value = false
   doApprove()
 }

@@ -132,6 +132,35 @@ async def change_password(
     return ApiResponse.ok(message="密码修改成功")
 
 
+def _auto_remove_white_bg(img: "Image.Image", threshold: int = 240, feather: int = 20) -> "Image.Image":
+    """自动去除签名图片的白底/浅色背景，将白色区域变为透明。
+
+    算法：
+      - R、G、B 最大值 >= threshold → 完全透明
+      - threshold - feather < 最大值 < threshold → 渐变半透明（边缘平滑）
+      - 其余 → 保留原始颜色
+
+    返回 RGBA 模式的图片，调用方无需再做模式转换。
+    """
+    from PIL import Image as _PILImage
+
+    img = img.convert("RGBA")
+    pixels = img.load()
+    w, h = img.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = pixels[x, y]
+            lightness = max(r, g, b)
+            if lightness >= threshold:
+                # 白色/浅色背景 → 完全透明
+                pixels[x, y] = (r, g, b, 0)
+            elif lightness > threshold - feather:
+                # 边缘渐变：半透明处理，避免锯齿
+                alpha = min(a, int(255 * (threshold - lightness) / feather))
+                pixels[x, y] = (r, g, b, alpha)
+    return img
+
+
 @router.post("/signature")
 async def upload_signature(
     file: UploadFile = File(..., description="签名图片（PNG透明底，200×60px，<500KB）"),
@@ -169,18 +198,49 @@ async def upload_signature(
 
     # 保存新签名文件
     ext = os.path.splitext(file.filename or "signature.png")[1] or ".png"
-    safe_name = f"{current_user.id}_{uuid.uuid4().hex[:8]}{ext}"
+    safe_name = f"{current_user.id}_{uuid.uuid4().hex[:8]}.png"  # 统一存为 PNG
     file_path = os.path.join(upload_dir, safe_name)
 
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    # 压缩签名图片：限制最大 400×120px，保持比例，保留透明通道
+    try:
+        from PIL import Image
+        from io import BytesIO
+        img = Image.open(BytesIO(contents))
+
+        # 统一转为 RGBA（保留透明通道，不合成白底）
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        elif img.mode not in ("RGBA", "RGB", "L"):
+            img = img.convert("RGBA")
+        elif img.mode == "L":
+            img = img.convert("RGB")
+
+        # 限制最大宽高，保持比例
+        w, h = img.size
+        ratio_w = 400 / w if w > 400 else 1.0
+        ratio_h = 120 / h if h > 120 else 1.0
+        ratio = min(ratio_w, ratio_h)
+        if ratio < 1.0:
+            w = int(w * ratio)
+            h = int(h * ratio)
+            img = img.resize((w, h), Image.Resampling.LANCZOS)
+
+        # 自动去白底：把白色/浅色背景像素变为透明
+        img = _auto_remove_white_bg(img)
+
+        # 保存为 PNG，保留 RGBA 透明通道
+        img.save(file_path, "PNG", optimize=True)
+    except Exception:
+        # 压缩失败则直接保存原始文件
+        with open(file_path, "wb") as f:
+            f.write(contents)
 
     # 更新数据库
     user.signature_image = file_path
     await db.commit()
 
     return ApiResponse.ok(
-        {"signature_url": f"/storage/signatures/{safe_name}"},
+        {"signature_url": f"/api/v1/auth/users/{current_user.id}/signature-image"},
         message="签名图片已上传",
     )
 
