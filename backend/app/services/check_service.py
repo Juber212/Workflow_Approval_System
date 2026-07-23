@@ -384,11 +384,15 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     files = (await db.execute(
         select(File).where(File.task_id == c.task_id, File.round == node.round)
     )).scalars().all()
+    # 先DB后物理文件（避免事务回滚后物理文件已丢失）
     for f in files:
         abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-        if os.path.exists(abs_path):
-            os.remove(abs_path)
         await db.delete(f)
+        try:
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+        except OSError:
+            pass
 
     # Task → processing，Node → running，轮次 +1
     task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()

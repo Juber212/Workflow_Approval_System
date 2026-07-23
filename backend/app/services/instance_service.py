@@ -775,10 +775,13 @@ async def terminate_instance(
     file_result = await db.execute(file_stmt)
     files = file_result.scalars().all()
 
-    # 逐个物理删除磁盘文件
+    # 先删除文件记录（DB），再删物理文件（避免事务回滚后物理文件丢失）
+    if files:
+        await db.execute(sql_delete(File).where(File.instance_id == instance_id))
+
+    # 逐个物理删除磁盘文件（DB记录已删，物理删除失败不影响DB一致性）
     for f in files:
         if f.file_path:
-            # 存储路径：STORAGE_ROOT / file_path
             full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
             try:
                 if os.path.exists(full_path):
@@ -786,10 +789,6 @@ async def terminate_instance(
             except OSError:
                 # 文件不存在或无权删除，不阻断流程
                 pass
-
-    # 删除文件记录（物理删除，非软删除）
-    if files:
-        await db.execute(sql_delete(File).where(File.instance_id == instance_id))
 
     # ========== 5. 关闭非终态 instance_nodes ==========
     non_terminal_statuses = ["finished", "terminated"]
@@ -936,12 +935,19 @@ async def change_personnel(
                 .values(status="terminated", decided_at=now)
             )
 
-            # 新校验人生成 CheckRecord
+            # 新校验人生成 CheckRecord（查询当前节点的活跃 Task 获取 task_id）
+            active_task = (await db.execute(
+                select(Task).where(
+                    Task.node_id == node_id,
+                    Task.status.in_(["pending", "processing"]),
+                )
+            )).scalar_one_or_none()
+            task_id_for_check = active_task.id if active_task else 0
             for uid in added:
                 db.add(CheckRecord(
                     instance_id=instance_id,
                     node_id=node_id,
-                    task_id=0,  # 换人时可能无 task
+                    task_id=task_id_for_check,
                     checker_id=uid,
                     status="pending",
                     round=node.round,  # 记录当前节点轮次
@@ -1286,14 +1292,17 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     # 2. 删除校验记录
     await db.execute(sql_delete(CheckRecord).where(CheckRecord.instance_id == instance_id))
 
-    # 3. 删除文件（物理文件 + DB 记录）
+    # 3. 删除文件（先DB后物理文件，避免事务回滚后物理文件丢失）
     files_result = await db.execute(select(File).where(File.instance_id == instance_id))
     files = files_result.scalars().all()
     for f in files:
-        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-        if os.path.exists(abs_path):
-            os.remove(abs_path)
         await db.delete(f)
+        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
+        try:
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+        except OSError:
+            pass
 
     # 4. 删除任务
     if task_ids:

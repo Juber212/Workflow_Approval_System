@@ -527,15 +527,19 @@ async def reject(
         target_node.started_at = now
         target_node.arrived_count = 0
 
-        # 删除目标节点当前文件
+        # 删除目标节点当前文件（先DB后物理文件，避免事务回滚后物理文件丢失）
         target_files = await db.execute(
             select(File).where(File.node_id == target_node_id)
         )
         for f in target_files.scalars().all():
             abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
             await db.delete(f)
+            try:
+                if os.path.exists(abs_path):
+                    os.remove(abs_path)
+            except OSError as e:
+                logger = __import__('logging').getLogger(__name__)
+                logger.warning(f"[审批退回] 物理文件删除失败: {abs_path}, err={e}")
 
         # 生成新 Task
         if target_node.assignee_id:
@@ -556,13 +560,16 @@ async def reject(
             ).order_by(InstanceNode.sort_order)
         )
         for dn in downstream_result.scalars().all():
-            # 删除下游节点文件
+            # 删除下游节点文件（先DB后物理文件）
             dn_files = await db.execute(select(File).where(File.node_id == dn.id))
             for f in dn_files.scalars().all():
                 abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-                if os.path.exists(abs_path):
-                    os.remove(abs_path)
                 await db.delete(f)
+                try:
+                    if os.path.exists(abs_path):
+                        os.remove(abs_path)
+                except OSError:
+                    pass
             # 终止下游节点未完成的 Task
             await db.execute(
                 update(Task).where(
@@ -620,15 +627,18 @@ async def reject(
             .values(status=CheckStatus.TERMINATED, decided_at=now)
         )
 
-        # 删除当前轮文件
+        # 删除当前轮文件（先DB后物理文件）
         curr_files = await db.execute(
             select(File).where(File.node_id == a.node_id, File.round == node.round)
         )
         for f in curr_files.scalars().all():
             abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
             await db.delete(f)
+            try:
+                if os.path.exists(abs_path):
+                    os.remove(abs_path)
+            except OSError:
+                pass
 
         # Node → running, Task → processing，轮次 +1
         node.status = InstanceNodeStatus.RUNNING
