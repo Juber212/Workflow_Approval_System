@@ -286,7 +286,7 @@ async function refreshNotifyCounts() {
       projectTasks.total + checks.total + projectApprovals.total,
       proposalTasks.total + proposalApprovals.total,
     )
-  } catch { /* 失败不影响页面使用 */ }
+  } catch (e) { /* 失败不影响页面使用，但记录日志便于排查 */ console.error('通知数量刷新失败:', e) }
 }
 
 onMounted(refreshNotifyCounts)

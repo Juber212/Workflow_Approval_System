@@ -1,7 +1,8 @@
 <template>
   <!-- 模板详情 —— 单列卡片布局：基础信息 → 节点配置 → 流程预览 -->
   <div class="tpl-detail" v-loading="loading">
-    <el-empty v-if="!loading && !detail" description="模板不存在或无权访问" :image-size="60" />
+    <el-empty v-if="!loading && !detail && !fetchError" description="模板不存在或无权访问" :image-size="60" />
+    <el-empty v-if="!loading && fetchError" description="加载失败，请稍后重试" :image-size="60" />
 
     <template v-if="detail">
       <!-- 基础信息卡片 -->
@@ -176,10 +177,13 @@ function formatTime(t: string | null): string {
 }
 
 // ========== 初始化 ==========
+const fetchError = ref(false)
+
 async function fetchDetail() {
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true
+  fetchError.value = false
   try {
     detail.value = await getTemplateDetail(id)
     if (detail.value) {
@@ -190,6 +194,8 @@ async function fetchDetail() {
         { label: detail.value.name },
       ])
     }
+  } catch {
+    fetchError.value = true
   } finally { loading.value = false }
 }
 

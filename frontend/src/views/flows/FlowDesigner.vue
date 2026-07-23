@@ -209,8 +209,9 @@ async function loadDocTemplates() {
     linkedDocTemplates.value = data.linked
     availableDocTemplates.value = data.available
     docVariables.value = data.available_variables
-  } catch {
+  } catch (e) {
     // 模板不存在时不报错
+    console.error('加载文件模板列表失败:', e)
   }
 }
 
@@ -478,7 +479,7 @@ async function fetchPresets() {
   try {
     const res = await getPresets()
     presets.value = res.items || []
-  } catch { /* 静默失败，预设列表为空 */ }
+  } catch (e) { /* 静默失败，预设列表为空 */ console.error('加载预设列表失败:', e) }
 }
 
 /** 从 PresetItem 构建节点 properties */
