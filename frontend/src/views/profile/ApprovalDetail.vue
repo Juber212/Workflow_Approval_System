@@ -229,8 +229,9 @@ onMounted(async () => {
 
 async function handleApprove() {
   if (!detail.value) return
+  // 终审节点无需签批，直接通过（终审只需确认文件齐全）
   // 节点要求审批人签批 → 检查签名图片
-  if (detail.value.require_approver_signature) {
+  if (detail.value.require_approver_signature && !detail.value.is_end_node) {
     if (detail.value.current_signature_url) {
       sigSlots.value = null
       showSignatureDialog.value = true

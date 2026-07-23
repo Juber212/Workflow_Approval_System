@@ -422,8 +422,8 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
-    # 签批：从 signatures 表读取所有待写入的审批签名，批量写入 PDF
-    if node.require_approver_signature:
+    # 签批：终审节点跳过 PDF 盖章（终审只需确认文件齐全即可归档）
+    if not node.is_end and node.require_approver_signature:
         pending_sigs_result = await db.execute(
             select(Signature).where(
                 Signature.node_id == node.id,
@@ -436,13 +436,13 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             from app.services.pdf_signature import apply_signatures_to_files
             await apply_signatures_to_files(db, [s.id for s in pending_sigs])
 
-    # 兼容旧版：标记 Approval 的旧签名字段
-    await db.execute(
-        update(Approval)
-        .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
-        .values(signature_applied=True)
-    )
-    await db.flush()
+        # 兼容旧版：标记 Approval 的旧签名字段
+        await db.execute(
+            update(Approval)
+            .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
+            .values(signature_applied=True)
+        )
+        await db.flush()
 
     from app.models import FlowTemplate
 
