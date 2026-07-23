@@ -1177,6 +1177,7 @@ async def supplement_files(
 
     # ========== 5. 遍历上传文件 ==========
     file_records: list[File] = []
+    written_files: list[str] = []  # 跟踪已写入的物理文件路径（DB失败时用于清理）
     archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", instance.name)
     os.makedirs(archive_dir, exist_ok=True)
 
@@ -1220,9 +1221,21 @@ async def supplement_files(
         )
         db.add(file_record)
         file_records.append(file_record)
+        # 记录物理文件路径（用于 DB 失败时清理）
+        written_files.append(file_path)
 
-    # ========== 6. 批量 flush 后记录操作日志 ==========
-    await db.flush()
+    # ========== 6. 批量 flush + 记录操作日志 ==========
+    try:
+        await db.flush()
+    except Exception:
+        # DB 事务失败 → 清理已写入的物理文件
+        for wf in written_files:
+            if os.path.exists(wf):
+                try:
+                    os.remove(wf)
+                except OSError:
+                    pass
+        raise
 
     log = OperationLog(
         instance_id=instance_id,
