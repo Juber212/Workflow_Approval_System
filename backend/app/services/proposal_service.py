@@ -34,13 +34,16 @@ BUILTIN_PROPOSAL_TEMPLATE_NAME = "方案默认模板"
 
 
 async def ensure_proposal_template(db: AsyncSession, org_id: int, user_id: int) -> FlowTemplate:
-    """获取或创建组织的方案默认模板（每个组织一个）"""
-    # 查找是否已有该组织的方案模板
+    """获取或创建组织的方案默认模板（每个组织一个）
+
+    使用 SELECT ... FOR UPDATE 防止并发调用创建重复模板。
+    """
+    # 锁定查——确保两个并发请求只有一个能进入创建逻辑
     existing = (await db.execute(
         select(FlowTemplate).where(
             FlowTemplate.organization_id == org_id,
             FlowTemplate.type == "proposal",
-        )
+        ).with_for_update()
     )).scalar_one_or_none()
     if existing:
         return existing
@@ -168,31 +171,17 @@ async def create_proposal(
             target_node_id=node_id_map[te.target_node_id],
         ))
 
-    # 激活开始节点和第一个工作节点
-    from app.engine.flow_engine import propagate_from_node
-    start_node = next((n for n in instance_nodes if n.is_start), None)
-    first_work = next((n for n in instance_nodes if not n.is_start and not n.is_end), None)
-
-    if start_node:
-        start_node.status = InstanceNodeStatus.FINISHED
-    if first_work:
-        instance.status = InstanceStatus.RUNNING
-        first_work.status = InstanceNodeStatus.RUNNING
-        first_work.started_at = datetime.now()
-
-        if first_work.assignee_id:
-            task = Task(
-                instance_id=instance.id,
-                node_id=first_work.id,
-                assignee_id=first_work.assignee_id,
-                status=TaskStatus.PENDING,
-            )
-            db.add(task)
+    # 计算节点 incoming_counts + 激活开始节点（复用流水线逻辑）
+    from app.engine.flow_engine import calculate_incoming_counts, activate_start_node
+    await calculate_incoming_counts(db, instance.id)
+    await activate_start_node(db, instance.id)
 
     # 操作日志
+    start_node = next((n for n in instance_nodes if n.is_start), None)
+    first_work = next((n for n in instance_nodes if not n.is_start and not n.is_end), None)
     db.add(OperationLog(
         instance_id=instance.id,
-        node_id=first_work.id if first_work else None,
+        node_id=first_work.id if first_work else start_node.id if start_node else None,
         operator_type=OperatorType.USER,
         operator_id=current_user.id,
         operation_type="initiate",
