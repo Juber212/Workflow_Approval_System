@@ -27,6 +27,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.presets import router as presets_router
 from app.api.utils import router as utils_router
 from app.api.proposals import router as proposals_router
+from app.api.endorsements import router as endorsements_router
 from app.core.database import async_session_factory, engine
 from app.services.config_service import config_service
 
@@ -123,6 +124,7 @@ app.include_router(dashboard_router)
 app.include_router(presets_router)
 app.include_router(utils_router)
 app.include_router(proposals_router)
+app.include_router(endorsements_router)
 
 # ================= 健康检查 =================
 

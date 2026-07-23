@@ -26,6 +26,8 @@ export interface DesignerNode {
   require_assignee_signature?: boolean   // 负责人提交时是否签名
   require_checker_signature?: boolean    // 校验人通过时是否签名
   require_approver_signature?: boolean   // 审批人通过时是否签名
+  endorser_id?: number | null            // 批准人（仅难度4时生效）
+  require_endorser_signature?: boolean   // 批准人通过时是否签名
   signature_x?: number
   signature_y?: number
   signature_page?: number

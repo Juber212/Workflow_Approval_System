@@ -13,6 +13,8 @@ export interface NodeOverride {
   require_assignee_signature?: boolean
   require_checker_signature?: boolean
   require_approver_signature?: boolean
+  endorser_id?: number | null  // 批准人（仅难度4时生效）
+  require_endorser_signature?: boolean
   signature_x?: number
   signature_y?: number
   signature_page?: number
@@ -24,6 +26,7 @@ export interface CreateInstanceData {
   name: string
   description?: string | null
   priority?: string
+  difficulty?: string  // 难度等级: 1/2/3/4
   contract_no?: string | null
   product_model?: string | null
   sales_manager?: string | null
@@ -38,6 +41,7 @@ export interface InstanceCreated {
   organization_id: number
   initiator_id: number
   priority: string
+  difficulty: string
   status: string
   nodes: {
     id: number
@@ -72,6 +76,7 @@ export interface InstanceListItem {
   initiator_id: number
   initiator_name: string
   priority: string
+  difficulty: string
   status: string
   current_node_index: number
   total_nodes: number
@@ -130,6 +135,18 @@ export interface ApprovalBrief {
   decided_at: string | null
 }
 
+/** 批准记录简要信息 */
+export interface EndorsementBrief {
+  id: number
+  endorser_id: number
+  endorser_name: string
+  status: string
+  opinion: string | null
+  signature_applied: boolean
+  round: number
+  decided_at: string | null
+}
+
 /** 项目详情中的节点信息 */
 export interface DetailNodeInfo {
   id: number
@@ -150,6 +167,9 @@ export interface DetailNodeInfo {
   require_assignee_signature: boolean
   require_checker_signature: boolean
   require_approver_signature: boolean
+  endorser_id: number | null
+  endorser_name: string | null
+  require_endorser_signature: boolean
   signature_x: number
   signature_y: number
   signature_page: number
@@ -159,6 +179,7 @@ export interface DetailNodeInfo {
   files: NodeFileBrief[]
   checks: CheckRecordBrief[]
   approvals: ApprovalBrief[]
+  endorsements: EndorsementBrief[]  // 批准记录
 }
 
 /** 操作日志项 */
@@ -185,6 +206,7 @@ export interface InstanceDetailResponse {
   initiator_id: number
   initiator_name: string
   priority: string
+  difficulty: string
   status: string
   termination_reason: string | null
   contract_no: string | null

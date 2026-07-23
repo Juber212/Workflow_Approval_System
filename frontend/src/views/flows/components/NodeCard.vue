@@ -62,6 +62,10 @@
           <div class="v">{{ approverNames }} · {{ strategyLabel }}</div>
         </div>
         <div class="info-grid__item">
+          <div class="k">批准人</div>
+          <div class="v">{{ endorserName }}</div>
+        </div>
+        <div class="info-grid__item">
           <div class="k">完成时限</div>
           <div class="v">
             {{ node.time_limit_days ? node.time_limit_days + ' 工作日' : '未设置' }}
@@ -181,6 +185,28 @@
               </div>
               <div v-if="a.opinion" class="record-item__opinion">「{{ a.opinion }}」</div>
               <div class="record-item__time" v-if="a.decided_at">{{ formatTime(a.decided_at) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 批准栏（仅难度4时显示） -->
+        <div class="node-col" v-if="node.endorsements && node.endorsements.length > 0">
+          <div class="node-col__title">🔏 批准记录（{{ node.endorsements.length }}）</div>
+          <div class="record-list">
+            <div
+              v-for="e in node.endorsements"
+              :key="e.id"
+              class="record-item"
+              :class="'record--' + (e.status || '').toLowerCase()"
+            >
+              <div class="record-item__main">
+                <span class="record-user">{{ e.endorser_name }}</span>
+                <span class="record-status" :class="approvalStatusClass(e.status)">{{ endorsementStatusLabel(e.status) }}</span>
+                <span class="record-round" v-if="e.round > 1">#{{ e.round }}</span>
+                <el-tag v-if="e.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+              </div>
+              <div v-if="e.opinion" class="record-item__opinion">「{{ e.opinion }}」</div>
+              <div class="record-item__time" v-if="e.decided_at">{{ formatTime(e.decided_at) }}</div>
             </div>
           </div>
         </div>
@@ -343,6 +369,12 @@ const approverNames = computed(() => {
   return props.node.approvers.map(a => a.user_name || `ID:${a.user_id}`).join('、')
 })
 
+/** 批准人名称 */
+const endorserName = computed(() => {
+  if (!props.node.endorser_id) return '未设置（仅难度4时生效）'
+  return props.node.endorser_name || `ID:${props.node.endorser_id}`
+})
+
 const strategyLabel = computed(() => {
   return props.node.approval_strategy === 'all_approve' ? '全部通过' : props.node.approval_strategy
 })
@@ -408,6 +440,18 @@ function approvalStatusLabel(status: string): string {
     approved: '已通过',
     rejected: '已退回',
     pending: '待审批',
+    terminated: '已终止',
+  }
+  return map[s] || status
+}
+
+/** 批准状态标签映射 */
+function endorsementStatusLabel(status: string): string {
+  const s = (status || '').toLowerCase()
+  const map: Record<string, string> = {
+    approved: '批准通过',
+    rejected: '批准驳回',
+    pending: '待批准',
     terminated: '已终止',
   }
   return map[s] || status

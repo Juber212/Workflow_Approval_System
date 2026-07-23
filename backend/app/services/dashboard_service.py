@@ -296,6 +296,7 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[Bott
             current_node_name=current_node_name,
             current_assignee_name=current_assignee_name,
             priority=inst.priority,
+            difficulty=inst.difficulty or "1",
             finished_count=finished_count,
             total_nodes=total_nodes,
             overdue_status=overdue_status,

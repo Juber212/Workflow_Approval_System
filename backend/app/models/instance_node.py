@@ -27,6 +27,8 @@ class InstanceNode(Base):
     require_assignee_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="负责人提交时是否签名")
     require_checker_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="校验人通过时是否签名")
     require_approver_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="审批人通过时是否签名")
+    endorser_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), comment="批准人（单人）")
+    require_endorser_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="批准人通过时是否签名")
     signature_x: Mapped[float] = mapped_column(Float, default=400, comment="签名默认X坐标（距左边）")
     signature_y: Mapped[float] = mapped_column(Float, default=100, comment="签名默认Y坐标（距底部）")
     signature_page: Mapped[int] = mapped_column(Integer, default=-1, comment="签名默认页码（-1=最后一页）")

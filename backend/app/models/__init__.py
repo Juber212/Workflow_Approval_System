@@ -1,8 +1,8 @@
 """SQLAlchemy ORM 模型"""
 
 from app.models.enums import (
-    InstanceStatus, Priority,
-    InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus, OperatorType, UploadType,
+    InstanceStatus, Priority, Difficulty,
+    InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus, EndorsementStatus, OperatorType, UploadType,
 )
 from app.models.organization import Organization
 from app.models.user import User
@@ -22,14 +22,15 @@ from app.models.file import File
 from app.models.operation_log import OperationLog
 from app.models.node_preset import NodePreset
 from app.models.signature import Signature
-from app.models.document_template import DocumentTemplate
+from app.models.endorsement import Endorsement
+from app.models.document_template import DocumentTemplate, TemplateDocumentLink
 
 __all__ = [
-    "InstanceStatus", "Priority",
-    "InstanceNodeStatus", "TaskStatus", "ApprovalStatus", "CheckStatus", "OperatorType", "UploadType",
+    "InstanceStatus", "Priority", "Difficulty",
+    "InstanceNodeStatus", "TaskStatus", "ApprovalStatus", "CheckStatus", "EndorsementStatus", "OperatorType", "UploadType",
     "Organization", "User", "Role", "UserRole", "SystemConfig",
     "FlowTemplate", "TemplateNode", "TemplateEdge",
     "FlowInstance", "InstanceNode", "InstanceEdge",
-    "Task", "CheckRecord", "Approval", "File", "OperationLog", "NodePreset",
-    "Signature", "DocumentTemplate",
+    "Task", "CheckRecord", "Approval", "Endorsement", "File", "OperationLog", "NodePreset",
+    "Signature", "DocumentTemplate", "TemplateDocumentLink",
 ]

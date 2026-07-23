@@ -86,6 +86,11 @@
           <el-table :data="filteredBottleneck" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id">
             <el-table-column prop="instance_name" label="项目" min-width="120" show-overflow-tooltip />
             <el-table-column prop="organization_name" label="所属组织" min-width="80" />
+            <el-table-column label="难度" min-width="48" align="center">
+              <template #default="{ row }">
+                <span class="diff-badge" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
             <el-table-column prop="current_assignee_name" label="负责人" min-width="64" />
             <el-table-column label="进度" min-width="160" align="center">
@@ -286,6 +291,15 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
 .od--r { background: #fde2e2; color: #c0392b; }
 .od--y { background: #fef5e7; color: #d68910; }
 .od--g { background: #eafaf1; color: #1e8449; }
+
+/* ─── 难度 badge ─── */
+.diff-badge {
+  font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px;
+  &.diff--1 { color: #1e8449; background: #eafaf1; }
+  &.diff--2 { color: #2471a3; background: #eaf2f8; }
+  &.diff--3 { color: #b87333; background: #fef5e7; }
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
+}
 </style>
 
 <style lang="scss">

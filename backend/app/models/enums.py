@@ -25,6 +25,7 @@ class InstanceNodeStatus(str, enum.Enum):
     RUNNING = "running"
     WAITING_CHECK = "waiting_check"
     WAITING_APPROVAL = "waiting_approval"
+    WAITING_ENDORSEMENT = "waiting_endorsement"
     FINISHED = "finished"
     REJECTED = "rejected"
     TERMINATED = "terminated"
@@ -36,6 +37,7 @@ class TaskStatus(str, enum.Enum):
     PROCESSING = "processing"
     WAITING_CHECK = "waiting_check"
     WAITING_APPROVAL = "waiting_approval"
+    WAITING_ENDORSEMENT = "waiting_endorsement"
     COMPLETED = "completed"
     REJECTED = "rejected"
     TERMINATED = "terminated"
@@ -67,3 +69,19 @@ class UploadType(str, enum.Enum):
     """文件上传类型"""
     NORMAL = "normal"
     SUPPLEMENT = "supplement"
+
+
+class EndorsementStatus(str, enum.Enum):
+    """批准状态（Endorsement 专用）"""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    TERMINATED = "terminated"
+
+
+class Difficulty(str, enum.Enum):
+    """项目难度等级"""
+    ONE = "1"
+    TWO = "2"
+    THREE = "3"
+    FOUR = "4"

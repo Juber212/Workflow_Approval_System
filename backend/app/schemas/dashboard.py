@@ -29,6 +29,7 @@ class BottleneckItem(BaseModel):
     current_node_name: str = ""
     current_assignee_name: str = ""
     priority: str = "normal"
+    difficulty: str = "1"
     finished_count: int = 0
     total_nodes: int = 0
     overdue_status: str = "正常"

@@ -17,9 +17,9 @@ from app.models import (
     FlowTemplate, TemplateNode, TemplateEdge,
     FlowInstance, InstanceNode, InstanceEdge,
     OperationLog, User, Organization,
-    Task, CheckRecord, Approval, File,
+    Task, CheckRecord, Approval, Endorsement, File,
 )
-from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus
+from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus, EndorsementStatus
 from app.services.file_service import ALLOWED_MIME_TYPES, MAX_FILE_SIZE
 from app.schemas.common import PaginatedData
 from app.schemas.instance import (
@@ -101,6 +101,9 @@ async def create_instance(
     priority = request.priority
     if priority not in ("urgent", "high", "normal", "low"):
         priority = "normal"
+    difficulty = getattr(request, "difficulty", "1") or "1"
+    if difficulty not in ("1", "2", "3", "4"):
+        difficulty = "1"
 
     instance = FlowInstance(
         name=request.name.strip(),
@@ -110,6 +113,7 @@ async def create_instance(
         organization_id=tpl.organization_id,
         initiator_id=current_user.id,
         priority=priority,
+        difficulty=difficulty,
         contract_no=request.contract_no.strip() if request.contract_no else None,
         product_model=request.product_model.strip() if request.product_model else None,
         sales_manager=request.sales_manager.strip() if request.sales_manager else None,
@@ -141,6 +145,11 @@ async def create_instance(
         require_approver_signature = node_override.get("require_approver_signature")
         if require_approver_signature is None:
             require_approver_signature = tn.require_approver_signature
+        # 批准人：发起覆盖 > 模板默认值（仅难度4时生效）
+        endorser_id = node_override.get("endorser_id") or (tn.endorser_id if hasattr(tn, 'endorser_id') else None)
+        require_endorser_signature = node_override.get("require_endorser_signature")
+        if require_endorser_signature is None:
+            require_endorser_signature = tn.require_endorser_signature if hasattr(tn, 'require_endorser_signature') else True
         signature_x = node_override.get("signature_x")
         if signature_x is None:
             signature_x = tn.signature_x
@@ -175,6 +184,8 @@ async def create_instance(
             require_assignee_signature=require_assignee_signature,
             require_checker_signature=require_checker_signature,
             require_approver_signature=require_approver_signature,
+            endorser_id=endorser_id,
+            require_endorser_signature=require_endorser_signature,
             signature_x=signature_x,
             signature_y=signature_y,
             signature_page=signature_page,
@@ -403,6 +414,7 @@ async def list_instances(
             initiator_id=instance.initiator_id,
             initiator_name=initiator_name or "",
             priority=(instance.priority or "normal").lower(),
+            difficulty=instance.difficulty or "1",
             status=(instance.status or "created").lower(),
             current_node_index=node_stats["processed"],
             total_nodes=node_stats["total"],
@@ -508,7 +520,9 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
     for n in node_models:
         if n.assignee_id:
             user_ids.add(n.assignee_id)
-        # 从 checkers/approvers JSON 中提取 user_id
+        # 从 checkers/approvers JSON 中提取 user_id，以及 endorser_id
+        if n.endorser_id:
+            user_ids.add(n.endorser_id)
         for raw in (n.checkers, n.approvers):
             if raw and isinstance(raw, list):
                 for item in raw:
@@ -614,6 +628,30 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
                 )
             )
 
+    # 批准记录（按 node_id 分组）—— 仅难度4时存在
+    endorsements_by_node: dict[int, list] = {}
+    if node_ids:
+        end_stmt = (
+            select(Endorsement, User.real_name.label("endorser_name"))
+            .join(User, Endorsement.endorser_id == User.id)
+            .where(Endorsement.node_id.in_(node_ids), Endorsement.status != EndorsementStatus.TERMINATED)
+            .order_by(Endorsement.created_at)
+        )
+        end_result = await db.execute(end_stmt)
+        for e, e_name in end_result:
+            if e.node_id not in endorsements_by_node:
+                endorsements_by_node[e.node_id] = []
+            endorsements_by_node[e.node_id].append({
+                "id": e.id,
+                "endorser_id": e.endorser_id,
+                "endorser_name": e_name or "",
+                "status": (e.status or "pending").lower(),
+                "opinion": e.opinion,
+                "signature_applied": e.signature_applied,
+                "round": e.round or 1,
+                "decided_at": e.decided_at,
+            })
+
     # ========== 5. 组装节点列表 ==========
     nodes: list[DetailNodeInfo] = []
     for n in node_models:
@@ -656,6 +694,9 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             require_assignee_signature=n.require_assignee_signature,
             require_checker_signature=n.require_checker_signature,
             require_approver_signature=n.require_approver_signature,
+            endorser_id=n.endorser_id,
+            endorser_name=user_name_map.get(n.endorser_id) if n.endorser_id else None,
+            require_endorser_signature=n.require_endorser_signature if hasattr(n, 'require_endorser_signature') else True,
             signature_x=n.signature_x,
             signature_y=n.signature_y,
             signature_page=n.signature_page,
@@ -665,6 +706,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             files=files_by_node.get(n.id, []),
             checks=checks_by_node.get(n.id, []),
             approvals=approvals_by_node.get(n.id, []),
+            endorsements=endorsements_by_node.get(n.id, []),
         ))
 
     # ========== 6. 操作日志（前 50 条，后续可做分页） ==========
@@ -718,6 +760,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         initiator_id=instance.initiator_id,
         initiator_name=initiator_name or "",
         priority=(instance.priority or "normal").lower(),
+        difficulty=instance.difficulty or "1",
         status=(instance.status or "created").lower(),
         termination_reason=instance.termination_reason,
         contract_no=instance.contract_no,
@@ -830,6 +873,16 @@ async def terminate_instance(
             Approval.status == ApprovalStatus.PENDING,
         )
         .values(status=ApprovalStatus.TERMINATED, decided_at=now)
+    )
+
+    # ========== 8b. 关闭 pending endorsements ==========
+    await db.execute(
+        sql_update(Endorsement)
+        .where(
+            Endorsement.instance_id == instance_id,
+            Endorsement.status == EndorsementStatus.PENDING,
+        )
+        .values(status=EndorsementStatus.TERMINATED, decided_at=now)
     )
 
     # ========== 9. 更新实例状态 ==========
@@ -992,6 +1045,12 @@ async def change_personnel(
             changes.append(f"审批人: {_describe_change(old_ids, new_ids)}")
             node.approvers = new_approvers
 
+    # ========== 4b. 处理批准人变更（单人，直接更新） ==========
+    if body.endorser_id is not None and body.endorser_id != node.endorser_id:
+        old_name = f"ID:{node.endorser_id}" if node.endorser_id else "无"
+        node.endorser_id = body.endorser_id
+        changes.append(f"批准人: {old_name} → ID:{body.endorser_id}")
+
     # ========== 5. 处理负责人变更 ==========
     if body.assignee_id is not None and body.assignee_id != node.assignee_id:
         old_name = f"ID:{node.assignee_id}" if node.assignee_id else "无"
@@ -1037,6 +1096,7 @@ async def change_personnel(
         "assignee_id": node.assignee_id,
         "checkers": node.checkers,
         "approvers": node.approvers,
+        "endorser_id": node.endorser_id,
         "changes": changes,
     }
 
@@ -1298,6 +1358,9 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
             select(Task.id).where(Task.instance_id == instance_id)
         )
         task_ids = [row[0] for row in task_ids_result.all()]
+
+    # 0. 删除批准记录（先于审批，避免外键冲突）
+    await db.execute(sql_delete(Endorsement).where(Endorsement.instance_id == instance_id))
 
     # 1. 删除审批记录
     await db.execute(sql_delete(Approval).where(Approval.instance_id == instance_id))

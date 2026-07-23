@@ -129,6 +129,11 @@
                 <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
               </template>
             </el-table-column>
+            <el-table-column label="难度" min-width="52" align="center">
+              <template #default="{ row }">
+                <span class="diff-badge" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span>
+              </template>
+            </el-table-column>
             <el-table-column label="状态" min-width="64" align="center">
               <template #default="{ row }">
                 <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
@@ -205,7 +210,7 @@
 
 <script setup lang="ts">
 /** 所内主页 —— 实例列表 + 模板管理（PRD P04，参考 pages/P04_org_home.html） */
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -363,6 +368,10 @@ const rules: FormRules = {
 onMounted(async () => {
   await fetchOrgInfo()
   await Promise.all([fetchInstances(), fetchStatusCounts()])
+})
+
+onUnmounted(() => {
+  if (instanceSearchTimer) clearTimeout(instanceSearchTimer)
 })
 
 watch(activeTab, (tab) => {
@@ -596,6 +605,15 @@ function instStatusLabel(s: string): string {
   &.pri--high   { color: #fff; background: var(--el-color-warning); }
   &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
   &.pri--low    { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
+
+/* 难度等级 badge */
+.diff-badge {
+  font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px;
+  &.diff--1 { color: #1e8449; background: #eafaf1; }
+  &.diff--2 { color: #2471a3; background: #eaf2f8; }
+  &.diff--3 { color: #b87333; background: #fef5e7; }
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
 }
 
 .list-pagination {

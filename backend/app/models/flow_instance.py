@@ -18,6 +18,7 @@ class FlowInstance(Base):
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, comment="所属组织")
     initiator_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="发起人")
     priority: Mapped[str] = mapped_column(String(20), default="normal", comment="优先级")
+    difficulty: Mapped[str] = mapped_column(String(20), default="1", comment="难度等级: 1/2/3/4")
     contract_no: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="合同号")
     product_model: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="产品型号")
     sales_manager: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="销售经理")

@@ -122,6 +122,20 @@
           />
         </el-form-item>
 
+        <!-- 批准人（单人，仅难度4时生效） -->
+        <el-form-item label="批准人">
+          <UserSelector
+            v-model="form.endorser_id"
+            :multiple="false"
+            :initial-options="endorserInitialOptions"
+            placeholder="可选，仅难度4级时生效"
+            org-members
+            @update:model-value="handleEndorserChange"
+            @options-loaded="handleOptionsLoaded"
+          />
+          <div class="field-hint">批准人在所有审批人通过后操作，可审核、签字、驳回。仅难度4级时生效。</div>
+        </el-form-item>
+
         <!-- 完成时限 -->
         <!-- 编辑模式：数字输入框（工作日天数） -->
         <el-form-item
@@ -285,11 +299,14 @@
             <el-checkbox v-model="form.require_approver_signature" @change="syncToNode">
               审批人通过时签名
             </el-checkbox>
+            <el-checkbox v-model="form.require_endorser_signature" @change="syncToNode">
+              批准人通过时签名
+            </el-checkbox>
           </div>
         </el-form-item>
 
         <!-- 签名位置（至少一个开关开启时显示） -->
-        <template v-if="form.require_assignee_signature || form.require_checker_signature || form.require_approver_signature">
+        <template v-if="form.require_assignee_signature || form.require_checker_signature || form.require_approver_signature || form.require_endorser_signature">
           <el-form-item label="签名X坐标">
             <el-input-number v-model="form.signature_x" :min="0" :max="800" style="width:100%" @change="syncToNode" />
           </el-form-item>
@@ -349,6 +366,9 @@ const form = reactive({
   require_assignee_signature: true,
   require_checker_signature: true,
   require_approver_signature: true,
+  endorser_id: undefined as number | undefined,
+  endorser_name: '' as string,
+  require_endorser_signature: true,
   signature_x: 400,
   signature_y: 100,
   signature_page: -1,
@@ -411,6 +431,15 @@ const approverInitialOptions = computed<UserSearchItem[]>(() => {
   }))
 })
 
+/** 批准人初始选项（单人） */
+const endorserInitialOptions = computed<UserSearchItem[]>(() => {
+  if (!form.endorser_id) return []
+  return [{
+    id: form.endorser_id, username: '', real_name: form.endorser_name || `用户${form.endorser_id}`,
+    organization_id: null, organization_name: null,
+  }]
+})
+
 /** 上次加载的节点 ID（用于检测切换） */
 let lastNodeId: string | null = null
 
@@ -439,6 +468,9 @@ function loadFromNode() {
   form.require_assignee_signature = p.require_assignee_signature ?? true
   form.require_checker_signature = p.require_checker_signature ?? true
   form.require_approver_signature = p.require_approver_signature ?? true
+  form.endorser_id = p.endorser_id ?? undefined
+  form.endorser_name = p.endorser_name || ''
+  form.require_endorser_signature = p.require_endorser_signature ?? true
   form.signature_x = p.signature_x ?? 400
   form.signature_y = p.signature_y ?? 100
   form.signature_page = p.signature_page ?? -1
@@ -500,6 +532,9 @@ function syncToNode() {
     require_assignee_signature: form.require_assignee_signature,
     require_checker_signature: form.require_checker_signature,
     require_approver_signature: form.require_approver_signature,
+    endorser_id: form.endorser_id ?? null,
+    endorser_name: form.endorser_name || null,
+    require_endorser_signature: form.require_endorser_signature,
     signature_x: form.signature_x,
     signature_y: form.signature_y,
     signature_page: form.signature_page,
@@ -530,6 +565,12 @@ function handleCheckersChange(val: number[]) {
 /** 审批人变更 —— 同步名称 + 写入节点 */
 function handleApproversChange(val: number[]) {
   form.approvers_names = (val || []).map(id => userNameCache[id] || '').filter(Boolean)
+  syncToNode()
+}
+
+/** 批准人变更 —— 同步名称 + 写入节点 */
+function handleEndorserChange(val: number | undefined) {
+  form.endorser_name = val ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 

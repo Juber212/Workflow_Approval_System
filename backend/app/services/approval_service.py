@@ -464,6 +464,29 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         inst.completed_at = now
         return {"all_approved": True, "instance_completed": True, "message": "流程已完成"}
 
+    # 难度4 + 有批准人 → 进入批准环节（审核→签字→节点完成）
+    if inst.difficulty == "4" and node.endorser_id:
+        from app.models.endorsement import Endorsement
+        from app.models.enums import EndorsementStatus
+        endorsement = Endorsement(
+            instance_id=a.instance_id,
+            node_id=a.node_id,
+            task_id=a.task_id,
+            endorser_id=node.endorser_id,
+            status=EndorsementStatus.PENDING,
+            round=node.round,
+        )
+        db.add(endorsement)
+        # 更新 Task 和 Node 状态为等待批准
+        if a.task_id:
+            await db.execute(
+                update(Task)
+                .where(Task.id == a.task_id)
+                .values(status=TaskStatus.WAITING_ENDORSEMENT)
+            )
+        node.status = InstanceNodeStatus.WAITING_ENDORSEMENT
+        return {"all_approved": True, "waiting_endorsement": True, "message": "全部审批通过，等待批准人审核"}
+
     # 普通节点 → finished → 传播到下游
     node.status = InstanceNodeStatus.FINISHED
     node.completed_at = now

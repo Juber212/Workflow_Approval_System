@@ -83,6 +83,14 @@
             <el-option label="低" value="low" />
           </el-select>
         </el-form-item>
+        <el-form-item label="难度" prop="difficulty">
+          <el-select v-model="launchForm.difficulty" style="width:100%">
+            <el-option label="1级 - 简单" value="1" />
+            <el-option label="2级 - 一般" value="2" />
+            <el-option label="3级 - 较难" value="3" />
+            <el-option label="4级 - 困难（启用批准人）" value="4" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="补充说明">
           <el-input v-model="launchForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="500" />
         </el-form-item>
@@ -279,7 +287,7 @@ const hasBizInfo = computed(() =>
 )
 
 /** 发起项目表单 */
-const launchForm = ref({ name: '', priority: 'normal' as string, description: '' })
+const launchForm = ref({ name: '', priority: 'normal' as string, difficulty: '1' as string, description: '' })
 const launchRules: FormRules = {
   name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }, { min: 2, max: 100, message: '2-100字符', trigger: 'blur' }],
 }
@@ -607,6 +615,8 @@ async function handleSave() {
       require_assignee_signature: n.properties?.require_assignee_signature ?? true,
       require_checker_signature: n.properties?.require_checker_signature ?? true,
       require_approver_signature: n.properties?.require_approver_signature ?? true,
+      endorser_id: n.properties?.endorser_id ?? null,
+      require_endorser_signature: n.properties?.require_endorser_signature ?? true,
       signature_x: n.properties?.signature_x ?? 400,
       signature_y: n.properties?.signature_y ?? 100,
       signature_page: n.properties?.signature_page ?? -1,
@@ -665,6 +675,8 @@ async function handleLaunch() {
       require_assignee_signature: n.properties?.require_assignee_signature ?? true,
       require_checker_signature: n.properties?.require_checker_signature ?? true,
       require_approver_signature: n.properties?.require_approver_signature ?? true,
+      endorser_id: n.properties?.endorser_id ?? null,
+      require_endorser_signature: n.properties?.require_endorser_signature ?? true,
       signature_x: n.properties?.signature_x ?? 400,
       signature_y: n.properties?.signature_y ?? 100,
       signature_page: n.properties?.signature_page ?? -1,
@@ -700,6 +712,10 @@ async function handleLaunch() {
         override.assignee_id = n.properties.assignee_id
         hasOverride = true
       }
+      if (n.properties?.endorser_id != null) {
+        (override as any).endorser_id = n.properties.endorser_id
+        hasOverride = true
+      }
       if (hasOverride) nodeOverrides.push(override)
     }
 
@@ -708,6 +724,7 @@ async function handleLaunch() {
       template_id: templateId,
       name: launchForm.value.name.trim(),
       priority: launchForm.value.priority,
+      difficulty: launchForm.value.difficulty,
       description: launchForm.value.description || undefined,
       contract_no: bizInfo.value.contract_no || undefined,
       product_model: bizInfo.value.product_model || undefined,

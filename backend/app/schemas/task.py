@@ -50,12 +50,14 @@ class TaskDetail(BaseModel):
     files: list[dict] = []
     checks: list[dict] = []
     approvals: list[dict] = []
+    endorsements: list[dict] = []  # 批准记录（仅难度4时存在）
     rejected_type: str | None = None
     rejected_reason: str | None = None
     # 节点签批配置
     require_assignee_signature: bool = True
     require_checker_signature: bool = True
     require_approver_signature: bool = True
+    require_endorser_signature: bool = True
     signature_x: float = 400
     signature_y: float = 100
     signature_page: int = -1

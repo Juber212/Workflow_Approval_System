@@ -16,6 +16,8 @@ class NodeOverride(BaseModel):
     require_assignee_signature: bool | None = Field(None, description="负责人提交时是否签名")
     require_checker_signature: bool | None = Field(None, description="校验人通过时是否签名")
     require_approver_signature: bool | None = Field(None, description="审批人通过时是否签名")
+    endorser_id: int | None = Field(None, description="更换批准人（仅难度4级时生效）")
+    require_endorser_signature: bool | None = Field(None, description="批准人通过时是否签名")
 
 
 class CreateInstanceRequest(BaseModel):
@@ -24,6 +26,7 @@ class CreateInstanceRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100, description="实例名称")
     description: str | None = Field(None, max_length=500, description="实例描述")
     priority: str = Field("normal", description="优先级：urgent / high / normal / low")
+    difficulty: str = Field("1", description="难度等级：1 / 2 / 3 / 4")
     contract_no: str | None = Field(None, max_length=100, description="合同号")
     product_model: str | None = Field(None, max_length=100, description="产品型号")
     sales_manager: str | None = Field(None, max_length=50, description="销售经理")
@@ -48,6 +51,7 @@ class InstanceResponse(BaseModel):
     organization_id: int
     initiator_id: int
     priority: str
+    difficulty: str = "1"
     status: str
     nodes: list[InstanceNodeBrief] = []
     initiated_at: datetime | None = None
@@ -64,6 +68,7 @@ class InstanceListItem(BaseModel):
     initiator_id: int
     initiator_name: str = ""
     priority: str
+    difficulty: str = "1"
     status: str
     current_node_index: int = 0
     total_nodes: int = 0
@@ -134,6 +139,9 @@ class DetailNodeInfo(BaseModel):
     require_assignee_signature: bool = True
     require_checker_signature: bool = True
     require_approver_signature: bool = True
+    endorser_id: int | None = None
+    endorser_name: str | None = None
+    require_endorser_signature: bool = True
     signature_x: float = 400
     signature_y: float = 100
     signature_page: int = -1
@@ -143,6 +151,7 @@ class DetailNodeInfo(BaseModel):
     files: list[NodeFileBrief] = []
     checks: list[CheckRecordBrief] = []
     approvals: list[ApprovalBrief] = []
+    endorsements: list[dict] = []  # 批准记录（仅难度4时存在）
 
 
 class LogItemBrief(BaseModel):
@@ -169,6 +178,7 @@ class InstanceDetailResponse(BaseModel):
     initiator_id: int
     initiator_name: str = ""
     priority: str
+    difficulty: str = "1"
     status: str
     termination_reason: str | None = None
     contract_no: str | None = None
@@ -203,6 +213,7 @@ class ChangePersonnelRequest(BaseModel):
     assignee_id: int | None = Field(None, description="新负责人 ID")
     checkers: list[dict] | None = Field(None, description="新校验人列表 [{\"user_id\": N}]")
     approvers: list[dict] | None = Field(None, description="新审批人列表 [{\"user_id\": N}]")
+    endorser_id: int | None = Field(None, description="新批准人 ID（仅难度4级时有效）")
 
 
 # ==================== 优先级修改 ====================
