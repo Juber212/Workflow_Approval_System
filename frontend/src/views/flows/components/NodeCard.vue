@@ -409,7 +409,7 @@ const hasFolderConfig = computed(() => {
   return normalFiles.value.some(f => f.folder_name)
 })
 
-// ========== 校验/审批状态 ==========
+// ========== 校验/审批状态（NodeCard 专用样式，与全局 status-tag 不同） ==========
 function checkStatusClass(status: string): string {
   const s = (status || '').toLowerCase()
   if (s === 'passed') return 'status--pass'

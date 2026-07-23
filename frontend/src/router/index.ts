@@ -98,6 +98,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '审批处理', roles: ['manager', 'user'] },
       },
       {
+        path: 'profile/endorse/:id',
+        name: 'EndorseDetail',
+        component: () => import('@/views/profile/EndorseDetail.vue'),
+        meta: { title: '批准处理', roles: ['manager', 'user'] },
+      },
+      {
         path: 'admin/users',
         name: 'AdminUsers',
         component: () => import('@/views/admin/index.vue'),

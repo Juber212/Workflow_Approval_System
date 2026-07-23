@@ -650,6 +650,18 @@ async def reject(
             .values(status=CheckStatus.TERMINATED, decided_at=now)
         )
 
+        # 终止当前节点 pending 的批准记录（难度4场景，安全兜底）
+        from app.models import Endorsement
+        from app.models.enums import EndorsementStatus
+        await db.execute(
+            update(Endorsement)
+            .where(
+                Endorsement.node_id == a.node_id,
+                Endorsement.status == EndorsementStatus.PENDING,
+            )
+            .values(status=EndorsementStatus.TERMINATED, decided_at=now)
+        )
+
         # 删除当前轮文件（先DB后物理文件）
         curr_files = await db.execute(
             select(File).where(File.node_id == a.node_id, File.round == node.round)

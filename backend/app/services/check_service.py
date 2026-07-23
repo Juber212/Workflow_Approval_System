@@ -372,6 +372,18 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         )
         .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
+
+    # 终止当前节点 pending 的批准记录（难度4场景，安全兜底）
+    from app.models import Endorsement
+    from app.models.enums import EndorsementStatus
+    await db.execute(
+        update(Endorsement)
+        .where(
+            Endorsement.node_id == c.node_id,
+            Endorsement.status == EndorsementStatus.PENDING,
+        )
+        .values(status=EndorsementStatus.TERMINATED, decided_at=now)
+    )
     # 当前这条保持 returned（不被覆盖）
     c.status = CheckStatus.RETURNED
     c.opinion = opinion

@@ -49,6 +49,11 @@
             <span>我的审批<span class="tab-badge" v-if="approvalCount > 0">{{ approvalCount }}</span></span>
           </template>
         </el-tab-pane>
+        <el-tab-pane name="endorsements">
+          <template #label>
+            <span>我的批准<span class="tab-badge" v-if="endorsementCount > 0">{{ endorsementCount }}</span></span>
+          </template>
+        </el-tab-pane>
         <el-tab-pane v-if="isManager" name="initiated">
           <template #label><span>我发起的流程</span></template>
         </el-tab-pane>
@@ -149,6 +154,29 @@
         <el-empty v-if="!approvalLoading && approvals.length === 0" description="暂无待审批" :image-size="50" />
       </template>
 
+      <!-- 批准列表 -->
+      <template v-if="activeTab === 'endorsements'">
+        <el-table :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+          <el-table-column prop="instance_name" label="项目" min-width="140" />
+          <el-table-column prop="node_name" label="节点" min-width="100" />
+          <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
+          <el-table-column label="轮次" min-width="48" align="center">
+            <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
+          </el-table-column>
+          <el-table-column label="状态" min-width="64" align="center">
+            <template #default="{ row }">
+              <span class="status-tag" :class="endorsementStatusClass(row.status)">{{ endorsementStatusLabel(row.status) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="60">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/endorse/${row.id}`)">批准</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!endorsementLoading && endorsements.length === 0" description="暂无待批准" :image-size="50" />
+      </template>
+
       <!-- 我发起的流程 -->
       <template v-if="activeTab === 'initiated'">
         <el-table :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
@@ -183,6 +211,11 @@
         <el-tab-pane name="approve">
           <template #label>
             <span>方案审批<span class="tab-badge" v-if="propApprovalCount > 0">{{ propApprovalCount }}</span></span>
+          </template>
+        </el-tab-pane>
+        <el-tab-pane name="propEndorsements">
+          <template #label>
+            <span>方案批准<span class="tab-badge" v-if="propEndorsementCount > 0">{{ propEndorsementCount }}</span></span>
           </template>
         </el-tab-pane>
         <el-tab-pane v-if="isManager" name="initiated">
@@ -234,6 +267,25 @@
         <el-empty v-if="!propApprovalLoading && propApprovals.length === 0" description="暂无待审批方案" :image-size="50" />
       </template>
 
+      <!-- 方案批准列表 -->
+      <template v-if="propActiveTab === 'propEndorsements'">
+        <el-table :data="propEndorsements" stripe v-loading="propEndorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+          <el-table-column prop="instance_name" label="方案名称" min-width="160" />
+          <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
+          <el-table-column label="状态" min-width="64" align="center">
+            <template #default="{ row }">
+              <span class="status-tag" :class="endorsementStatusClass(row.status)">{{ endorsementStatusLabel(row.status) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" min-width="60">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/endorse/${row.id}`)">批准</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!propEndorsementLoading && propEndorsements.length === 0" description="暂无待批准方案" :image-size="50" />
+      </template>
+
       <!-- 我发起的方案 -->
       <template v-if="propActiveTab === 'initiated'">
         <el-table :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
@@ -265,10 +317,11 @@ import { useNotificationStore } from '@/stores/notification'
 import { getTasks, type TaskListItem } from '@/api/task'
 import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
+import { getEndorsements, type EndorsementListItem } from '@/api/endorsement'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
-import { priLabel, roleLabel, instStatusClass, instStatusLabel, taskStatusClass, taskStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
+import { priLabel, roleLabel, instStatusClass, instStatusLabel, taskStatusClass, taskStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel, endorsementStatusClass, endorsementStatusLabel } from '@/utils/labels'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
@@ -332,6 +385,20 @@ async function fetchApprovals() {
   } finally { approvalLoading.value = false }
 }
 
+// ========== 项目：批准 ==========
+const endorsements = ref<EndorsementListItem[]>([])
+const endorsementLoading = ref(false)
+const endorsementCount = ref(0)
+
+async function fetchEndorsements() {
+  endorsementLoading.value = true
+  try {
+    const data = await getEndorsements({ type: 'project' })
+    endorsements.value = data.items
+    endorsementCount.value = data.total
+  } finally { endorsementLoading.value = false }
+}
+
 // ========== 项目：我发起的 ==========
 const initiatedList = ref<MyInitiatedItem[]>([])
 const initiatedLoading = ref(false)
@@ -372,6 +439,20 @@ async function fetchPropApprovals() {
   } finally { propApprovalLoading.value = false }
 }
 
+// ========== 方案：批准 ==========
+const propEndorsements = ref<EndorsementListItem[]>([])
+const propEndorsementLoading = ref(false)
+const propEndorsementCount = ref(0)
+
+async function fetchPropEndorsements() {
+  propEndorsementLoading.value = true
+  try {
+    const data = await getEndorsements({ type: 'proposal' })
+    propEndorsements.value = data.items
+    propEndorsementCount.value = data.total
+  } finally { propEndorsementLoading.value = false }
+}
+
 // ========== 方案：我发起的 ==========
 const propInitiatedList = ref<MyInitiatedItem[]>([])
 const propInitiatedLoading = ref(false)
@@ -396,6 +477,7 @@ onMounted(() => {
 watch(activeTab, (tab) => {
   if (tab === 'checks') fetchChecks()
   else if (tab === 'approvals') fetchApprovals()
+  else if (tab === 'endorsements') fetchEndorsements()
   else if (tab === 'initiated') fetchInitiated()
 })
 
@@ -404,6 +486,7 @@ function handleViewTypeChange() {
   if (viewType.value === 'proposal') {
     fetchPropTasks()
     fetchPropApprovals()
+    fetchPropEndorsements()
     if (isManager.value) fetchPropInitiated()
   }
 }
@@ -411,6 +494,7 @@ function handleViewTypeChange() {
 // 方案子 Tab 切换时按需加载
 watch(propActiveTab, (tab) => {
   if (tab === 'approve') fetchPropApprovals()
+  else if (tab === 'propEndorsements') fetchPropEndorsements()
   else if (tab === 'initiated') fetchPropInitiated()
 })
 

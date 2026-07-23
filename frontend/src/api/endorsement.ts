@@ -1,6 +1,8 @@
-/** 批准（Endorsement）API —— 难度4级时的最终审核 */
+/** 批准 API —— 难度4级的最终审核环节 */
 import request from './request'
+import type { SignatureSlot } from './signature'
 
+/** 批准列表项 */
 export interface EndorsementListItem {
   id: number
   instance_id: number
@@ -15,6 +17,7 @@ export interface EndorsementListItem {
   created_at: string | null
 }
 
+/** 批准详情 */
 export interface EndorsementDetail {
   id: number
   instance_id: number
@@ -40,8 +43,8 @@ export interface EndorsementDetail {
   current_signature_url: string | null
   current_node_index: number
   total_nodes: number
-  nodes: { id: number; name: string; status: string; is_start: boolean; is_end: boolean }[]
-  files: { id: number; original_name: string; file_size: number; round: number }[]
+  nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string }[]
+  files: { id: number; original_name: string; file_size: number | null; round: number }[]
   checks: { id: number; checker_id: number; status: string; opinion: string | null; decided_at: string | null }[]
   approvals: { id: number; approver_id: number; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]
   decided_at: string | null
@@ -49,28 +52,32 @@ export interface EndorsementDetail {
 }
 
 /** 获取我的批准列表 */
-export async function getEndorsements(params?: { type?: string }): Promise<{ items: EndorsementListItem[]; total: number }> {
+export async function getEndorsements(params: { type?: string } = {}) {
   const res = await request.get('/endorsements', { params })
-  return res.data.data
+  return res.data as { items: EndorsementListItem[]; total: number }
 }
 
 /** 获取批准详情 */
 export async function getEndorsementDetail(id: number): Promise<EndorsementDetail> {
   const res = await request.get(`/endorsements/${id}`)
-  return res.data.data
+  return res.data
 }
 
-/** 批准通过 */
-export async function endorse(id: number, data: {
-  opinion?: string | null
-  signatures?: { file_id: number; signature_x: number; signature_y: number; signature_page: number }[]
-}): Promise<{ message: string }> {
-  const res = await request.post(`/endorsements/${id}/approve`, data)
-  return res.data.data
+/** 批准通过 —— 支持多签名 */
+export async function endorseApprove(
+  id: number,
+  opinion?: string | null,
+  signatures?: SignatureSlot[] | null,
+) {
+  const res = await request.post(`/endorsements/${id}/approve`, {
+    opinion,
+    signatures,
+  })
+  return res
 }
 
 /** 批准驳回 */
-export async function endorseReject(id: number, data: { opinion: string }): Promise<{ message: string }> {
-  const res = await request.post(`/endorsements/${id}/reject`, data)
-  return res.data.data
+export async function endorseReject(id: number, opinion: string) {
+  const res = await request.post(`/endorsements/${id}/reject`, { opinion })
+  return res
 }
