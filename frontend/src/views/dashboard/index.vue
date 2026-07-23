@@ -77,24 +77,13 @@
         <div class="card__header">
           <span class="card__title">流程卡点追踪</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <el-button size="small" text @click="toggleAllExpand">{{ allExpanded ? '收起全部' : '展开全部' }}</el-button>
             <el-select v-model="bottleneckOrgFilter" placeholder="全部组织" clearable size="small" style="width:120px">
               <el-option v-for="o in orgNames" :key="o" :label="o" :value="o" />
             </el-select>
           </div>
         </div>
         <div class="card__body" style="padding:0">
-          <el-table :data="filteredBottleneck" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id" :expand-row-keys="expandedRows" @expand-change="onExpandChange">
-            <el-table-column type="expand">
-              <template #default="{ row }">
-                <div class="bt-chain">
-                  <template v-for="(seg, i) in row.progress_chain" :key="i">
-                    <span v-if="i > 0" class="bt-arr">→</span>
-                    <span class="bt-node" :class="chainNodeClass(seg)">{{ chainNodeLabel(seg) }}</span>
-                  </template>
-                </div>
-              </template>
-            </el-table-column>
+          <el-table :data="filteredBottleneck" stripe v-if="filteredBottleneck.length > 0" :row-class-name="tableRowClass" max-height="360" row-key="instance_id">
             <el-table-column prop="instance_name" label="项目" min-width="120" show-overflow-tooltip />
             <el-table-column prop="organization_name" label="所属组织" min-width="80" />
             <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
@@ -151,7 +140,6 @@ const router = useRouter()
 const loading = ref(false)
 const catTab = ref<'project' | 'proposal'>('project')
 const bottleneckOrgFilter = ref('')
-const expandedRows = ref<number[]>([])
 
 const ORG_COLORS = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC', '#6E7074']
 
@@ -202,18 +190,6 @@ const orgNames = computed(() => [...new Set(data.bottleneck.map(b => b.organizat
 const filteredBottleneck = computed(() =>
   bottleneckOrgFilter.value ? data.bottleneck.filter(b => b.organization_name === bottleneckOrgFilter.value) : data.bottleneck
 )
-const allExpanded = computed(() => {
-  const ids = filteredBottleneck.value.map(b => b.instance_id)
-  return ids.length > 0 && ids.every(id => expandedRows.value.includes(id))
-})
-function toggleAllExpand() {
-  if (allExpanded.value) expandedRows.value = []
-  else expandedRows.value = filteredBottleneck.value.map(b => b.instance_id)
-}
-function onExpandChange(_row: any, rows: any[]) {
-  expandedRows.value = rows.map((r: any) => r.instance_id)
-}
-
 /** 饼图数据 */
 const orgPieItems = computed(() => {
   return data.org_overview
@@ -235,15 +211,6 @@ function tableRowClass({ row }: any) {
   return ''
 }
 function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将逾期' ? 'od--y' : 'od--g' }
-function chainNodeLabel(seg: string): string {
-  if (seg.startsWith('active ') || seg.startsWith('done ') || seg.startsWith('waiting ')) return seg.slice(seg.indexOf(' ') + 1)
-  return seg
-}
-function chainNodeClass(seg: string): string {
-  if (seg.startsWith('active ')) return 'bt-node--active'
-  if (seg.startsWith('done ')) return 'bt-node--done'
-  return 'bt-node--wait'
-}
 </script>
 
 <style lang="scss" scoped>
@@ -306,19 +273,12 @@ function chainNodeClass(seg: string): string {
 .dash-pie { min-width: 0; display: flex; flex-direction: column; }
 .dash-bn { min-width: 0; overflow: hidden; :deep(.el-table__cell) { padding: 10px 0; } }
 
-/* ─── 卡点追踪：进度链 ─── */
-.bt-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 0; font-size: 13px; line-height: 1.8; padding: 10px 0; justify-content: center; }
-.bt-arr { color: var(--el-text-color-placeholder); margin: 0 6px; flex-shrink: 0; font-size: 12px; }
-.bt-node {
-  display: inline-block; padding: 3px 12px; border-radius: 5px;
-  font-size: 13px; white-space: nowrap; border: 1px solid var(--el-border-color);
-  &--done { background: #eafaf1; color: #1e8449; border-color: #a3d9b1; }
-  &--active { background: var(--el-color-primary-light-9); color: var(--el-color-primary); border-color: var(--el-color-primary); font-weight: 600; }
-  &--wait { background: #fafafa; color: var(--el-text-color-placeholder); border-color: #eee; }
-}
-
 /* ─── 进度条 ─── */
-.bt-progress { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+.bt-progress {
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  :deep(.el-progress) { flex: 1; min-width: 60px; }
+  :deep(.el-progress-bar__outer) { border-radius: 4px; }
+}
 .bt-progress__text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; flex-shrink: 0; }
 
 /* ─── 逾期标签 ─── */
