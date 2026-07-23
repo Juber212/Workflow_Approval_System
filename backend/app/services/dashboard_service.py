@@ -14,6 +14,7 @@ from app.models import (
     CheckRecord,
     Approval,
 )
+from app.models.enums import TaskStatus, CheckStatus, ApprovalStatus
 from app.schemas.dashboard import (
     DashboardData,
     DashboardStats,
@@ -436,7 +437,7 @@ async def _get_my_task_counts(db: AsyncSession, user_id: int) -> MyTaskCounts:
     pending = (await db.execute(
         select(func.count()).select_from(Task).where(
             Task.assignee_id == user_id,
-            Task.status.in_(["pending", "processing"]),
+            Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING]),
         )
     )).scalar() or 0
 
@@ -444,7 +445,7 @@ async def _get_my_task_counts(db: AsyncSession, user_id: int) -> MyTaskCounts:
     checking = (await db.execute(
         select(func.count()).select_from(CheckRecord).where(
             CheckRecord.checker_id == user_id,
-            CheckRecord.status == "pending",
+            CheckRecord.status == CheckStatus.PENDING,
         )
     )).scalar() or 0
 
@@ -452,7 +453,7 @@ async def _get_my_task_counts(db: AsyncSession, user_id: int) -> MyTaskCounts:
     approval = (await db.execute(
         select(func.count()).select_from(Approval).where(
             Approval.approver_id == user_id,
-            Approval.status == "pending",
+            Approval.status == ApprovalStatus.PENDING,
         )
     )).scalar() or 0
 
