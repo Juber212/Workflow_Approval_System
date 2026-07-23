@@ -481,11 +481,16 @@ async def reject(
     opinion: str,
     target_node_id: int | None = None,
 ) -> dict:
-    """审批退回 —— 中间节点固定退回负责人，结束节点总驳回可指定目标"""
+    """审批退回 —— 中间节点固定退回负责人，结束节点总驳回可指定目标
+
+    并发安全：FOR UPDATE 锁定目标行，防止并发驳回导致状态混乱。
+    """
     if not opinion:
         raise AppException(ErrorCode.BAD_REQUEST, "退回必须填写审批意见")
 
-    a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
+    a = (await db.execute(
+        select(Approval).where(Approval.id == approval_id).with_for_update()
+    )).scalar_one_or_none()
     if a is None:
         raise AppException(ErrorCode.NOT_FOUND, "审批记录不存在")
     if a.approver_id != current_user_id:

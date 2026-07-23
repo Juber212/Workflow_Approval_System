@@ -341,11 +341,16 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
 
 async def return_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str) -> dict:
-    """校验退回 —— 退回当前负责人，删除当前轮文件"""
+    """校验退回 —— 退回当前负责人，删除当前轮文件
+
+    并发安全：FOR UPDATE 锁定目标行，防止并发退回导致状态混乱。
+    """
     if not opinion:
         raise AppException(ErrorCode.BAD_REQUEST, "退回必须填写校验意见")
 
-    c = (await db.execute(select(CheckRecord).where(CheckRecord.id == check_id))).scalar_one_or_none()
+    c = (await db.execute(
+        select(CheckRecord).where(CheckRecord.id == check_id).with_for_update()
+    )).scalar_one_or_none()
     if c is None:
         raise AppException(ErrorCode.NOT_FOUND, "校验记录不存在")
     if c.checker_id != current_user_id:
