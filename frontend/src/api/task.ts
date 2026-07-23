@@ -174,7 +174,15 @@ export async function previewFile(fileId: number): Promise<void> {
   }
   const blob = await resp.blob()
   const blobUrl = URL.createObjectURL(blob)
-  window.open(blobUrl, '_blank')
+  const previewWindow = window.open(blobUrl, '_blank')
+  // 延迟释放 Blob URL（等待新窗口加载完成）
+  if (previewWindow) {
+    setTimeout(() => {
+      URL.revokeObjectURL(blobUrl)
+    }, 60000)  // 1分钟后释放，足够浏览器加载
+  } else {
+    URL.revokeObjectURL(blobUrl)
+  }
 }
 
 /** 下载文件 —— 获取文件 blob 后触发浏览器保存对话框 */

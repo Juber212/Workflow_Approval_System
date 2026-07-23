@@ -104,7 +104,7 @@
     <!-- 文件模板管理弹窗 -->
     <el-dialog
       v-model="showDocDialog"
-      title="文件模板管理"
+      title="选择文件模板"
       width="680px"
       @open="handleDocDialogOpen"
       destroy-on-close
@@ -117,42 +117,34 @@
         </div>
       </div>
 
-      <!-- 上传区域（多文件） -->
-      <div class="doc-upload-row">
-        <el-upload
-          ref="docUploadRef"
-          :auto-upload="false"
-          multiple
-          accept=".doc,.docx,.xlsx"
-          :show-file-list="false"
-          :on-change="handleDocFilesChange"
-        >
-          <el-button type="primary" :icon="UploadFilled" :loading="uploadingDoc">上传文件模板</el-button>
-        </el-upload>
-        <span class="doc-upload-hint">支持 .doc / .docx / .xlsx，可一次多选</span>
+      <!-- 已关联模板 -->
+      <div v-if="linkedDocTemplates.length > 0" class="doc-section">
+        <h4 class="doc-section__title">已关联的模板（{{ linkedDocTemplates.length }}）</h4>
+        <div class="doc-item" v-for="d in linkedDocTemplates" :key="d.id">
+          <span class="doc-item__info">
+            <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
+            <span class="doc-item__name">{{ d.name }}</span>
+            <span class="doc-item__orig">({{ d.original_name }})</span>
+          </span>
+          <el-button link type="danger" size="small" @click="handleUnlinkDoc(d)">移除</el-button>
+        </div>
       </div>
 
-      <!-- 模板列表 -->
-      <el-table v-if="docTemplates.length > 0" :data="docTemplates" class="doc-table" stripe>
-        <el-table-column prop="name" label="名称" min-width="180" />
-        <el-table-column label="类型" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">
-              .{{ row.file_type }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="original_name" label="原始文件名" min-width="200" />
-        <el-table-column label="大小" width="100">
-          <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="80" align="center">
-          <template #default="{ row }">
-            <el-button link type="danger" size="small" @click="handleDeleteDoc(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-else description="暂无文件模板，请上传" :image-size="60" />
+      <!-- 组织内可用模板 -->
+      <div v-if="availableDocTemplates.length > 0" class="doc-section">
+        <h4 class="doc-section__title">组织内可用模板（{{ availableDocTemplates.length }}）<span class="doc-section__hint">管理员上传</span></h4>
+        <div class="doc-item" v-for="d in availableDocTemplates" :key="d.id">
+          <span class="doc-item__info">
+            <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
+            <span class="doc-item__name">{{ d.name }}</span>
+            <span class="doc-item__orig">({{ d.original_name }})</span>
+            <span class="doc-item__size">{{ formatFileSize(d.file_size) }}</span>
+          </span>
+          <el-button link type="primary" size="small" @click="handleLinkDoc(d)">关联</el-button>
+        </div>
+      </div>
+
+      <el-empty v-if="linkedDocTemplates.length === 0 && availableDocTemplates.length === 0" description="暂无可用文件模板，请联系管理员上传" :image-size="60" />
 
       <template #footer><el-button @click="showDocDialog = false">关闭</el-button></template>
     </el-dialog>
@@ -163,7 +155,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, getDocTemplates, uploadDocTemplate, deleteDocTemplate, type TemplateDetail, type DocTemplateItem } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem } from '@/api/template'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance, calculateDeadlines } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
@@ -172,7 +164,6 @@ import PropertyPanel from './designer/PropertyPanel.vue'
 import PresetEditor from './designer/PresetEditor.vue'
 import NodeListView from './designer/NodeListView.vue'
 import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
-import { UploadFilled } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -200,10 +191,9 @@ const pendingPresetData = ref<PresetFormData | null>(null)
 
 // ─── 文件模板 ───────────────────────────────────────────
 const showDocDialog = ref(false)
-const docTemplates = ref<DocTemplateItem[]>([])
+const linkedDocTemplates = ref<DocTemplateItem[]>([])
+const availableDocTemplates = ref<DocTemplateItem[]>([])
 const docVariables = ref<string[]>([])
-const uploadingDoc = ref(false)
-const docUploadRef = ref()  // el-upload ref
 
 /** 弹窗打开时刷新列表 */
 async function handleDocDialogOpen() {
@@ -216,7 +206,8 @@ async function loadDocTemplates() {
   if (!templateId) return
   try {
     const data = await getDocTemplates(templateId)
-    docTemplates.value = data.items
+    linkedDocTemplates.value = data.linked
+    availableDocTemplates.value = data.available
     docVariables.value = data.available_variables
   } catch {
     // 模板不存在时不报错
@@ -231,39 +222,27 @@ function currentTemplateId(): number | null {
   return Number.isNaN(n) ? null : n
 }
 
-/** 多文件选择 → 逐个上传 */
-async function handleDocFilesChange(uploadFile: any, uploadFiles: any[]) {
-  const templateId = currentTemplateId()
-  if (!templateId) return
-  uploadingDoc.value = true
-  let successCount = 0
-  let failCount = 0
-  for (const file of uploadFiles) {
-    if (!file?.raw) continue
-    try {
-      await uploadDocTemplate(templateId, file.raw)
-      successCount++
-    } catch (e: any) {
-      failCount++
-      console.warn('[文件模板] 上传失败:', file.name, e?.response?.data?.message || e)
-    }
-  }
-  uploadingDoc.value = false
-  if (successCount > 0) ElMessage.success(`成功上传 ${successCount} 个${failCount > 0 ? `，${failCount} 个失败` : ''}`)
-  else if (failCount > 0) ElMessage.error('全部上传失败')
-  // 清空 el-upload 已选文件列表以便再次选择
-  if (docUploadRef.value) docUploadRef.value.clearFiles()
-  await loadDocTemplates()
-}
-
-/** 删除文件模板 */
-async function handleDeleteDoc(row: DocTemplateItem) {
+/** 关联模板到当前流程 */
+async function handleLinkDoc(doc: DocTemplateItem) {
   const templateId = currentTemplateId()
   if (!templateId) return
   try {
-    await ElMessageBox.confirm(`确定删除文件模板「${row.name}」？`, '确认删除', { type: 'warning' })
-    await deleteDocTemplate(templateId, row.id)
-    ElMessage.success('已删除')
+    await linkDocTemplates(templateId, [doc.id])
+    ElMessage.success(`已关联「${doc.name}」`)
+    await loadDocTemplates()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '关联失败')
+  }
+}
+
+/** 取消关联 */
+async function handleUnlinkDoc(doc: DocTemplateItem) {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    await ElMessageBox.confirm(`确定移除「${doc.name}」？`, '取消关联', { type: 'warning' })
+    await unlinkDocTemplate(templateId, doc.id)
+    ElMessage.success('已移除')
     await loadDocTemplates()
   } catch {
     // 用户取消
@@ -274,7 +253,7 @@ async function handleDeleteDoc(row: DocTemplateItem) {
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1024 * 1024).toFixed(1) + ' MB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 /** 是否为发起项目模式（路由参数 mode=launch） */
@@ -768,6 +747,24 @@ async function handleLaunch() {
   .doc-var-hint { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; }
 }
 .doc-var-tags { display: flex; flex-wrap: wrap; gap: 6px; .doc-var-tag { font-family: monospace; font-size: 12px; } }
+
+/* 文件模板选择弹窗 */
+.doc-section {
+  margin-bottom: 16px;
+  &__title { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: var(--el-text-color-primary); }
+  &__hint { font-size: 12px; color: var(--el-text-color-secondary); font-weight: 400; margin-left: 8px; }
+}
+.doc-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px;
+  margin-bottom: 6px; transition: background .15s;
+  &:hover { background: var(--el-fill-color-light); }
+  &__info { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  &__name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  &__orig { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  &__size { font-size: 11px; color: var(--el-text-color-placeholder); white-space: nowrap; }
+}
+
 .doc-upload-row {
   display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
   .doc-upload-hint { font-size: 12px; color: var(--el-text-color-secondary); }

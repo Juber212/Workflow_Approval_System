@@ -132,7 +132,7 @@
           <h4 class="signature-section__title">个人签名</h4>
           <p class="signature-section__desc">上传透明底 PNG 签名图片（推荐 200×60px，≤500KB），审批通过时自动插入 PDF。</p>
           <div class="signature-preview" v-if="userInfoDetail?.has_signature">
-            <img :src="signaturePreviewUrl" alt="签名预览" class="signature-img" />
+            <img :src="signatureBlobUrl" alt="签名预览" class="signature-img" />
             <span class="signature-status">已上传</span>
           </div>
           <div class="signature-preview signature-preview--empty" v-else>
@@ -338,11 +338,28 @@ const userInfoDetail = ref<{
 } | null>(null)
 const uploadingSignature = ref(false)
 
-/** 签名预览 URL：通过后端 API 获取（自动查找用户真实签名文件路径） */
-const signaturePreviewUrl = computed(() => {
-  if (!userInfoDetail.value?.user_id) return ''
-  return `/api/v1/auth/users/${userInfoDetail.value.user_id}/signature-image?t=${Date.now()}`
-})
+/** 签名预览 blob URL：fetch 方式加载（绕过 img 标签无 Authorization 头的问题） */
+const signatureBlobUrl = ref('')
+
+async function loadSignatureBlob() {
+  // 清理旧 blob URL
+  if (signatureBlobUrl.value) {
+    URL.revokeObjectURL(signatureBlobUrl.value)
+    signatureBlobUrl.value = ''
+  }
+  const uid = userInfoDetail.value?.user_id
+  if (!uid || !userInfoDetail.value?.has_signature) return
+
+  try {
+    const token = localStorage.getItem('token')
+    const resp = await fetch(`/api/v1/auth/users/${uid}/signature-image`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    signatureBlobUrl.value = URL.createObjectURL(blob)
+  } catch { /* 静默失败，无签名时不用报错 */ }
+}
 
 async function refreshUserInfoDetail() {
   try {
@@ -363,7 +380,18 @@ async function refreshUserInfoDetail() {
   }
 }
 
-watch(showUserInfoDialog, async (val) => { if (val) await refreshUserInfoDetail() })
+watch(showUserInfoDialog, async (val) => {
+  if (val) {
+    await refreshUserInfoDetail()
+    await loadSignatureBlob()
+  } else {
+    // 弹窗关闭时清理 blob URL
+    if (signatureBlobUrl.value) {
+      URL.revokeObjectURL(signatureBlobUrl.value)
+      signatureBlobUrl.value = ''
+    }
+  }
+})
 
 /** Canvas 压缩签名图片到 400×120 范围内（高清存储，CSS 缩小后预览清晰），返回压缩后的 File
  *
@@ -375,6 +403,7 @@ function compressSignatureImage(file: File): Promise<File> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
+      URL.revokeObjectURL(img.src)  // 图片已加载，释放 Blob URL
       const maxW = 400, maxH = 120
       let w = img.width, h = img.height
 
@@ -412,7 +441,10 @@ function compressSignatureImage(file: File): Promise<File> {
         resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.png'), { type: 'image/png' }))
       }, 'image/png')
     }
-    img.onerror = () => reject(new Error('图片加载失败'))
+    img.onerror = () => {
+      URL.revokeObjectURL(img.src)
+      reject(new Error('图片加载失败'))
+    }
     img.src = URL.createObjectURL(file)
   })
 }
@@ -432,6 +464,7 @@ async function handleSignatureUpload(file: File): Promise<boolean> {
     }
     ElMessage.success('签名图片已上传')
     await refreshUserInfoDetail()
+    await loadSignatureBlob()  // 上传后刷新 blob 预览
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.message || '上传失败')
   } finally { uploadingSignature.value = false }
