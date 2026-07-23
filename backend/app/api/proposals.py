@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.proposal import ProposalCreateRequest
 from app.services import proposal_service
-from app.api.deps import get_current_active_user, CurrentUser, require_manager
+from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org
 
 router = APIRouter(prefix="/api/v1", tags=["方案"])
 
@@ -17,8 +17,9 @@ async def create_proposal(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """发起方案（仅所长）"""
+    """发起方案（仅所长，且只能为所属组织创建）"""
     require_manager(current_user)
+    require_same_org(current_user, body.organization_id)
     result = await proposal_service.create_proposal(db, body, current_user)
     await db.commit()
     return ApiResponse.ok(result, message="方案已发起")
