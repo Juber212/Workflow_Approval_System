@@ -45,7 +45,7 @@
         <div class="k">发起时间</div>
         <div class="v num">{{ formatTime(detail.initiated_at) }}</div>
       </div>
-      <div class="info-grid__item">
+      <div class="info-grid__item" v-if="!isProposal">
         <div class="k">节点进度</div>
         <div class="v">
           <span class="stat-num" style="font-size:18px">{{ detail.current_node_index }}</span>
@@ -56,7 +56,7 @@
       <div class="info-grid__item" v-if="detail.proposal_id">
         <div class="k">关联方案</div>
         <div class="v">
-          <router-link :to="`/flows/instances/${detail.proposal_id}`" class="proposal-link">
+          <router-link :to="`/proposals/instances/${detail.proposal_id}`" class="proposal-link">
             {{ detail.proposal_name || `方案 #${detail.proposal_id}` }}
           </router-link>
         </div>
@@ -77,7 +77,7 @@
     </div>
 
     <!-- 第三行：流程进度条 -->
-    <ProgressBar v-if="detail.nodes.length > 0" :nodes="detail.nodes" />
+    <ProgressBar v-if="!isProposal && detail.nodes.length > 0" :nodes="detail.nodes" />
   </div>
 </template>
 

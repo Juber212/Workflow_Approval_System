@@ -40,26 +40,35 @@ logger = logging.getLogger(__name__)
 
 
 # ─── 签名配置默认值 ────────────────────────────────────────────
-_SIG_DEFAULTS = {
-    "pdf_signature_x": 400,         # 签名起始 X 坐标（距左边）
-    "pdf_signature_y": 100,         # 签名 Y 坐标（距底部）
-    "pdf_signature_offset": 150,    # 多签名水平偏移量
-    "pdf_signature_page": -1,       # 签名页码，-1 = 最后一页
-    "pdf_signature_max_width": 100,   # 签名图片最大宽度（PDF 上最终尺寸）
-    "pdf_signature_max_height": 26,   # 签名图片最大高度（PDF 上最终尺寸）
-}
+_SIG_KEYS = [
+    "pdf_signature_x", "pdf_signature_y", "pdf_signature_offset",
+    "pdf_signature_page", "pdf_signature_max_width", "pdf_signature_max_height",
+]
+
+
+def _get_sig_default(key: str) -> int:
+    """从 settings 获取签名的默认值"""
+    mapping = {
+        "pdf_signature_x": settings.PDF_SIGNATURE_X,
+        "pdf_signature_y": settings.PDF_SIGNATURE_Y,
+        "pdf_signature_offset": settings.PDF_SIGNATURE_OFFSET,
+        "pdf_signature_page": settings.PDF_SIGNATURE_PAGE,
+        "pdf_signature_max_width": settings.PDF_SIGNATURE_MAX_WIDTH,
+        "pdf_signature_max_height": settings.PDF_SIGNATURE_MAX_HEIGHT,
+    }
+    return mapping.get(key, 0)
 
 
 async def _get_signature_configs(db: AsyncSession) -> dict:
-    """从 system_configs 表读取签名位置配置，缺失时使用默认值"""
-    keys = list(_SIG_DEFAULTS.keys())
+    """从 system_configs 表读取签名位置配置，缺失时使用 settings 默认值"""
     result = await db.execute(
-        select(SystemConfig).where(SystemConfig.config_key.in_(keys))
+        select(SystemConfig).where(SystemConfig.config_key.in_(_SIG_KEYS))
     )
     configs = {c.config_key: c.config_value for c in result.scalars().all()}
 
     parsed = {}
-    for key, default in _SIG_DEFAULTS.items():
+    for key in _SIG_KEYS:
+        default = _get_sig_default(key)
         val = configs.get(key)
         if val is not None:
             try:
@@ -170,6 +179,14 @@ async def apply_signatures_to_node_pdfs(
         except Exception as e:
             logger.warning(f"[签名] 文件 {file_record.id} 签名失败: {e}")
             continue
+
+    # 标记该节点所有 Signature 记录为已应用
+    if signed_count > 0:
+        await db.execute(
+            update(Signature)
+            .where(Signature.node_id == node_id, Signature.applied == False)
+            .values(applied=True)
+        )
 
     return signed_count
 

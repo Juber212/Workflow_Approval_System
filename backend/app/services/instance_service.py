@@ -20,7 +20,6 @@ from app.models import (
     Task, CheckRecord, Approval, Endorsement, File,
 )
 from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus, EndorsementStatus
-from app.services.file_service import ALLOWED_MIME_TYPES, MAX_FILE_SIZE
 from app.schemas.common import PaginatedData
 from app.schemas.instance import (
     CreateInstanceRequest,
@@ -110,6 +109,7 @@ async def create_instance(
         description=request.description,
         template_id=request.template_id,
         template_name=tpl.name,
+        template_type=tpl.type,  # 快照模板类型，用于存储分目录等
         organization_id=tpl.organization_id,
         initiator_id=current_user.id,
         priority=priority,
@@ -219,7 +219,8 @@ async def create_instance(
                     folder_names.add(name)
 
     if folder_names:
-        instance_dir = os.path.join(settings.STORAGE_ROOT, "archive", instance.name)
+        archive_subdir = settings.get_archive_dir(instance.template_type or "project")
+        instance_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, instance.name)
         for fname in folder_names:
             os.makedirs(os.path.join(instance_dir, fname), exist_ok=True)
 
@@ -397,6 +398,19 @@ async def list_instances(
     # 单次查询所有实例的当前负责人
     assignee_map = await _batch_get_current_assignees(db, instance_ids)
 
+    # 批量查询关联方案名称（避免 N+1）
+    proposal_ids = list(set(
+        row[0].proposal_id for row in rows if row[0].proposal_id
+    ))
+    proposal_name_map: dict[int, str] = {}
+    if proposal_ids:
+        prop_result = await db.execute(
+            select(FlowInstance.id, FlowInstance.name).where(
+                FlowInstance.id.in_(proposal_ids)
+            )
+        )
+        proposal_name_map = {pid: pname for pid, pname in prop_result.all()}
+
     # ========== 组装结果 ==========
     items: list[InstanceListItem] = []
     for row in rows:
@@ -419,6 +433,7 @@ async def list_instances(
             current_node_index=node_stats["processed"],
             total_nodes=node_stats["total"],
             current_assignee_name=assignee_map.get(instance.id),
+            proposal_name=proposal_name_map.get(instance.proposal_id) if instance.proposal_id else None,
             initiated_at=instance.initiated_at,
             completed_at=instance.completed_at,
             terminated_at=instance.terminated_at,
@@ -443,7 +458,9 @@ async def _batch_get_node_stats(db: AsyncSession, instance_ids: list[int]) -> di
             func.if_(func.lower(InstanceNode.status) == "finished", 1, 0)
         ).label("processed"),
     ).where(
-        InstanceNode.instance_id.in_(instance_ids)
+        InstanceNode.instance_id.in_(instance_ids),
+        InstanceNode.is_start == False,  # 排除开始节点
+        InstanceNode.is_end == False,    # 排除结束节点
     ).group_by(InstanceNode.instance_id)
 
     result = await db.execute(stmt)
@@ -538,10 +555,11 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         for uid, uname in users_result:
             user_name_map[uid] = uname
 
-    # ========== 3. 节点统计 ==========
-    total_nodes = len(node_models)
+    # ========== 3. 节点统计（排除开始/结束节点） ==========
+    work_nodes = [n for n in node_models if not n.is_start and not n.is_end]
+    total_nodes = len(work_nodes)
     processed_count = sum(
-        1 for n in node_models
+        1 for n in work_nodes
         if (n.status or "").lower() == "finished"
     )
 
@@ -569,6 +587,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
                     uploader_id=f.uploader_id,
                     uploader_name=u_name or "",
                     upload_type=(f.upload_type or "normal").lower(),
+                    folder_name=f.folder_name,  # 所属文件夹名称
                     round=f.round,
                     created_at=f.created_at,
                 )
@@ -735,14 +754,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
 
     # ========== 7. 关联方案名称 + 模板类型 ==========
     proposal_name: str | None = None
-    template_type = "project"
-    # 查询模板类型（用于前端面包屑/标题区分项目/方案）
-    tpl_result = await db.execute(
-        select(FlowTemplate.type).where(FlowTemplate.id == instance.template_id)
-    )
-    tpl_type = tpl_result.scalar_one_or_none()
-    if tpl_type:
-        template_type = tpl_type
+    template_type = instance.template_type or "project"  # 使用实例快照值
 
     if instance.proposal_id:
         prop = (await db.execute(
@@ -1238,12 +1250,13 @@ async def supplement_files(
     # ========== 5. 遍历上传文件 ==========
     file_records: list[File] = []
     written_files: list[str] = []  # 跟踪已写入的物理文件路径（DB失败时用于清理）
-    archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", instance.name)
+    archive_subdir = settings.get_archive_dir(instance.template_type or "project")
+    archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, instance.name)
     os.makedirs(archive_dir, exist_ok=True)
 
     for upload_file_obj in files:
         # 5a. 校验文件类型
-        if upload_file_obj.content_type not in ALLOWED_MIME_TYPES:
+        if upload_file_obj.content_type not in settings.allowed_mime_types_list:
             raise AppException(
                 ErrorCode.FILE_TYPE_UNSUPPORTED,
                 f"不支持的文件类型: {upload_file_obj.content_type}（{upload_file_obj.filename}）",
@@ -1251,7 +1264,7 @@ async def supplement_files(
 
         # 5b. 校验文件大小
         contents = await upload_file_obj.read()
-        if len(contents) > MAX_FILE_SIZE:
+        if len(contents) > settings.max_file_size_bytes:
             raise AppException(
                 ErrorCode.FILE_TOO_LARGE,
                 f"文件大小超过限制（最大 50MB）: {upload_file_obj.filename}",
@@ -1275,7 +1288,7 @@ async def supplement_files(
             upload_type=UploadType.SUPPLEMENT,
             original_name=upload_file_obj.filename or "unknown",
             stored_name=stored_name,
-            file_path=os.path.join("archive", instance.name, stored_name),
+            file_path=os.path.join(archive_subdir, instance.name, stored_name),
             file_size=len(contents),
             mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
         )
@@ -1323,6 +1336,7 @@ async def supplement_files(
                 uploader_id=fr.uploader_id,
                 uploader_name=user_name,
                 upload_type=UploadType.SUPPLEMENT,
+                folder_name=fr.folder_name,  # 所属文件夹名称
                 round=fr.round,
                 created_at=fr.created_at,
             )

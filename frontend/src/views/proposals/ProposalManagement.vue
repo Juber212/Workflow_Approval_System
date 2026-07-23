@@ -81,7 +81,7 @@
 
 <script setup lang="ts">
 /** 方案管理全局入口 —— 组织卡片 + 全部方案（方案库浏览，发起入口在组织内部页面） */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
@@ -120,6 +120,10 @@ const statusFilters = [
 onMounted(async () => {
   setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '方案管理' }])
   await Promise.all([fetchOrgs(), fetchList(), fetchStatusCounts()])
+})
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
 })
 
 /** 合并组织列表 + 方案统计，确保所有组织卡片都显示（无方案也显示） */
@@ -207,7 +211,7 @@ function handleSearch() {
 }
 
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
-function goDetail(id: number) { router.push(`/flows/instances/${id}`) }
+function goDetail(id: number) { router.push(`/proposals/instances/${id}`) }
 
 /** 管理员永久删除已终止方案 */
 async function handlePermanentDelete(row: ProposalListItem) {

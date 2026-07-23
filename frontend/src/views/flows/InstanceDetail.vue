@@ -14,21 +14,77 @@
         @terminate="handleTerminate"
       />
 
-      <!-- 流程节点卡片列表 -->
-      <div class="section-header">
-        <h3 class="section-title">流程节点</h3>
-        <el-button text size="small" @click="toggleExpandAll">{{ expandLabel }}</el-button>
-      </div>
-      <NodeCard
-        v-for="node in detail.nodes"
-        :key="node.id"
-        :node="node"
-        :is-initiator="isInitiator"
-        :instance-status="detail.status"
-        :force-expand="expandAll"
-        @change-personnel="handleChangePersonnel"
-        @supplement="handleSupplement"
-      />
+      <!-- ===== 方案：卡片平铺布局 ===== -->
+      <template v-if="isProposal">
+        <div class="card">
+          <div class="card__header">
+            <h3 class="card__title">方案内容</h3>
+          </div>
+          <div class="card__body">
+            <div v-for="node in displayNodes" :key="node.id" class="proposal-node">
+              <!-- 文件（按文件夹分组） -->
+              <div class="proposal-block">
+                <template v-if="getNodeFolderGroups(node).length > 0">
+                  <div v-for="group in getNodeFolderGroups(node)" :key="group.name" class="proposal-folder">
+                    <div class="proposal-folder__name">📁 {{ group.name }}（{{ group.files.length }}）</div>
+                    <div v-if="group.files.length === 0" class="proposal-empty">暂未上传文件</div>
+                    <div v-else class="proposal-file-list">
+                      <div v-for="f in group.files" :key="f.id" class="proposal-file-row">
+                        <el-icon :size="14"><Document /></el-icon>
+                        <span class="proposal-file-name" :title="f.original_name">{{ f.original_name }}</span>
+                        <span v-if="f.round > 1" class="proposal-file-round">第{{ f.round }}轮</span>
+                        <span class="proposal-file-meta">{{ f.uploader_name }} · {{ fmtFileSize(f.file_size) }}</span>
+                        <el-button text type="primary" size="small" @click="handlePreview(f.id)">查看</el-button>
+                        <el-button text type="primary" size="small" @click="handleDownload(f.id)">下载</el-button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="proposal-empty">暂未上传文件</div>
+              </div>
+
+              <!-- 审批记录 -->
+              <div class="proposal-block">
+                <div class="proposal-block__title">📝 审批记录（{{ node.approvals.length }}）</div>
+                <div v-if="node.approvals.length === 0" class="proposal-empty">暂无</div>
+                <div v-else class="proposal-record-list">
+                  <div
+                    v-for="a in node.approvals"
+                    :key="a.id"
+                    class="proposal-record"
+                    :class="'proposal-record--' + (a.status || '').toLowerCase()"
+                  >
+                    <span class="proposal-record-user">{{ a.approver_name }}</span>
+                    <span class="proposal-record-status" :class="a.status === 'approved' ? 'text-success' : 'text-danger'">
+                      {{ a.status === 'approved' ? '已通过' : a.status === 'rejected' ? '已驳回' : a.status }}
+                    </span>
+                    <span v-if="a.round > 1" class="proposal-record-round">#{{ a.round }}</span>
+                    <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+                    <span v-if="a.opinion" class="proposal-record-opinion">「{{ a.opinion }}」</span>
+                    <span v-if="a.decided_at" class="proposal-record-time">{{ fmtTime(a.decided_at) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div class="section-header">
+          <h3 class="section-title">流程节点</h3>
+          <el-button text size="small" @click="toggleExpandAll">{{ expandLabel }}</el-button>
+        </div>
+        <NodeCard
+          v-for="node in displayNodes"
+          :key="node.id"
+          :node="node"
+          :is-initiator="isInitiator"
+          :instance-status="detail.status"
+          :force-expand="expandAll"
+          @change-personnel="handleChangePersonnel"
+          @supplement="handleSupplement"
+        />
+      </template>
 
       <!-- 实例补充说明 -->
       <div class="card" v-if="detail.description">
@@ -94,9 +150,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getInstanceDetail, type InstanceDetailResponse } from '@/api/instance'
+import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief } from '@/api/instance'
+import { previewFile, downloadFile } from '@/api/task'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { Document } from '@element-plus/icons-vue'
 import InstanceInfo from './components/InstanceInfo.vue'
 import NodeCard from './components/NodeCard.vue'
 import OperationTimeline from './components/OperationTimeline.vue'
@@ -104,7 +162,6 @@ import TerminateDialog from './components/TerminateDialog.vue'
 import PriorityEditDialog from './components/PriorityEditDialog.vue'
 import ChangePersonnelDialog from './components/ChangePersonnelDialog.vue'
 import SupplementFileDialog from './components/SupplementFileDialog.vue'
-import type { DetailNodeInfo } from '@/api/instance'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -134,6 +191,14 @@ const isInitiator = computed(() => {
 const isProposal = computed(() => detail.value?.template_type === 'proposal')
 /** 类型中文标签 */
 const typeLabel = computed(() => isProposal.value ? '方案' : '项目')
+/** 显示的节点列表：方案排除开始/结束节点，项目显示全部 */
+const displayNodes = computed(() => {
+  if (!detail.value) return []
+  if (isProposal.value) {
+    return detail.value.nodes.filter(n => !n.is_start && !n.is_end)
+  }
+  return detail.value.nodes
+})
 
 // ========== 生命周期 ==========
 onMounted(() => {
@@ -148,6 +213,10 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getInstanceDetail(id)
+    // 方案详情默认全部展开
+    if (isProposal.value) {
+      expandAll.value = true
+    }
     // 面包屑：根据模板类型区分项目/方案
     if (detail.value) {
       if (isProposal.value) {
@@ -229,6 +298,55 @@ function handleChangePersonnel(nodeId: number) {
 function handlePersonnelChanged() {
   fetchDetail()
 }
+
+// ========== 方案平铺视图辅助 ==========
+/** 获取节点的普通文件（排除补交） */
+function getNodeNormalFiles(node: DetailNodeInfo): NodeFileBrief[] {
+  return node.files.filter(f => (f.upload_type || '').toLowerCase() !== 'supplement')
+}
+
+/** 按文件夹分组节点文件 */
+function getNodeFolderGroups(node: DetailNodeInfo): { name: string; files: NodeFileBrief[] }[] {
+  const normalFiles = getNodeNormalFiles(node)
+  if (normalFiles.length === 0) return []
+  const groups: { name: string; files: NodeFileBrief[] }[] = []
+  const seen = new Map<string, number>()
+  for (const f of normalFiles) {
+    const key = f.folder_name || '方案'
+    if (seen.has(key)) {
+      groups[seen.get(key)!].files.push(f)
+    } else {
+      seen.set(key, groups.length)
+      groups.push({ name: key, files: [f] })
+    }
+  }
+  groups.sort((a, b) => {
+    if (a.name === '方案') return 1
+    if (b.name === '方案') return -1
+    return 0
+  })
+  return groups
+}
+
+function fmtFileSize(bytes: number | null): string {
+  if (bytes == null) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function fmtTime(val: string | null): string {
+  if (!val) return ''
+  return val.replace('T', ' ').substring(0, 16)
+}
+
+function handlePreview(fileId: number) {
+  previewFile(fileId)
+}
+
+function handleDownload(fileId: number) {
+  downloadFile(fileId)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -256,5 +374,128 @@ function handlePersonnelChanged() {
   line-height: 1.7;
   margin: 0;
   white-space: pre-wrap;
+}
+
+// ========== 方案平铺布局 ==========
+.proposal-node {
+  margin-bottom: 24px;
+
+  &__name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--el-border-color-light);
+  }
+}
+
+.proposal-block {
+  margin-bottom: 14px;
+
+  &__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 6px;
+  }
+}
+
+.proposal-folder {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+
+  &__name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 6px;
+  }
+}
+
+.proposal-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.proposal-file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+
+  &:hover { background: var(--el-fill-color-light); }
+}
+
+.proposal-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.proposal-file-meta {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.proposal-file-round {
+  font-size: 11px;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  padding: 0 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.proposal-empty {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  padding: 8px 0;
+}
+
+.proposal-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-record {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  border-left: 3px solid var(--el-border-color);
+
+  &--approved { border-left-color: var(--el-color-success); background: var(--el-color-success-light-9); }
+  &--rejected { border-left-color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+
+  &-user { font-weight: 500; color: var(--el-text-color-primary); }
+  &-status {
+    font-size: 12px;
+    font-weight: 500;
+    &.text-success { color: var(--el-color-success); }
+    &.text-danger { color: var(--el-color-danger); }
+  }
+  &-round {
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+    background: var(--el-fill-color);
+    padding: 0 5px;
+    border-radius: 999px;
+  }
+  &-opinion { font-size: 12px; color: var(--el-text-color-secondary); }
+  &-time { font-size: 11px; color: var(--el-text-color-placeholder); margin-left: auto; }
 }
 </style>

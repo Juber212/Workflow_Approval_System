@@ -12,21 +12,6 @@ from app.core.error_codes import ErrorCode
 from app.models import File, Task, InstanceNode, FlowInstance
 from app.models.enums import TaskStatus, UploadType
 
-# 允许的文件类型
-ALLOWED_MIME_TYPES = {
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/webp",
-}
-
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-
 
 async def upload_file(
     db: AsyncSession,
@@ -46,12 +31,12 @@ async def upload_file(
         raise AppException(ErrorCode.FORBIDDEN, "当前状态不可上传文件")
 
     # 校验文件类型
-    if upload_file_obj.content_type not in ALLOWED_MIME_TYPES:
+    if upload_file_obj.content_type not in settings.allowed_mime_types_list:
         raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {upload_file_obj.content_type}")
 
     # 读取并校验大小
     contents = await upload_file_obj.read()
-    if len(contents) > MAX_FILE_SIZE:
+    if len(contents) > settings.max_file_size_bytes:
         raise AppException(ErrorCode.BAD_REQUEST, "文件大小不能超过 50MB")
 
     # 获取实例名称和节点信息
@@ -62,13 +47,14 @@ async def upload_file(
     ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
-    # 创建存储目录（有文件夹时存入子目录，否则存入实例根目录）
+    # 创建存储目录（根据模板类型分目录，有文件夹时存入子目录）
+    archive_subdir = settings.get_archive_dir(inst.template_type or "project")
     if folder_name:
-        archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", inst.name, folder_name)
-        file_path_rel = os.path.join("archive", inst.name, folder_name, stored_name)
+        archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name, folder_name)
+        file_path_rel = os.path.join(archive_subdir, inst.name, folder_name, stored_name)
     else:
-        archive_dir = os.path.join(settings.STORAGE_ROOT, "archive", inst.name)
-        file_path_rel = os.path.join("archive", inst.name, stored_name)
+        archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name)
+        file_path_rel = os.path.join(archive_subdir, inst.name, stored_name)
     os.makedirs(archive_dir, exist_ok=True)
 
     # 写入物理文件
@@ -78,7 +64,7 @@ async def upload_file(
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    # 创建 File 记录
+    # 创建 File 记录（失败时清理物理文件，防止孤儿文件残留）
     file_record = File(
         instance_id=task.instance_id,
         node_id=task.node_id,
@@ -93,8 +79,14 @@ async def upload_file(
         file_size=len(contents),
         mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
     )
-    db.add(file_record)
-    await db.flush()
+    try:
+        db.add(file_record)
+        await db.flush()
+    except Exception:
+        # DB 写入失败，清理已写入的物理文件
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     return {
         "id": file_record.id,

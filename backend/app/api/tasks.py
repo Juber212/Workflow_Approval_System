@@ -17,7 +17,7 @@ from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
 )
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog, Signature, DocumentTemplate, FlowInstance
+from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog, Signature, DocumentTemplate, FlowInstance, TemplateDocumentLink
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
 from sqlalchemy import select
 from urllib.parse import quote
@@ -358,6 +358,14 @@ async def download_file(
     if f is None:
         raise AppException(ErrorCode.NOT_FOUND, "文件不存在")
 
+    # 归属校验：检查文件所属实例的组织是否与当前用户组织一致（管理员除外）
+    if "system_admin" not in current_user.roles and f.instance_id:
+        inst = (await db.execute(
+            select(FlowInstance).where(FlowInstance.id == f.instance_id)
+        )).scalar_one_or_none()
+        if inst is None or inst.organization_id != current_user.organization_id:
+            raise AppException(ErrorCode.FORBIDDEN, "无权访问此文件")
+
     # 拼接完整路径
     full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
     if not os.path.exists(full_path):
@@ -392,7 +400,7 @@ async def list_task_document_templates(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取任务可用的文件模板列表 —— 根据 Task 所属实例的模板 ID 查找"""
+    """获取任务可用的文件模板列表 —— 通过中间表查找流程模板关联的文件模板"""
     from app.schemas.template import DocTemplateItem, DocTemplateListResponse
 
     # 校验 Task 存在且当前用户有权访问
@@ -402,18 +410,19 @@ async def list_task_document_templates(
     if task.assignee_id != current_user.id:
         raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可查看")
 
-    # 通过实例获取 template_id
+    # 通过实例获取 template_id，再通过中间表查关联的文档模板
     instance = (await db.execute(
         select(FlowInstance).where(FlowInstance.id == task.instance_id)
     )).scalar_one_or_none()
     if instance is None:
         raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
 
-    # 查询该模板的所有文件模板
     docs = (await db.execute(
-        select(DocumentTemplate)
-        .where(DocumentTemplate.template_id == instance.template_id)
-        .order_by(DocumentTemplate.created_at.desc())
+        select(DocumentTemplate).join(
+            TemplateDocumentLink, TemplateDocumentLink.document_id == DocumentTemplate.id
+        ).where(
+            TemplateDocumentLink.template_id == instance.template_id,
+        ).order_by(DocumentTemplate.created_at.desc())
     )).scalars().all()
 
     items = [
@@ -456,12 +465,21 @@ async def download_document_template(
     if doc is None:
         raise AppException(ErrorCode.NOT_FOUND, "文件模板不存在")
 
-    # 3. 查模板是否属于该 Task 对应的流程模板
+    # 3. 查模板是否通过中间表关联到此 Task 对应的流程模板
     instance = (await db.execute(
         select(FlowInstance).where(FlowInstance.id == task.instance_id)
     )).scalar_one_or_none()
-    if instance is None or instance.template_id != doc.template_id:
-        raise AppException(ErrorCode.FORBIDDEN, "该文件模板不属于此项目")
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+
+    link = (await db.execute(
+        select(TemplateDocumentLink).where(
+            TemplateDocumentLink.template_id == instance.template_id,
+            TemplateDocumentLink.document_id == doc_id,
+        )
+    )).scalar_one_or_none()
+    if link is None:
+        raise AppException(ErrorCode.FORBIDDEN, "该文件模板未关联到此项目")
 
     # 4. 解析变量 → 实际值
     replacements = await resolve_template_variables(db, doc_id, task_id)

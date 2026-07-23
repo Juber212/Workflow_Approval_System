@@ -23,10 +23,10 @@
     <div class="view-type-bar">
       <el-radio-group v-model="viewType" size="default" @change="handleViewTypeChange">
         <el-radio-button value="project">
-          项目<span class="view-badge" v-if="notifyStore.projectPending > 0">{{ notifyStore.projectPending }}</span>
+          项目<i class="view-dot" v-if="notifyStore.projectPending > 0"></i>
         </el-radio-button>
         <el-radio-button value="proposal">
-          方案<span class="view-badge" v-if="notifyStore.proposalPending > 0">{{ notifyStore.proposalPending }}</span>
+          方案<i class="view-dot" v-if="notifyStore.proposalPending > 0"></i>
         </el-radio-button>
       </el-radio-group>
     </div>
@@ -236,7 +236,7 @@
 
       <!-- 我发起的方案 -->
       <template v-if="propActiveTab === 'initiated'">
-        <el-table :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
+        <el-table :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="140" />
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
@@ -246,7 +246,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push(`/proposals/instances/${row.id}`)">查看详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -454,13 +454,21 @@ function approvalStatusLabel(s: string) { const m: Record<string, string> = { pe
   background: var(--el-color-danger); color: #fff; font-size: 11px; padding: 0 5px; margin-left: 4px;
 }
 
-/* 项目/方案 radio-button 红点数字徽章 */
-.view-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; border-radius: 9px;
-  background: var(--el-color-danger); color: #fff; font-size: 11px; font-weight: 600;
-  padding: 0 5px; margin-left: 4px;
-  vertical-align: middle;
+/* radio-button 内部作为红点定位基准 */
+.view-type-bar :deep(.el-radio-button__inner) {
+  position: relative;
+}
+
+/* 按钮框内右上角小红点 */
+.view-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--el-color-danger);
+  font-style: normal;
 }
 
 .list-toolbar { display: flex; gap: 12px; margin-bottom: 16px; }

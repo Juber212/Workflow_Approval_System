@@ -1,7 +1,24 @@
 <template>
   <div class="doc-tpl-admin" v-loading="loading">
+    <!-- 上传区域 -->
+    <div class="upload-bar">
+      <el-select v-model="uploadOrgId" placeholder="选择组织" style="width:200px">
+        <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
+      </el-select>
+      <el-upload
+        :show-file-list="false"
+        :before-upload="handleUpload"
+        accept=".doc,.docx,.xlsx"
+        :disabled="!uploadOrgId"
+        style="margin-left:12px;display:inline-block"
+      >
+        <el-button type="primary" :disabled="!uploadOrgId">上传文件模板</el-button>
+      </el-upload>
+      <span style="font-size:12px;color:var(--el-text-color-secondary);margin-left:8px">支持 .doc / .docx / .xlsx，≤10MB</span>
+    </div>
+
     <!-- 筛选栏 -->
-    <div class="filter-bar">
+    <div class="filter-bar" style="margin-top:16px">
       <el-select v-model="filterOrgId" placeholder="按组织筛选" clearable @change="handleFilter" style="width:200px">
         <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
       </el-select>
@@ -13,7 +30,6 @@
 
     <!-- 表格 -->
     <el-table :data="list" stripe class="doc-table" style="margin-top:16px">
-      <el-table-column prop="template_name" label="所属模板" min-width="150" />
       <el-table-column prop="organization_name" label="所属组织" min-width="120" />
       <el-table-column prop="name" label="模板名称" min-width="160" />
       <el-table-column prop="original_name" label="原始文件名" min-width="180" />
@@ -70,7 +86,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import {
-  getAdminDocTemplates, deleteAdminDocTemplate,
+  getAdminDocTemplates, deleteAdminDocTemplate, adminUploadDocTemplate,
   getAdminOrganizations, type AdminDocTemplateItem,
 } from '@/api/template'
 
@@ -83,6 +99,7 @@ const pageSize = ref(30)
 const orgs = ref<{ id: number; name: string }[]>([])
 const filterOrgId = ref<number | ''>('')
 const filterKeyword = ref('')
+const uploadOrgId = ref<number | ''>('')
 
 const variables = [
   '{{项目名称}}', '{{项目描述}}', '{{合同号}}', '{{产品型号}}',
@@ -120,6 +137,21 @@ async function fetchOrgs() {
 function handleFilter() {
   page.value = 1
   fetchList()
+}
+
+async function handleUpload(file: File) {
+  if (!uploadOrgId.value) return false
+  loading.value = true
+  try {
+    await adminUploadDocTemplate(file, uploadOrgId.value as number)
+    ElMessage.success(`"${file.name}" 上传成功`)
+    fetchList()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '上传失败')
+  } finally {
+    loading.value = false
+  }
+  return false  // 阻止 el-upload 默认行为
 }
 
 async function handleDelete(row: AdminDocTemplateItem) {

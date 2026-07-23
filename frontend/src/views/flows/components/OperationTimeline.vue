@@ -44,8 +44,8 @@ const props = defineProps<{
   isProposal?: boolean  // 是否为方案实例，用于区分操作类型文案
 }>()
 
-/** 默认折叠 */
-const collapsed = ref(true)
+/** 默认折叠（方案默认展开） */
+const collapsed = ref(!props.isProposal)
 
 /** 操作类型中文映射 —— 根据项目/方案动态切换 */
 function logTypeLabel(type: string): string {

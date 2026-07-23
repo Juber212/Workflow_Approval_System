@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { searchUsers, type UserSearchItem } from '@/api/admin'
 import { useUserStore } from '@/stores/user'
 
@@ -146,6 +146,10 @@ async function handleSearch(keyword: string) {
     }
   }, 300)
 }
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
 </script>
 
 <style lang="scss" scoped>

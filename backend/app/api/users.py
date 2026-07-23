@@ -116,12 +116,12 @@ async def search_users(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """用户搜索 —— 支持三种模式：
+    """用户搜索 —— 仅所长和管理员可使用"""
 
-    1. 仅 keyword → 全局搜索（现有行为）
-    2. 仅 organization_id → 返回该组织全部活跃用户
-    3. keyword + organization_id → 在该组织内搜索
-    """
+    # 权限校验：仅所长和管理员
+    if "system_admin" not in current_user.roles and "manager" not in current_user.roles:
+        raise AppException(ErrorCode.FORBIDDEN, "无权限搜索用户")
+
     from sqlalchemy import select as sql_select, or_ as sql_or
     from app.models import User, Organization
 
@@ -163,7 +163,9 @@ async def get_role_options(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取角色下拉选项（所有角色）"""
+    """获取角色下拉选项（仅管理员）"""
+    require_admin(current_user)
+
     from sqlalchemy import select as sql_select
     from app.models import Role
 

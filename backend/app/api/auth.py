@@ -187,7 +187,7 @@ async def upload_signature(
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
     # 创建存储目录（使用配置中的 STORAGE_ROOT）
-    upload_dir = os.path.join(settings.STORAGE_ROOT, "signatures")
+    upload_dir = os.path.join(settings.STORAGE_ROOT, settings.STORAGE_SIGNATURES_DIR)
     os.makedirs(upload_dir, exist_ok=True)
 
     # 删除旧签名文件（如果存在）
@@ -248,6 +248,7 @@ async def upload_signature(
 @router.get("/users/{user_id}/signature-image")
 async def get_signature_image(
     user_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取用户签名图片 —— 返回文件流，供前端 img 标签直接使用"""

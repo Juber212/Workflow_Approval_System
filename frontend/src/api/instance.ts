@@ -81,6 +81,7 @@ export interface InstanceListItem {
   current_node_index: number
   total_nodes: number
   current_assignee_name: string | null
+  proposal_name: string | null
   initiated_at: string | null
   completed_at: string | null
   terminated_at: string | null

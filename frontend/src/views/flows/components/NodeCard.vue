@@ -61,7 +61,7 @@
           <div class="k">审批人 / 策略</div>
           <div class="v">{{ approverNames }} · {{ strategyLabel }}</div>
         </div>
-        <div class="info-grid__item">
+        <div class="info-grid__item" v-if="node.endorser_id">
           <div class="k">批准人</div>
           <div class="v">{{ endorserName }}</div>
         </div>
@@ -82,22 +82,20 @@
 
       <!-- ===== 三栏布局：文件 / 校验 / 审批（非开始/结束节点） ===== -->
       <div v-if="!node.is_start && !node.is_end" class="node-columns">
-        <!-- 文件栏（40%）—— 支持文件夹分组展示 -->
+        <!-- 文件栏 —— 支持文件夹分组展示 -->
         <div class="node-col">
           <!-- 有文件夹配置：按文件夹分组 -->
           <template v-if="hasFolderConfig">
             <div v-for="group in folderFileGroups" :key="group.name" class="folder-file-group">
               <div class="node-col__title">📁 {{ group.name }}（{{ group.files.length }}）</div>
-              <div v-if="group.files.length === 0" class="node-col__empty">暂无</div>
+              <div v-if="group.files.length === 0" class="node-col__empty">暂未上传文件</div>
               <div v-else class="file-list">
-                <div v-for="f in group.files" :key="f.id" class="file-item">
-                  <div class="file-item__main">
-                    <el-icon :size="14"><Document /></el-icon>
-                    <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
-                    <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
-                  </div>
-                  <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</div>
-                  <div class="file-item__actions">
+                <div v-for="f in group.files" :key="f.id" class="file-row">
+                  <el-icon :size="14"><Document /></el-icon>
+                  <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+                  <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
+                  <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
+                  <div class="file-actions">
                     <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                     <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                   </div>
@@ -108,16 +106,14 @@
           <!-- 无文件夹配置：原有平面展示 -->
           <template v-else>
           <div class="node-col__title">📁 文件（{{ normalFiles.length }}）</div>
-          <div v-if="normalFiles.length === 0" class="node-col__empty">暂无</div>
+          <div v-if="normalFiles.length === 0" class="node-col__empty">暂未上传文件</div>
           <div v-else class="file-list">
-            <div v-for="f in normalFiles" :key="f.id" class="file-item">
-              <div class="file-item__main">
-                <el-icon :size="14"><Document /></el-icon>
-                <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
-                <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
-              </div>
-              <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</div>
-              <div class="file-item__actions">
+            <div v-for="f in normalFiles" :key="f.id" class="file-row">
+              <el-icon :size="14"><Document /></el-icon>
+              <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+              <span v-if="f.round > 1" class="file-round">第{{ f.round }}轮</span>
+              <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
+              <div class="file-actions">
                 <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                 <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
               </div>
@@ -128,14 +124,12 @@
           <template v-if="supplementFiles.length > 0">
             <div class="node-col__title node-col__title--supplement">📎 补交文件（{{ supplementFiles.length }}）</div>
             <div class="file-list">
-              <div v-for="f in supplementFiles" :key="f.id" class="file-item file-item--supplement">
-                <div class="file-item__main">
-                  <el-icon :size="14"><Document /></el-icon>
-                  <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
-                  <el-tag size="small" type="warning" effect="dark">补交</el-tag>
-                </div>
-                <div class="file-item__meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }} · {{ formatTime(f.created_at) }}</div>
-                <div class="file-item__actions">
+              <div v-for="f in supplementFiles" :key="f.id" class="file-row file-row--supplement">
+                <el-icon :size="14"><Document /></el-icon>
+                <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
+                <el-tag size="small" type="warning" effect="dark">补交</el-tag>
+                <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }} · {{ formatTime(f.created_at) }}</span>
+                <div class="file-actions">
                   <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                   <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                 </div>
@@ -144,7 +138,7 @@
           </template>
         </div>
 
-        <!-- 校验栏（30%） -->
+        <!-- 校验栏 -->
         <div class="node-col">
           <div class="node-col__title">✓ 校验记录（{{ node.checks.length }}）</div>
           <div v-if="node.checks.length === 0" class="node-col__empty">暂无</div>
@@ -166,7 +160,7 @@
           </div>
         </div>
 
-        <!-- 审批栏（30%） -->
+        <!-- 审批栏 -->
         <div class="node-col">
           <div class="node-col__title">📝 审批记录（{{ node.approvals.length }}）</div>
           <div v-if="node.approvals.length === 0" class="node-col__empty">暂无</div>
@@ -187,28 +181,27 @@
               <div class="record-item__time" v-if="a.decided_at">{{ formatTime(a.decided_at) }}</div>
             </div>
           </div>
-        </div>
-
-        <!-- 批准栏（仅难度4时显示） -->
-        <div class="node-col" v-if="node.endorsements && node.endorsements.length > 0">
-          <div class="node-col__title">🔏 批准记录（{{ node.endorsements.length }}）</div>
-          <div class="record-list">
-            <div
-              v-for="e in node.endorsements"
-              :key="e.id"
-              class="record-item"
-              :class="'record--' + (e.status || '').toLowerCase()"
-            >
-              <div class="record-item__main">
-                <span class="record-user">{{ e.endorser_name }}</span>
-                <span class="record-status" :class="approvalStatusClass(e.status)">{{ endorsementStatusLabel(e.status) }}</span>
-                <span class="record-round" v-if="e.round > 1">#{{ e.round }}</span>
-                <el-tag v-if="e.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+          <!-- 批准记录（难度4，审批子区块） -->
+          <template v-if="node.endorser_id && node.endorsements && node.endorsements.length > 0">
+            <div class="node-col__title node-col__title--sub">🔏 批准记录（{{ node.endorsements.length }}）</div>
+            <div class="record-list">
+              <div
+                v-for="e in node.endorsements"
+                :key="e.id"
+                class="record-item"
+                :class="'record--' + (e.status || '').toLowerCase()"
+              >
+                <div class="record-item__main">
+                  <span class="record-user">{{ e.endorser_name }}</span>
+                  <span class="record-status" :class="approvalStatusClass(e.status)">{{ endorsementStatusLabel(e.status) }}</span>
+                  <span class="record-round" v-if="e.round > 1">#{{ e.round }}</span>
+                  <el-tag v-if="e.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
+                </div>
+                <div v-if="e.opinion" class="record-item__opinion">「{{ e.opinion }}」</div>
+                <div class="record-item__time" v-if="e.decided_at">{{ formatTime(e.decided_at) }}</div>
               </div>
-              <div v-if="e.opinion" class="record-item__opinion">「{{ e.opinion }}」</div>
-              <div class="record-item__time" v-if="e.decided_at">{{ formatTime(e.decided_at) }}</div>
             </div>
-          </div>
+          </template>
         </div>
       </div>
 
@@ -408,8 +401,11 @@ const folderFileGroups = computed(() => {
   })
   return groups
 })
+/** 是否有文件夹分组展示：有文件夹配置 或 文件已按文件夹分类 */
 const hasFolderConfig = computed(() => {
-  return props.node.file_folders && Array.isArray(props.node.file_folders) && props.node.file_folders.length > 0
+  if (props.node.file_folders && Array.isArray(props.node.file_folders) && props.node.file_folders.length > 0) return true
+  // 文件上传时带了 folder_name 也按分组显示
+  return normalFiles.value.some(f => f.folder_name)
 })
 
 // ========== 校验/审批状态 ==========
@@ -639,10 +635,10 @@ function formatFileSize(bytes: number | null): string {
   padding: 4px 0;
 }
 
-/* ===== 三栏容器（grid 4:3:3） ===== */
+/* ===== 三栏容器（文件 2 : 校验 1 : 审批 1） ===== */
 .node-columns {
   display: grid;
-  grid-template-columns: 4fr 3fr 3fr;
+  grid-template-columns: 2fr 1fr 1fr;
   gap: 16px;
   margin-top: 14px;
 }
@@ -663,6 +659,10 @@ function formatFileSize(bytes: number | null): string {
       color: var(--el-color-warning-dark-2);
       border-bottom-color: var(--el-color-warning-light-7);
     }
+
+    &--sub {
+      margin-top: 14px;
+    }
   }
 
   &__empty {
@@ -674,61 +674,69 @@ function formatFileSize(bytes: number | null): string {
 }
 
 /* 文件列表 */
+/* 文件夹分组边框 */
+.folder-file-group {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
-.file-item {
+/* 文件行（单行紧凑布局） */
+.file-row {
   display: flex;
-  flex-direction: column;
-  padding: 8px 10px;
-  background: var(--el-bg-color-page);
-  border-radius: 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+
+  &:hover {
+    background: var(--el-fill-color-light);
+  }
 
   &--supplement {
+    background: var(--el-color-warning-light-9);
     border-left: 3px solid var(--el-color-warning);
+    padding-left: 10px;
   }
 
-  &__main {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-
-    .file-name {
-      font-weight: 500;
-      font-size: 13px;
-      color: var(--el-text-color-primary);
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .file-round {
-      font-size: 11px;
-      color: var(--el-color-primary);
-      background: var(--el-color-primary-light-9);
-      padding: 0 5px;
-      border-radius: 999px;
-      flex-shrink: 0;
-    }
+  .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+    color: var(--el-text-color-primary);
   }
 
-  &__meta {
+  .file-meta {
     font-size: 12px;
     color: var(--el-text-color-secondary);
-    padding-left: 18px; /* 对齐文件名（图标14px + gap 4px） */
-    margin-top: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
-  &__actions {
+  .file-actions {
     display: flex;
-    gap: 4px;
-    margin-top: 4px;
-    justify-content: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
   }
+}
+
+.file-round {
+  font-size: 11px;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  padding: 0 5px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 /* 校验/审批记录列表 */

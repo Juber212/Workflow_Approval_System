@@ -2,7 +2,8 @@
 
 from datetime import date as date_type
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.api.deps import get_current_active_user
 from pydantic import BaseModel, Field
 
 from app.schemas.common import ApiResponse
@@ -36,7 +37,10 @@ class CalculateDeadlinesResponse(BaseModel):
 
 
 @router.post("/utils/calculate-deadlines", response_model=ApiResponse)
-async def calculate_deadlines(body: CalculateDeadlinesRequest):
+async def calculate_deadlines(
+    body: CalculateDeadlinesRequest,
+    current_user=Depends(get_current_active_user),
+):
     """计算节点预估开始/截止日期 —— 按工作日跳过法定节假日和周末
 
     计算规则：

@@ -59,16 +59,12 @@ async def resolve_template_variables(
     返回：{"{{变量名}}": "实际值", ...}
     """
 
-    # 1. 查文档模板 + 所属流程模板
+    # 1. 查文档模板
     doc = (await db.execute(
         select(DocumentTemplate).where(DocumentTemplate.id == doc_template_id)
     )).scalar_one_or_none()
     if doc is None:
         raise ValueError(f"文件模板不存在: {doc_template_id}")
-
-    template = (await db.execute(
-        select(FlowTemplate).where(FlowTemplate.id == doc.template_id)
-    )).scalar_one_or_none()
 
     # 2. 查 Task → 节点 → 实例（手动查询关联对象，模型没有定义 relationship）
     task = (await db.execute(
@@ -91,6 +87,11 @@ async def resolve_template_variables(
     )).scalar_one_or_none()
     if instance is None:
         raise ValueError(f"流程实例不存在: {task.instance_id}")
+
+    # 通过实例获取流程模板（文档模板经中间表关联，此处用实例的模板上下文）
+    template = (await db.execute(
+        select(FlowTemplate).where(FlowTemplate.id == instance.template_id)
+    )).scalar_one_or_none()
 
     # 手动查发起人 User
     initiator = (await db.execute(
@@ -261,9 +262,17 @@ def get_doc_template_abs_path(doc: DocumentTemplate) -> str:
     """获取文件模板的绝对路径（兼容存储各种路径格式）"""
     if os.path.isabs(doc.file_path):
         path = doc.file_path
+        # 绝对路径：直接返回
+        if os.path.exists(path):
+            return path
     else:
+        # 相对路径：先尝试与 STORAGE_ROOT 拼接
         path = os.path.join(settings.STORAGE_ROOT, doc.file_path)
-    # 如果 STORAGE_ROOT 已被包含，避免重复拼接
-    if not os.path.exists(path):
-        path = doc.file_path
-    return path
+        if os.path.exists(path):
+            return path
+        # 如果 file_path 已包含 STORAGE_ROOT 目录名（如 "storage/doc_templates/..."），
+        # 避免重复拼接 —— 尝试直接作为相对路径返回
+        if os.path.exists(doc.file_path):
+            return doc.file_path
+    # 最终兜底（确保返回绝对路径）
+    return os.path.abspath(path)

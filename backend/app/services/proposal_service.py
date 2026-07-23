@@ -117,6 +117,7 @@ async def create_proposal(
         description=body.description,
         template_id=tpl.id,
         template_name=tpl.name,
+        template_type=tpl.type,  # 快照模板类型，用于存储分目录
         organization_id=body.organization_id,
         initiator_id=current_user.id,
         priority="normal",
@@ -171,13 +172,20 @@ async def create_proposal(
             target_node_id=node_id_map[te.target_node_id],
         ))
 
-    # 计算节点 incoming_counts + 激活开始节点（复用流水线逻辑）
-    from app.engine.flow_engine import calculate_incoming_counts, activate_start_node
+    # 计算节点 incoming_counts + 激活开始节点 + 传播到工作节点
+    from app.engine.flow_engine import calculate_incoming_counts, activate_start_node, propagate_from_node
     await calculate_incoming_counts(db, instance.id)
-    await activate_start_node(db, instance.id)
+    start_node = next((n for n in instance_nodes if n.is_start), None)
+    if start_node:
+        await activate_start_node(db, instance.id)
+        # 激活第一个工作节点，创建 Task
+        await propagate_from_node(db, instance.id, start_node.id)
+
+    # 实例状态 → running
+    instance.status = InstanceStatus.RUNNING
+    instance.initiated_at = datetime.now()
 
     # 操作日志
-    start_node = next((n for n in instance_nodes if n.is_start), None)
     first_work = next((n for n in instance_nodes if not n.is_start and not n.is_end), None)
     db.add(OperationLog(
         instance_id=instance.id,

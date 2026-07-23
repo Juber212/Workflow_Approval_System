@@ -44,38 +44,70 @@
           :row-class-name="instanceRowClass"
           @row-click="handleInstanceRowClick" style="cursor:pointer"
         >
-          <el-table-column prop="name" label="项目名称" min-width="140">
+          <!-- ===== 弹性列（按内容自适配） ===== -->
+          <!-- 1. 项目名称 -->
+          <el-table-column prop="name" label="项目名称" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="inst-name">{{ row.name }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="organization_name" label="所属组织" min-width="100" />
-          <el-table-column label="当前负责人" min-width="100">
+          <!-- 2. 方案 -->
+          <el-table-column label="方案" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="inst-meta">{{ row.proposal_name || '-' }}</span>
+            </template>
+          </el-table-column>
+          <!-- 3. 所属组织 -->
+          <el-table-column prop="organization_name" label="所属组织" show-overflow-tooltip />
+          <!-- 4. 进度（进度条） -->
+          <el-table-column label="进度" min-width="120" align="center">
+            <template #default="{ row }">
+              <div class="bt-progress">
+                <el-progress
+                  :percentage="row.total_nodes > 0 ? Math.round((row.current_node_index / row.total_nodes) * 100) : 0"
+                  :stroke-width="8"
+                  :show-text="false"
+                />
+                <span class="bt-progress__text">
+                  {{ row.total_nodes > 0 ? Math.round((row.current_node_index / row.total_nodes) * 100) : 0 }}%（{{ row.current_node_index }}/{{ row.total_nodes }}）
+                </span>
+              </div>
+            </template>
+          </el-table-column>
+          <!-- ===== 固定列 ===== -->
+          <!-- 5. 当前负责人 -->
+          <el-table-column label="当前负责人" width="110" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="inst-meta">{{ row.current_assignee_name || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="进度" min-width="64" align="center">
-            <template #default="{ row }">
-              <span class="inst-progress">{{ row.current_node_index }} / {{ row.total_nodes }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="优先级" min-width="64" align="center">
-            <template #default="{ row }">
-              <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="initiated_at" label="发起时间" min-width="140">
-            <template #default="{ row }">
-              <span class="num">{{ fmtTime(row.initiated_at) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <!-- 6. 状态 -->
+          <el-table-column label="状态" width="80" align="center" sortable="false">
             <template #default="{ row }">
               <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" min-width="120" fixed="right">
+          <!-- 7. 优先级 -->
+          <el-table-column label="优先级" width="72" align="center">
+            <template #default="{ row }">
+              <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
+            </template>
+          </el-table-column>
+          <!-- 8. 难度 -->
+          <el-table-column label="难度" width="64" align="center">
+            <template #default="{ row }">
+              <span class="diff-badge" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span>
+            </template>
+          </el-table-column>
+          <!-- 9. 发起时间 -->
+          <el-table-column prop="initiated_at" label="发起时间" width="150" align="center">
+            <template #default="{ row }">
+              <span class="num">{{ fmtTime(row.initiated_at) }}</span>
+            </template>
+          </el-table-column>
+          <!-- 10. 操作 -->
+          <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
+          <el-table-column label="操作" :width="isAdmin ? 160 : 140" align="center" fixed="right">
             <template #default="{ row }">
               <el-button text type="primary" size="small" @click.stop="goInstanceDetail(row.id)">查看详情</el-button>
               <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
@@ -105,7 +137,7 @@
  * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -145,6 +177,10 @@ const instanceFilters = [
 onMounted(async () => {
   setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '项目管理' }])
   await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
+})
+
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
 })
 
 async function fetchOrgs() {
@@ -255,7 +291,7 @@ function instStatusLabel(s: string): string {
 <style lang="scss" scoped>
 .page-header__subtitle { margin-left: 12px; font-weight: 400; }
 
-.flow-management { /* max-width 由 AppLayout 内容区统一控制 */ }
+.flow-management { :deep(.caret-wrapper) { display: none; } :deep(.el-table__header) .el-icon { display: none !important; } :deep(.el-table .cell)::before, :deep(.el-table .cell)::after { display: none !important; content: none !important; } }
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 
@@ -268,9 +304,15 @@ function instStatusLabel(s: string): string {
 
 .inst-name { font-weight: 500; color: var(--el-text-color-primary); }
 .inst-meta { font-size: 13px; color: var(--el-text-color-secondary); }
-.inst-progress { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--el-text-color-primary); }
+
+/* 进度条（与首页卡点追踪一致） */
+.bt-progress { display: flex; align-items: center; gap: 8px; padding: 4px 8px; :deep(.el-progress) { flex: 1; min-width: 60px; } :deep(.el-progress-bar__outer) { border-radius: 4px; } }
+.bt-progress__text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; flex-shrink: 0; }
 
 .pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { color: #fff; background: var(--el-color-danger); } &.pri--high { color: #fff; background: var(--el-color-warning); } &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); } &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); } }
+
+/* 难度等级 badge */
+.diff-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.diff--1 { color: #1e8449; background: #eafaf1; } &.diff--2 { color: #2471a3; background: #eaf2f8; } &.diff--3 { color: #b87333; background: #fef5e7; } &.diff--4 { color: #fff; background: var(--el-color-danger); } }
 
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }

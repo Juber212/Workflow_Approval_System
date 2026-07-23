@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '所内方案' },
       },
       {
+        path: 'proposals/instances/:id',
+        name: 'ProposalDetail',
+        component: () => import('@/views/flows/InstanceDetail.vue'),
+        meta: { title: '方案详情' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/profile/index.vue'),

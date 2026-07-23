@@ -142,36 +142,28 @@ export interface DocTemplateItem {
   created_at: string | null
 }
 
-/** 文件模板列表响应 */
+/** 文件模板列表响应（含已关联 + 未关联） */
 export interface DocTemplateListResponse {
-  items: DocTemplateItem[]
-  available_variables: string[]  // 可用变量列表
+  linked: DocTemplateItem[]           // 已关联到此流程模板的
+  available: DocTemplateItem[]        // 组织内可用但未关联的
+  available_variables: string[]       // 可用变量列表
 }
 
-/** 获取模板的文件模板列表 */
+/** 获取模板的文件模板列表（已关联 + 组织内可用） */
 export async function getDocTemplates(templateId: number): Promise<DocTemplateListResponse> {
   const res = await request.get(`/templates/${templateId}/documents`)
   return res.data
 }
 
-/** 上传文件模板 */
-export async function uploadDocTemplate(
-  templateId: number,
-  file: File,
-  name?: string,
-): Promise<{ id: number; name: string; file_type: string }> {
-  const form = new FormData()
-  form.append('file', file)
-  const params = name ? `?name=${encodeURIComponent(name)}` : ''
-  const res = await request.post(`/templates/${templateId}/documents${params}`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+/** 关联文件模板到流程模板 */
+export async function linkDocTemplates(templateId: number, docIds: number[]): Promise<{ linked: number }> {
+  const res = await request.post(`/templates/${templateId}/documents/link`, docIds)
   return res.data
 }
 
-/** 删除文件模板 */
-export async function deleteDocTemplate(templateId: number, docId: number): Promise<void> {
-  await request.delete(`/templates/${templateId}/documents/${docId}`)
+/** 取消文件模板与流程模板的关联 */
+export async function unlinkDocTemplate(templateId: number, docId: number): Promise<void> {
+  await request.delete(`/templates/${templateId}/documents/${docId}/link`)
 }
 
 /** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
@@ -201,10 +193,8 @@ export async function downloadDocTemplate(taskId: number, docId: number): Promis
 
 // ─── 管理员文件模板管理 ──────────────────────────────────────
 
-/** 管理员文档模板列表项（含模板名和组织名） */
+/** 管理员文档模板列表项（含组织名） */
 export interface AdminDocTemplateItem extends DocTemplateItem {
-  template_id: number
-  template_name: string
   organization_id: number
   organization_name: string
 }
@@ -225,6 +215,23 @@ export async function getAdminDocTemplates(params: {
   page_size?: number
 } = {}): Promise<AdminDocTemplateListResponse> {
   const res = await request.get('/admin/document-templates', { params })
+  return res.data
+}
+
+/** 管理员上传文件模板 */
+export async function adminUploadDocTemplate(
+  file: File,
+  organizationId: number,
+  name?: string,
+): Promise<{ id: number; name: string; file_type: string; organization_id: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  const params = new URLSearchParams()
+  params.set('organization_id', String(organizationId))
+  if (name) params.set('name', name)
+  const res = await request.post(`/admin/document-templates?${params}`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return res.data
 }
 

@@ -73,6 +73,7 @@ class InstanceListItem(BaseModel):
     current_node_index: int = 0
     total_nodes: int = 0
     current_assignee_name: str | None = None
+    proposal_name: str | None = None  # 关联的方案名称
     initiated_at: datetime | None = None
     completed_at: datetime | None = None
     terminated_at: datetime | None = None

@@ -52,6 +52,10 @@ const canvasRef = ref<HTMLElement>()
 const lf = shallowRef<LogicFlow>()
 const zoomRatio = ref(100)
 
+/** DnD 事件处理引用（用于 onUnmounted 清理） */
+let _dragOverHandler: ((e: DragEvent) => void) | null = null
+let _dropHandler: ((e: DragEvent) => void) | null = null
+
 /** 工作节点序号 */
 let workNodeCounter = 1
 
@@ -69,10 +73,12 @@ onMounted(() => {
   // 基础渲染
   logicFlow.render({ nodes: [], edges: [] })
 
-  // DnD 支持：dragover/drop
+  // DnD 回调引用（用于 onUnmounted 清理）
+  _dragOverHandler = (e: DragEvent) => e.preventDefault()
+  _dropHandler = (e: DragEvent) => e.preventDefault()
   if (canvasRef.value) {
-    canvasRef.value.addEventListener('dragover', (e: DragEvent) => e.preventDefault())
-    canvasRef.value.addEventListener('drop', (e: DragEvent) => e.preventDefault())
+    canvasRef.value.addEventListener('dragover', _dragOverHandler)
+    canvasRef.value.addEventListener('drop', _dropHandler)
   }
 
   // 双击：阻止 LogicFlow 默认文字编辑
@@ -136,6 +142,13 @@ onMounted(() => { document.addEventListener('keydown', onGlobalKeydown) })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onGlobalKeydown)
+  // 清理 DnD 事件监听器
+  if (canvasRef.value) {
+    if (_dragOverHandler) canvasRef.value.removeEventListener('dragover', _dragOverHandler)
+    if (_dropHandler) canvasRef.value.removeEventListener('drop', _dropHandler)
+  }
+  _dragOverHandler = null
+  _dropHandler = null
   lf.value?.destroy()
 })
 

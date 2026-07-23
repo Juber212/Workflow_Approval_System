@@ -100,7 +100,7 @@
 
 <script setup lang="ts">
 /** 所内方案主页 —— 该所方案列表 + 发起方案 */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -161,6 +161,10 @@ onMounted(async () => {
   await Promise.all([fetchList(), fetchStatusCounts()])
 })
 
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
+
 async function loadOrgName() {
   try {
     const orgs = await getOrgOptions()
@@ -209,7 +213,7 @@ function handleStatusFilter(status: string) { statusFilter.value = status; page.
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleSearch() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; fetchList() }, 300) }
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
-function goDetail(id: number) { router.push(`/flows/instances/${id}`) }
+function goDetail(id: number) { router.push(`/proposals/instances/${id}`) }
 
 async function loadFormUsers() { try { users.value = await searchUsers() } catch { /* ignore */ } }
 
@@ -228,7 +232,7 @@ async function handleCreate() {
     })
     ElMessage.success('方案已发起')
     showCreateDialog.value = false
-    router.push(`/flows/instances/${result.id}`)
+    router.push(`/proposals/instances/${result.id}`)
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.message || '发起失败')
   } finally { creating.value = false }
