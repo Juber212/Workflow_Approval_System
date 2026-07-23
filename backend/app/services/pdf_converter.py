@@ -4,11 +4,14 @@
 转换成功后删除源文件保留 PDF。
 """
 import asyncio
+import logging
 import os
 
 from PIL import Image
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # 限流信号量（全局，2 并发）
 _semaphore = asyncio.Semaphore(2)
@@ -40,7 +43,8 @@ async def convert_to_pdf(file_path: str) -> str | None:
                 return await _libreoffice_convert(file_path)
             else:
                 return None  # 不支持的类型
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[PDF转换] convert_to_pdf 失败: file={file_path}, err={e}")
             return None
 
 
@@ -57,7 +61,8 @@ async def _image_to_pdf(image_path: str) -> str | None:
         # 删除源文件
         os.remove(image_path)
         return pdf_path
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[PDF转换] 图片转PDF失败: file={image_path}, err={e}")
         return None
 
 
@@ -95,9 +100,11 @@ async def _libreoffice_convert(input_path: str) -> str | None:
                 await asyncio.sleep(2)
 
         except asyncio.TimeoutError:
+            logger.warning(f"[PDF转换] LibreOffice 超时 (attempt={attempt + 1}/2): file={input_path}")
             if proc:
                 proc.kill()
             if attempt == 0:
                 await asyncio.sleep(2)
 
+    logger.warning(f"[PDF转换] LibreOffice 转换失败（重试耗尽）: file={input_path}")
     return None
