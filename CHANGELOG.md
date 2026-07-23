@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-23 — 难度等级 + 批准人（Endorser）
+
+### 新增功能
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 1 | 实例新增 difficulty 字段(1-4)，发起时选择，不可改 | `flow_instance.py`, `instance_service.py`, FlowDesigner, OrgHome |
+| 2 | 模板/实例节点新增 endorser_id（批准人），单人可选 | `template_node.py`, `instance_node.py`, PropertyPanel |
+| 3 | 新建 endorsements 表 + Endorsement 模型 | `models/endorsement.py` (新) |
+| 4 | 新建 endorsement_service：批准通过/驳回 | `services/endorsement_service.py` (新) |
+| 5 | approval_service.approve()：difficulty=4 时注入批准人环节 | `approval_service.py` |
+| 6 | 新建批准 API：GET/POST /endorsements | `api/endorsements.py` (新) |
+| 7 | 前端：NodeCard 批准列、Dashboard 难度badge、实例列表难度列 | NodeCard, dashboard, OrgHome |
+
+### 修复
+
+| # | 问题 | 文件 |
+|---|------|------|
+| 8 | 首页卡点追踪进度条消失（adf8670 误删 :deep 样式） | `dashboard/index.vue` |
+| 9 | 首页卡点追踪移除展开/折叠功能 | `dashboard/index.vue` |
+
+---
+
 ## 2026-07-23 — 系统全面审计修复
 
 ### 已修复（本次会话）— 共 19 项
