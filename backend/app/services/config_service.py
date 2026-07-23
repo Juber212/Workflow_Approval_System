@@ -62,7 +62,12 @@ class ConfigService:
         await self.load(session_factory)
 
     async def update(self, session_factory, updates: dict[int, str]) -> list[str]:
-        """批量更新配置值 → 写入 DB → 刷新缓存 → 返回变更的 key 列表"""
+        """批量更新配置值 → 写入 DB → 刷新缓存 → 返回变更的 key 列表
+
+        先更新内存缓存（DB 提交前），再提交 DB。如果 DB 提交失败，
+        下次 load() 或 refresh() 会从 DB 重新加载，自动修复缓存。
+        如果 DB 提交成功但后续 load 失败，缓存已包含新值，不受影响。
+        """
         updated_keys = []
         async with session_factory() as session:
             result = await session.execute(
@@ -76,13 +81,16 @@ class ConfigService:
                     continue
                 old_value = cfg.config_value
                 cfg.config_value = new_value
+                # 同步更新内存缓存（在 DB 提交前更新，避免缓存-DB 不一致）
+                if cfg.config_key in self._cache:
+                    self._cache[cfg.config_key] = cfg
                 updated_keys.append(cfg.config_key)
                 logger.info(f"ConfigService: {cfg.config_key} 变更 ({old_value} → {new_value})")
 
             await session.commit()
+            self._loaded = True
+            logger.info(f"ConfigService: 已更新 {len(updated_keys)} 项配置")
 
-        # 更新内存缓存
-        await self.load(session_factory)
         return updated_keys
 
 
