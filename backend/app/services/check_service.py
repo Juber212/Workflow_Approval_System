@@ -1,9 +1,11 @@
 """校验服务 —— 校验列表、详情、通过、退回"""
+import os
 from datetime import datetime
 
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import (
@@ -103,9 +105,15 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     if c.checker_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅校验人可查看详情")
 
-    task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == c.instance_id))).scalar_one()
+    task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联任务不存在")
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == c.instance_id))).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
     checker_user = (await db.execute(select(User).where(User.id == c.checker_id))).scalar_one_or_none()
     # 查发起人 + 提交人（负责人）
     initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
@@ -222,6 +230,14 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     if c.status != CheckStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待校验状态可操作")
 
+    # 锁定本 task 所有待校验行（防并发——确保只有一个事务能操作本节点的校验）
+    await db.execute(
+        select(CheckRecord).where(
+            CheckRecord.task_id == c.task_id,
+            CheckRecord.status == CheckStatus.PENDING,
+        ).with_for_update()
+    )
+
     now = datetime.now()
     c.status = CheckStatus.PASSED
     c.opinion = opinion
@@ -273,7 +289,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
     if not has_pending:
         # 全部校验通过 → 批量写入所有校验人签名到 PDF
-        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
+        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
+        if node is None:
+            raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
         if node.require_checker_signature:
             # 查询该节点本轮次所有校验人的 pending 签名
             all_checker_sigs_result = await db.execute(
@@ -289,7 +307,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                 await apply_signatures_to_files(db, [s.id for s in all_checker_sigs])
 
         # 推进到审批阶段
-        task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
+        task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
+        if task is None:
+            raise AppException(ErrorCode.NOT_FOUND, "关联任务不存在")
         task.status = TaskStatus.WAITING_APPROVAL
         node.status = InstanceNodeStatus.WAITING_APPROVAL
 
@@ -345,16 +365,23 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     c.opinion = opinion
     c.decided_at = now
 
-    # 删除当前轮文件
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one()
+    # 删除当前轮文件（DB 记录 + 物理文件）
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
     files = (await db.execute(
         select(File).where(File.task_id == c.task_id, File.round == node.round)
     )).scalars().all()
     for f in files:
+        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
         await db.delete(f)
 
     # Task → processing，Node → running，轮次 +1
-    task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one()
+    task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联任务不存在")
     task.status = TaskStatus.PROCESSING
     task.submitted_at = None  # 清除提交时间，标记为退回重做
     node.status = InstanceNodeStatus.RUNNING

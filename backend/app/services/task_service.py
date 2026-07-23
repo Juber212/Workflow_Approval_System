@@ -150,9 +150,13 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         await db.flush()
 
     # 查节点
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == t.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == t.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
     # 查实例
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == t.instance_id))).scalar_one()
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == t.instance_id))).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
     # 查负责人
     assignee = (await db.execute(select(User).where(User.id == t.assignee_id))).scalar_one_or_none()
     # 查发起人

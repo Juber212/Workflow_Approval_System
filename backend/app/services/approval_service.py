@@ -115,8 +115,12 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     if a.approver_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅审批人可查看")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
     approver_user = (await db.execute(select(User).where(User.id == a.approver_id))).scalar_one_or_none()
     # 查发起人
     initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
@@ -296,6 +300,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
 
 async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None, signatures: list[dict] | None = None, signature_x: float | None = None, signature_y: float | None = None, signature_page: int | None = None) -> dict:
     """审批通过 —— 含签名处理 + 流程推进"""
+    # 先查询目标审批记录（不加锁，仅用于校验）
     a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
     if a is None:
         raise AppException(ErrorCode.NOT_FOUND, "审批记录不存在")
@@ -303,6 +308,14 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         raise AppException(ErrorCode.FORBIDDEN, "仅审批人可操作")
     if a.status != ApprovalStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待审批状态可操作")
+
+    # 锁定本节点所有待审批行（防并发——确保只有一个事务能操作本节点的审批）
+    await db.execute(
+        select(Approval).where(
+            Approval.node_id == a.node_id,
+            Approval.status == ApprovalStatus.PENDING,
+        ).with_for_update()
+    )
 
     now = datetime.now()
     a.status = ApprovalStatus.APPROVED
@@ -341,7 +354,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     # 兼容旧版：无 signatures 但有单签名位置参数 → 自动生成一条签名记录
     elif signature_x is not None or signature_y is not None or signature_page is not None:
         # 获取审批人的签名位置（旧版模式下，默认签在节点第一个 PDF 上）
-        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
+        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+        if node is None:
+            raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
         pdf_files = (await db.execute(
             select(File).where(File.node_id == a.node_id).limit(1)
         )).scalars().all()
@@ -397,7 +412,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         )
 
     # 全部审批通过 → 签名上 PDF → 推进流程
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # 签批：从 signatures 表读取所有待写入的审批签名，批量写入 PDF
     if node.require_approver_signature:
@@ -424,7 +441,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     from app.models import FlowTemplate
 
     # 查询实例，判断是否为方案（方案工作节点审批通过后直接完成，跳过结束节点）
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one()
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
     is_proposal = False
     if not node.is_end:
         tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == inst.template_id))).scalar_one_or_none()
@@ -468,7 +487,9 @@ async def reject(
     if a.status != ApprovalStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待审批状态可操作")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
     now = datetime.now()
 
     if node.is_end:
