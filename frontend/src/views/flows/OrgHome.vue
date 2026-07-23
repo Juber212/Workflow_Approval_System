@@ -7,7 +7,7 @@
         <h1 class="page-header__title">{{ orgName }}</h1>
         <p class="page-header__subtitle" v-if="orgInfo">
           模板 {{ orgInfo.template_count }} 个 · 运行中 {{ orgInfo.running_instance_count }} 个
-          <span v-if="orgInfo.latest_update_time"> · 最近更新 {{ fmtTime(orgInfo.latest_update_time) }}</span>
+          <span v-if="orgInfo.latest_update_time"> · 最近更新 {{ formatTime(orgInfo.latest_update_time) }}</span>
         </p>
       </div>
       <div class="page-header__actions" v-if="isOrgManager">
@@ -153,7 +153,7 @@
             <!-- 6. 优先级 -->
             <el-table-column label="优先级" width="72" align="center">
               <template #default="{ row }">
-                <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
+                <span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
               </template>
             </el-table-column>
             <!-- 7. 难度 -->
@@ -164,7 +164,7 @@
             </el-table-column>
             <!-- 8. 发起时间 -->
             <el-table-column prop="initiated_at" label="发起时间" width="150" align="center">
-              <template #default="{ row }">{{ fmtTime(row.initiated_at) }}</template>
+              <template #default="{ row }">{{ formatTime(row.initiated_at) }}</template>
             </el-table-column>
             <!-- 9. 操作 -->
             <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
@@ -253,6 +253,8 @@ import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/
 import { getProposals } from '@/api/proposal'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime } from '@/utils/format'
+import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 import TemplateTable from './components/TemplateTable.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
@@ -568,26 +570,7 @@ async function handleDelete(id: number) {
   fetchTemplates()
 }
 
-// ========== 工具方法 ==========
-function fmtTime(val: string | null): string {
-  if (!val) return '-'
-  return val.replace('T', ' ').substring(0, 16)
-}
-
-function priShort(p: string): string {
-  const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }
-  return m[p] || p
-}
-
-function instStatusClass(s: string): string {
-  const m: Record<string, string> = { created: 'status-tag--draft', running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }
-  return m[(s || '').toLowerCase()] || ''
-}
-
-function instStatusLabel(s: string): string {
-  const m: Record<string, string> = { created: '已创建', running: '运行中', completed: '已完成', terminated: '已终止' }
-  return m[(s || '').toLowerCase()] || s
-}
+// 时间/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>

@@ -69,7 +69,7 @@
               <div v-for="group in fileGroups" :key="group.nodeKey" class="file-group">
                 <div class="file-group__title">{{ group.nodeName }}</div>
                 <div v-for="f in group.files" :key="f.id" class="file-row">
-                  <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
+                  <span>{{ f.original_name }}</span><span class="file-size">{{ formatFileSize(f.file_size) }}</span>
                   <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                   <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                 </div>
@@ -77,7 +77,7 @@
             </template>
             <template v-else>
               <div v-for="f in detail.files" :key="f.id" class="file-row">
-                <span>{{ f.original_name }}</span><span class="file-size">{{ formatSize(f.file_size) }}</span>
+                <span>{{ f.original_name }}</span><span class="file-size">{{ formatFileSize(f.file_size) }}</span>
                 <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                 <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
               </div>
@@ -162,6 +162,8 @@ import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { useUserStore } from '@/stores/user'
+import { formatTime, formatFileSize } from '@/utils/format'
+import { priLabel, instStatusClass, instStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
 const AUTH_TOKEN = () => localStorage.getItem('token') || ''
@@ -294,14 +296,7 @@ async function doReject() {
   } finally { rejecting.value = false }
 }
 
-function formatSize(b: number | null) { if (!b) return ''; return b < 1024 ? b + 'B' : b < 1048576 ? (b / 1024).toFixed(1) + 'KB' : (b / 1048576).toFixed(1) + 'MB' }
-function priLabel(p: string) { const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }; return m[p] || p }
-function instStatusClass(s: string) { const m: Record<string, string> = { running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }; return m[s] || '' }
-function instStatusLabel(s: string) { const m: Record<string, string> = { running: '运行中', completed: '已完成', terminated: '已终止' }; return m[s] || s }
-function approvalStatusClass(s: string) { return s === 'approved' ? 'status-tag--completed' : s === 'rejected' ? 'status-tag--terminated' : 'status-tag--running' }
-function checkStatusClass(s: string) { return s === 'passed' ? 'status-tag--completed' : s === 'returned' ? 'status-tag--terminated' : 'status-tag--running' }
-function checkStatusLabel(s: string) { const m: Record<string, string> = { pending: '待校验', passed: '已通过', returned: '已退回' }; return m[s] || s }
-function approvalStatusLabel(s: string) { const m: Record<string, string> = { pending: '待审批', approved: '已通过', rejected: '已退回' }; return m[s] || s }
+// 时间/文件大小/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>

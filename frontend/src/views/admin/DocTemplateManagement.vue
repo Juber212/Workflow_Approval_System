@@ -41,7 +41,7 @@
         </template>
       </el-table-column>
       <el-table-column label="大小" width="100">
-        <template #default="{ row }">{{ formatSize(row.file_size) }}</template>
+        <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
       </el-table-column>
       <el-table-column label="上传时间" width="160">
         <template #default="{ row }">{{ row.created_at?.slice(0, 16) || '-' }}</template>
@@ -89,6 +89,7 @@ import {
   getAdminDocTemplates, deleteAdminDocTemplate, adminUploadDocTemplate,
   getAdminOrganizations, type AdminDocTemplateItem,
 } from '@/api/template'
+import { formatFileSize } from '@/utils/format'
 
 const loading = ref(false)
 const list = ref<AdminDocTemplateItem[]>([])
@@ -164,11 +165,7 @@ async function handleDelete(row: AdminDocTemplateItem) {
   }
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-}
+// 文件大小格式化 —— 统一从 @/utils/format 导入
 
 onMounted(() => {
   fetchOrgs()

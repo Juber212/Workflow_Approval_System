@@ -47,7 +47,7 @@
           <el-table-column prop="initiator_name" label="发起人" min-width="80" />
           <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
           <el-table-column prop="created_at" label="发起时间" min-width="140">
-            <template #default="{ row }"><span class="num">{{ fmtTime(row.created_at) }}</span></template>
+            <template #default="{ row }"><span class="num">{{ formatTime(row.created_at) }}</span></template>
           </el-table-column>
           <el-table-column label="状态" min-width="80" align="center">
             <template #default="{ row }">
@@ -90,6 +90,8 @@ import { getOrgOptions } from '@/api/admin'
 import { permanentDeleteInstance } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime } from '@/utils/format'
+import { instStatusClass, instStatusLabel } from '@/utils/labels'
 import ProposalOrgCardList from './ProposalOrgCardList.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
@@ -232,19 +234,7 @@ async function handlePermanentDelete(row: ProposalListItem) {
   }
 }
 
-// ========== 工具 ==========
-function fmtTime(val: string | null): string {
-  if (!val) return '-'
-  return val.replace('T', ' ').substring(0, 16)
-}
-function instStatusClass(s: string): string {
-  const m: Record<string, string> = { created: 'status-tag--draft', running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }
-  return m[(s || '').toLowerCase()] || ''
-}
-function instStatusLabel(s: string): string {
-  const m: Record<string, string> = { created: '已创建', running: '运行中', completed: '已完成', terminated: '已终止' }
-  return m[(s || '').toLowerCase()] || s
-}
+// 时间/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>

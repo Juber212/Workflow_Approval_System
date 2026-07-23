@@ -27,7 +27,7 @@
         <span class="meta-item">已终止 {{ org.terminated_count }}</span>
       </div>
       <div class="org-card__time" v-if="org.latest_update_time">
-        最近更新：{{ fmtTime(org.latest_update_time) }}
+        最近更新：{{ formatTime(org.latest_update_time) }}
       </div>
     </div>
   </div>
@@ -35,13 +35,10 @@
 
 <script setup lang="ts">
 import type { ProposalOrgCardItem } from '@/api/proposal'
+import { formatTime } from '@/utils/format'
 
 defineProps<{ orgs: ProposalOrgCardItem[] }>()
 defineEmits<{ select: [orgId: number] }>()
-
-function fmtTime(val: string): string {
-  return val.replace('T', ' ').substring(5, 16)
-}
 </script>
 
 <style lang="scss" scoped>

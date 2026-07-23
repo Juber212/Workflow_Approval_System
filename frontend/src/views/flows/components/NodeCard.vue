@@ -221,6 +221,7 @@ import { ref, computed, watch } from 'vue'
 import { ArrowDown, Document } from '@element-plus/icons-vue'
 import type { DetailNodeInfo } from '@/api/instance'
 import { previewFile, downloadFile } from '@/api/task'
+import { formatTime, formatFileSize } from '@/utils/format'
 
 const props = defineProps<{
   node: DetailNodeInfo
@@ -454,22 +455,12 @@ function endorsementStatusLabel(status: string): string {
 }
 
 // ========== 工具方法 ==========
-function formatTime(val: string | null): string {
-  if (!val) return ''
-  return val.replace('T', ' ').substring(0, 16)
-}
+// formatTime / formatFileSize —— 统一从 @/utils/format 导入
 
 function formatDeadline(val: string): string {
   if (!val) return ''
   const d = val.replace('T', ' ').substring(0, 16)
   return `截止 ${d}`
-}
-
-function formatFileSize(bytes: number | null): string {
-  if (bytes == null) return ''
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 </script>
 

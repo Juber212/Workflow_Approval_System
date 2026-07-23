@@ -33,7 +33,7 @@
                         <el-icon :size="14"><Document /></el-icon>
                         <span class="proposal-file-name" :title="f.original_name">{{ f.original_name }}</span>
                         <span v-if="f.round > 1" class="proposal-file-round">第{{ f.round }}轮</span>
-                        <span class="proposal-file-meta">{{ f.uploader_name }} · {{ fmtFileSize(f.file_size) }}</span>
+                        <span class="proposal-file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
                         <el-button text type="primary" size="small" @click="handlePreview(f.id)">查看</el-button>
                         <el-button text type="primary" size="small" @click="handleDownload(f.id)">下载</el-button>
                       </div>
@@ -61,7 +61,7 @@
                     <span v-if="a.round > 1" class="proposal-record-round">#{{ a.round }}</span>
                     <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
                     <span v-if="a.opinion" class="proposal-record-opinion">「{{ a.opinion }}」</span>
-                    <span v-if="a.decided_at" class="proposal-record-time">{{ fmtTime(a.decided_at) }}</span>
+                    <span v-if="a.decided_at" class="proposal-record-time">{{ formatTime(a.decided_at) }}</span>
                   </div>
                 </div>
               </div>
@@ -154,6 +154,7 @@ import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, ty
 import { previewFile, downloadFile } from '@/api/task'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime, formatFileSize } from '@/utils/format'
 import { Document } from '@element-plus/icons-vue'
 import InstanceInfo from './components/InstanceInfo.vue'
 import NodeCard from './components/NodeCard.vue'
@@ -328,17 +329,7 @@ function getNodeFolderGroups(node: DetailNodeInfo): { name: string; files: NodeF
   return groups
 }
 
-function fmtFileSize(bytes: number | null): string {
-  if (bytes == null) return ''
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-}
-
-function fmtTime(val: string | null): string {
-  if (!val) return ''
-  return val.replace('T', ' ').substring(0, 16)
-}
+// 时间/文件大小 —— 统一从 @/utils/format 导入
 
 function handlePreview(fileId: number) {
   previewFile(fileId)

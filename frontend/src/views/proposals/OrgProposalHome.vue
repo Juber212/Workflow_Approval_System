@@ -40,11 +40,11 @@
           <el-table-column prop="initiator_name" label="发起人" min-width="80" />
           <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
           <el-table-column prop="created_at" label="发起时间" min-width="140">
-            <template #default="{ row }"><span class="num">{{ fmtTime(row.created_at) }}</span></template>
+            <template #default="{ row }"><span class="num">{{ formatTime(row.created_at) }}</span></template>
           </el-table-column>
           <el-table-column label="状态" min-width="80" align="center">
             <template #default="{ row }">
-              <span class="status-tag" :class="statusClass(row.status)">{{ statusLabel(row.status) }}</span>
+              <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" min-width="80" fixed="right">
@@ -109,6 +109,8 @@ import { useUserStore } from '@/stores/user'
 import { getProposals, createProposal, type ProposalListItem } from '@/api/proposal'
 import { getOrgOptions, searchUsers } from '@/api/admin'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime } from '@/utils/format'
+import { instStatusClass, instStatusLabel } from '@/utils/labels'
 
 const route = useRoute()
 const router = useRouter()
@@ -243,9 +245,7 @@ function resetForm() {
   formRef.value?.resetFields()
 }
 
-function fmtTime(val: string | null): string { if (!val) return '-'; return val.replace('T', ' ').substring(0, 16) }
-function statusClass(s: string): string { const m: Record<string, string> = { running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }; return m[s] || '' }
-function statusLabel(s: string): string { const m: Record<string, string> = { running: '运行中', completed: '已完成', terminated: '已终止' }; return m[s] || s }
+// 时间/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>

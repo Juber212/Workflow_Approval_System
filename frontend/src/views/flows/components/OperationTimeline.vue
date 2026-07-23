@@ -36,6 +36,7 @@
 /** 操作日志时间线 —— 使用 el-timeline 展示操作记录 */
 import { ref } from 'vue'
 import { ArrowDown } from '@element-plus/icons-vue'
+import { formatTime } from '@/utils/format'
 import type { LogItemBrief } from '@/api/instance'
 
 const props = defineProps<{
@@ -73,11 +74,6 @@ function logColor(type: string): string {
   if (type.includes('completed') || type.includes('passed') || type.includes('approved')) return 'var(--el-color-success)'
   if (type.includes('created') || type.includes('started')) return 'var(--el-color-primary)'
   return 'var(--el-color-info)'
-}
-
-function formatTime(val: string | null): string {
-  if (!val) return ''
-  return val.replace('T', ' ').substring(0, 16)
 }
 </script>
 

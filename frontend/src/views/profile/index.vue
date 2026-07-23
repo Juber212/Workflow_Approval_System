@@ -268,7 +268,7 @@ import { getApprovals, type ApprovalListItem } from '@/api/approval'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
-import { priLabel, roleLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
+import { priLabel, roleLabel, instStatusClass, instStatusLabel, taskStatusClass, taskStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
@@ -415,12 +415,7 @@ watch(propActiveTab, (tab) => {
 })
 
 // ========== 工具函数 ==========
-function taskStatusClass(s: string) { return s === 'overdue' ? 'status-tag--terminated' : s === 'pending' ? 'status-tag--running' : 'status-tag--draft' }
-function taskStatusLabel(s: string) { const m: Record<string, string> = { pending: '待处理', processing: '处理中', waiting_check: '待校验', waiting_approval: '待审批', completed: '已完成' }; return m[s] || s }
-function checkStatusClass(s: string) { return s === 'pending' ? 'status-tag--running' : s === 'passed' ? 'status-tag--completed' : 'status-tag--terminated' }
-function checkStatusLabel(s: string) { const m: Record<string, string> = { pending: '待校验', passed: '已通过', returned: '已退回', terminated: '已终止' }; return m[s] || s }
-function approvalStatusClass(s: string) { return s === 'pending' ? 'status-tag--running' : s === 'approved' ? 'status-tag--completed' : 'status-tag--terminated' }
-function approvalStatusLabel(s: string) { const m: Record<string, string> = { pending: '待审批', approved: '已通过', rejected: '已退回', terminated: '已终止' }; return m[s] || s }
+// 任务/校验/审批状态 —— 统一从 @/utils/labels 导入
 </script>
 
 <style lang="scss" scoped>

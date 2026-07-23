@@ -90,7 +90,7 @@
           <!-- 7. 优先级 -->
           <el-table-column label="优先级" width="72" align="center">
             <template #default="{ row }">
-              <span class="pri-badge" :class="'pri--' + row.priority">{{ priShort(row.priority) }}</span>
+              <span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
             </template>
           </el-table-column>
           <!-- 8. 难度 -->
@@ -102,7 +102,7 @@
           <!-- 9. 发起时间 -->
           <el-table-column prop="initiated_at" label="发起时间" width="150" align="center">
             <template #default="{ row }">
-              <span class="num">{{ fmtTime(row.initiated_at) }}</span>
+              <span class="num">{{ formatTime(row.initiated_at) }}</span>
             </template>
           </el-table-column>
           <!-- 10. 操作 -->
@@ -145,6 +145,8 @@ import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
+import { formatTime } from '@/utils/format'
+import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 import OrgCardList from './components/OrgCardList.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
@@ -269,23 +271,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
 }
 
-// ========== 工具 ==========
-function fmtTime(val: string | null): string {
-  if (!val) return '-'
-  return val.replace('T', ' ').substring(0, 16)
-}
-function priShort(p: string): string {
-  const m: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }
-  return m[p] || p
-}
-function instStatusClass(s: string): string {
-  const m: Record<string, string> = { created: 'status-tag--draft', running: 'status-tag--running', completed: 'status-tag--completed', terminated: 'status-tag--terminated' }
-  return m[(s || '').toLowerCase()] || ''
-}
-function instStatusLabel(s: string): string {
-  const m: Record<string, string> = { created: '已创建', running: '运行中', completed: '已完成', terminated: '已终止' }
-  return m[(s || '').toLowerCase()] || s
-}
+// 时间/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>
