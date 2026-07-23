@@ -6,6 +6,7 @@
 - 开始/结束节点的特殊处理
 """
 
+import asyncio
 from collections import deque
 from datetime import datetime, timedelta
 
@@ -71,6 +72,7 @@ async def propagate_from_node(
         queue.append(edge.target_node_id)
 
     activated_ids: list[int] = []
+    _tasks_for_notify: list[tuple] = []  # 收集创建的 Task 用于通知
 
     while queue:
         node_id = queue.popleft()
@@ -133,18 +135,37 @@ async def propagate_from_node(
                 node.deadline = now + timedelta(days=node.time_limit_days)
 
             # 创建 Task（状态 pending，等待负责人处理）
+            created_task: Task | None = None
             if node.assignee_id:
-                task = Task(
+                created_task = Task(
                     instance_id=instance_id,
                     node_id=node.id,
                     assignee_id=node.assignee_id,
                     status=TaskStatus.PENDING,
                 )
-                db.add(task)
+                db.add(created_task)
+                # 收集创建的 Task 用于后续通知
+                _tasks_for_notify.append((node, created_task))
 
             activated_ids.append(node.id)
 
     await db.flush()
+
+    # ---- 通知：下游节点负责人有新任务 (#5 / #1) ----
+    from app.services.notification_service import create_notification
+    notif_tasks = [
+        create_notification(
+            db, user_id=_node.assignee_id, type="task_assigned",
+            title="新的待办任务",
+            content=f"节点「{_node.name}」已激活，等待你处理",
+            link=f"/profile/task/{_task.id}",
+        )
+        for _node, _task in _tasks_for_notify
+        if _task.id and _node.assignee_id
+    ]
+    if notif_tasks:
+        await asyncio.gather(*notif_tasks)
+
     return activated_ids
 
 

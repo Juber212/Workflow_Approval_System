@@ -6,7 +6,7 @@ import uuid
 from fastapi import UploadFile
 from datetime import datetime
 
-from sqlalchemy import select, func, case, delete as sql_delete, update as sql_update
+from sqlalchemy import select, func, case, and_, delete as sql_delete, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -118,6 +118,7 @@ async def create_instance(
         product_model=request.product_model.strip() if request.product_model else None,
         sales_manager=request.sales_manager.strip() if request.sales_manager else None,
         proposal_id=request.proposal_id,
+        doc_template_ids=request.doc_template_ids,  # 实例级文件模板（为空则继承模板关联）
         status=InstanceStatus.CREATED,
     )
     db.add(instance)
@@ -330,8 +331,10 @@ async def list_instances(
         )
         .join(Initiator, FlowInstance.initiator_id == Initiator.id)
         .join(Org, FlowInstance.organization_id == Org.id)
-        .join(FlowTemplate, FlowInstance.template_id == FlowTemplate.id)
-        .where(FlowTemplate.type == "project")  # 项目列表排除方案实例
+        .join(FlowTemplate, and_(
+            FlowInstance.template_id == FlowTemplate.id,
+            FlowTemplate.type == "project",
+        ), isouter=True)  # LEFT JOIN：模板删除后实例依然可见
     )
 
     # ========== 筛选条件 ==========
@@ -1101,6 +1104,53 @@ async def change_personnel(
         },
     )
     db.add(log)
+
+    # ---- 通知：新人员被分配到任务 (#6) ----
+    from app.services.notification_service import create_notification
+    # 查询当前节点所有 pending 的校验/审批记录（即刚分配给新人员的）
+    new_checks = (await db.execute(
+        select(CheckRecord).where(
+            CheckRecord.node_id == node_id,
+            CheckRecord.status == "pending",
+        )
+    )).scalars().all()
+    for nc in new_checks:
+        await create_notification(
+            db, user_id=nc.checker_id, type="check_assigned",
+            title="新的待校验任务",
+            content=f"节点「{node.name}」人员变更，你被分配为校验人",
+            link=f"/profile/check/{nc.id}",
+        )
+
+    new_apprs = (await db.execute(
+        select(Approval).where(
+            Approval.node_id == node_id,
+            Approval.status == "pending",
+        )
+    )).scalars().all()
+    for na in new_apprs:
+        await create_notification(
+            db, user_id=na.approver_id, type="approval_assigned",
+            title="新的待审批任务",
+            content=f"节点「{node.name}」人员变更，你被分配为审批人",
+            link=f"/profile/approval/{na.id}",
+        )
+
+    # 负责人变更：查询当前活跃 task
+    if body.assignee_id is not None:
+        active_task = (await db.execute(
+            select(Task).where(
+                Task.node_id == node_id,
+                Task.status.in_(["pending", "processing"]),
+            )
+        )).scalar_one_or_none()
+        if active_task:
+            await create_notification(
+                db, user_id=body.assignee_id, type="task_assigned",
+                title="新的待办任务",
+                content=f"节点「{node.name}」人员变更，你被分配为负责人",
+                link=f"/profile/task/{active_task.id}",
+            )
 
     return {
         "id": node_id,

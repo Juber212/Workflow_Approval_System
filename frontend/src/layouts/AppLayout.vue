@@ -87,6 +87,9 @@
               {{ item.label }}
             </el-breadcrumb-item>
           </el-breadcrumb>
+          <div class="breadcrumb-bar__right">
+            <NotificationBell />
+          </div>
         </div>
         <router-view />
       </main>
@@ -177,6 +180,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { Monitor, Document, Setting, User, Files } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
+import NotificationBell from '@/components/NotificationBell.vue'
 import { getMeApi, changePasswordApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
 import { getTasks } from '@/api/task'
 import { getChecks } from '@/api/check'
@@ -777,6 +781,18 @@ async function handleChangePassword() {
     font-weight: 400;
     margin: 0 6px;
   }
+}
+
+/* 面包屑栏右侧：通知铃铛 */
+.breadcrumb-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.breadcrumb-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ==================== 用户 Popover ==================== */

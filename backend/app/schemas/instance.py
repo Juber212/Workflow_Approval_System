@@ -32,6 +32,7 @@ class CreateInstanceRequest(BaseModel):
     sales_manager: str | None = Field(None, max_length=50, description="销售经理")
     node_overrides: list[NodeOverride] | None = Field(None, description="节点覆盖配置（可选）")
     proposal_id: int | None = Field(None, description="关联的方案 ID（可选）")
+    doc_template_ids: list[int] | None = Field(None, description="文件模板 ID 列表（可选，为空则继承模板关联）")
 
 
 class InstanceNodeBrief(BaseModel):

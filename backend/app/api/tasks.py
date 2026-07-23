@@ -1,4 +1,5 @@
 """任务 API —— 待办列表、任务详情、提交、草稿保存、文件上传、文件下载"""
+import asyncio
 import os
 from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
 from fastapi.responses import FileResponse
@@ -254,13 +255,22 @@ async def list_task_document_templates(
     if instance is None:
         raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
 
-    docs = (await db.execute(
-        select(DocumentTemplate).join(
-            TemplateDocumentLink, TemplateDocumentLink.document_id == DocumentTemplate.id
-        ).where(
-            TemplateDocumentLink.template_id == instance.template_id,
-        ).order_by(DocumentTemplate.created_at.desc())
-    )).scalars().all()
+    # 优先使用实例级配置，为空则继承模板关联
+    doc_ids = instance.doc_template_ids
+    if doc_ids:
+        docs = (await db.execute(
+            select(DocumentTemplate).where(
+                DocumentTemplate.id.in_(doc_ids)
+            ).order_by(DocumentTemplate.created_at.desc())
+        )).scalars().all()
+    else:
+        docs = (await db.execute(
+            select(DocumentTemplate).join(
+                TemplateDocumentLink, TemplateDocumentLink.document_id == DocumentTemplate.id
+            ).where(
+                TemplateDocumentLink.template_id == instance.template_id,
+            ).order_by(DocumentTemplate.created_at.desc())
+        )).scalars().all()
 
     items = [
         {

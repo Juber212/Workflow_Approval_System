@@ -32,6 +32,7 @@ export interface CreateInstanceData {
   sales_manager?: string | null
   node_overrides?: NodeOverride[]
   proposal_id?: number | null  // 关联的已完成方案 ID（可选）
+  doc_template_ids?: number[]  // 实例级文件模板 ID 列表（可选）
 }
 
 /** 发起项目响应 */

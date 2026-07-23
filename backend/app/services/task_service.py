@@ -353,7 +353,7 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
     # ========== 文件提交校验 ==========
-    _validate_file_submission(node, task_id, db)
+    await _validate_file_submission(node, task_id, db)
 
     # ========== 更新备注和提交时间 ==========
     if data.assignee_note:
@@ -392,19 +392,23 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
 
     # ========== 按 checkers 创建 CheckRecord ==========
     checkers = node.checkers or []
+    created_checks: list[tuple[int, CheckRecord]] = []  # (checker_id, CheckRecord)
+    created_approvals: list[tuple[int, Approval]] = []  # (approver_id, Approval)
     if checkers:
         task.status = TaskStatus.WAITING_CHECK
         node.status = InstanceNodeStatus.WAITING_CHECK
         for ch in checkers:
             checker_id = ch.get("user_id") if isinstance(ch, dict) else ch
-            db.add(CheckRecord(
+            cr = CheckRecord(
                 instance_id=task.instance_id,
                 node_id=task.node_id,
                 task_id=task_id,
                 checker_id=checker_id,
                 status=CheckStatus.PENDING,
                 round=node.round,
-            ))
+            )
+            db.add(cr)
+            created_checks.append((checker_id, cr))
     else:
         # 无校验人 → 直接进入等待审批
         task.status = TaskStatus.WAITING_APPROVAL
@@ -412,14 +416,16 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
         approvers = node.approvers or []
         for a in approvers:
             approver_id = a.get("user_id") if isinstance(a, dict) else a
-            db.add(Approval(
+            ap = Approval(
                 instance_id=task.instance_id,
                 node_id=task.node_id,
                 task_id=task_id,
                 approver_id=approver_id,
                 status=ApprovalStatus.PENDING,
                 round=node.round,
-            ))
+            )
+            db.add(ap)
+            created_approvals.append((approver_id, ap))
 
     # ========== 操作日志 ==========
     db.add(OperationLog(
@@ -434,6 +440,38 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     ))
 
     await db.flush()
+
+    # ---- 通知：校验人有新的待校验任务 (#2) ----
+    from app.services.notification_service import create_notification
+    notif_tasks = [
+        create_notification(
+            db, user_id=c_id, type="check_assigned",
+            title="新的待校验任务",
+            content=f"节点「{node.name}」负责人已提交，等待你校验",
+            link=f"/profile/check/{cr.id}",
+        )
+        for c_id, cr in created_checks
+    ]
+    # ---- 通知：审批人有新的待审批任务（无校验人直通审批）(#3) ----
+    notif_tasks += [
+        create_notification(
+            db, user_id=a_id, type="approval_assigned",
+            title="新的待审批任务",
+            content=f"节点「{node.name}」负责人已提交，等待你审批",
+            link=f"/profile/approval/{ap.id}",
+        )
+        for a_id, ap in created_approvals
+    ]
+    if notif_tasks:
+        await asyncio.gather(*notif_tasks)
+
+    # ---- 通知清除：提交后删除该负责人的相关待办通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id,
+        types=["task_assigned", "check_returned", "approval_rejected", "final_rejected"],
+    )
+
     return {"message": "任务已提交，等待校验" if checkers else "任务已提交，等待审批"}
 
 

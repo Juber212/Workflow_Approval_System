@@ -328,6 +328,12 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     a.opinion = opinion
     a.decided_at = now
 
+    # ---- 通知清除：审批完成后删除该审批人的待审批通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id, types=["approval_assigned"],
+    )
+
     # 兼容旧版：单签名位置参数（直接存 Approval 旧字段）
     if signature_x is not None:
         a.signature_x = signature_x
@@ -485,6 +491,16 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
                 .values(status=TaskStatus.WAITING_ENDORSEMENT)
             )
         node.status = InstanceNodeStatus.WAITING_ENDORSEMENT
+
+        # ---- 通知：批准人有新的待批准任务 (#4) ----
+        from app.services.notification_service import create_notification
+        await create_notification(
+            db, user_id=node.endorser_id, type="endorsement_assigned",
+            title="新的待批准任务",
+            content=f"节点「{node.name}」全部审批通过，等待你批准",
+            link=f"/profile/endorse/{endorsement.id}",
+        )
+
         return {"all_approved": True, "waiting_endorsement": True, "message": "全部审批通过，等待批准人审核"}
 
     # 普通节点 → finished → 传播到下游
@@ -525,6 +541,12 @@ async def reject(
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
     now = datetime.now()
+
+    # ---- 通知清除：审批退回后删除该审批人的待审批通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id, types=["approval_assigned"],
+    )
 
     if node.is_end:
         # 结束节点终审总驳回
@@ -625,6 +647,18 @@ async def reject(
         )
         db.add(log)
         await db.flush()
+
+        # ---- 通知：目标节点负责人，终审总驳回需重新处理 (#9) ----
+        from app.services.notification_service import create_notification
+        new_task_id = new_task.id if (target_node.assignee_id and 'new_task' in dir()) else None
+        if target_node.assignee_id and new_task_id:
+            await create_notification(
+                db, user_id=target_node.assignee_id, type="final_rejected",
+                title="终审总驳回",
+                content=f"发起人将流程驳回至节点「{target_node.name}」：{opinion}",
+                link=f"/profile/task/{new_task_id}",
+            )
+
         return {"message": f"已驳回至「{target_node.name}」节点"}
 
     else:
@@ -695,4 +729,15 @@ async def reject(
         )
         db.add(log)
         await db.flush()
+
+        # ---- 通知：负责人，审批退回需重新处理 (#8) ----
+        from app.services.notification_service import create_notification
+        if task and task.assignee_id:
+            await create_notification(
+                db, user_id=task.assignee_id, type="approval_rejected",
+                title="审批驳回",
+                content=f"节点「{node.name}」审批驳回：{opinion}",
+                link=f"/profile/task/{task.id}",
+            )
+
         return {"message": "已退回，负责人可重新处理"}

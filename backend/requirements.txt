@@ -24,6 +24,13 @@ chinesecalendar>=1.11.0
 # 配置管理
 pydantic-settings>=2.6.0
 
+# 测试
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+pytest-mock>=3.14.0
+httpx>=0.28.0
+aiosqlite>=0.20.0  # 集成测试用 SQLite 内存数据库
+
 # 开发工具
 black>=24.0.0
 isort>=5.13.0

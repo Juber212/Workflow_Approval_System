@@ -233,6 +233,12 @@ async def endorse(
     e.status = EndorsementStatus.APPROVED
     e.opinion = opinion
     e.decided_at = now
+
+    # ---- 通知清除：批准完成后删除该批准人的待批准通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id, types=["endorsement_assigned"],
+    )
     # 保存签名位置（旧版兼容）
     if signature_x is not None:
         e.signature_x = signature_x
@@ -367,6 +373,12 @@ async def endorse_reject(
     e.opinion = opinion
     e.decided_at = now
 
+    # ---- 通知清除：批准驳回后删除该批准人的待批准通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id, types=["endorsement_assigned"],
+    )
+
     # 4. 查询节点
     node = await _get_node(db, e.node_id)
     if node is None:
@@ -418,12 +430,17 @@ async def endorse_reject(
     node.round += 1
 
     # 8. Task → processing
+    task_for_notify = None
     if e.task_id:
         await db.execute(
             update(Task)
             .where(Task.id == e.task_id)
             .values(status=TaskStatus.PROCESSING, submitted_at=None)
         )
+        # 查询 task 用于通知
+        task_for_notify = (await db.execute(
+            select(Task).where(Task.id == e.task_id)
+        )).scalar_one_or_none()
 
     # 9. 操作日志
     log = OperationLog(
@@ -436,6 +453,16 @@ async def endorse_reject(
         description=f"批准驳回：{opinion}",
     )
     db.add(log)
+
+    # ---- 通知：负责人，批准驳回需重新处理 (#10) ----
+    from app.services.notification_service import create_notification
+    if task_for_notify and task_for_notify.assignee_id:
+        await create_notification(
+            db, user_id=task_for_notify.assignee_id, type="endorsement_rejected",
+            title="批准驳回",
+            content=f"节点「{node.name}」批准驳回：{opinion}",
+            link=f"/profile/task/{task_for_notify.id}",
+        )
 
     return {"message": "已驳回，负责人需重新处理"}
 

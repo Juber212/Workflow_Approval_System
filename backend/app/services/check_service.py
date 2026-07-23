@@ -1,4 +1,5 @@
 """校验服务 —— 校验列表、详情、通过、退回"""
+import asyncio
 import os
 from datetime import datetime
 
@@ -322,6 +323,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
         # 按 approvers 创建 Approval 记录
         approvers = node.approvers or []
+        created_approvals: list[Approval] = []  # 记录创建的 Approval（用于通知）
         if approvers:
             for a in approvers:
                 approval = Approval(
@@ -333,8 +335,30 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     round=node.round,
                 )
                 db.add(approval)
+                created_approvals.append(approval)
 
         await db.flush()
+
+        # ---- 通知：每个审批人有新的待审批任务 (#3) ----
+        from app.services.notification_service import create_notification
+        notif_tasks = [
+            create_notification(
+                db, user_id=ap.approver_id, type="approval_assigned",
+                title="新的待审批任务",
+                content=f"节点「{node.name}」已通过校验，等待你审批",
+                link=f"/profile/approval/{ap.id}",
+            )
+            for ap in created_approvals
+        ]
+        if notif_tasks:
+            await asyncio.gather(*notif_tasks)
+
+        # ---- 通知清除：校验完成后删除该校验人的待校验通知 (#11) ----
+        from app.services.notification_service import clear_related
+        await clear_related(
+            db, user_id=current_user_id, types=["check_assigned"],
+        )
+
         return {"all_passed": True, "message": "全部校验通过，已进入审批阶段"}
 
     return {"all_passed": False, "message": "校验通过，等待其他校验人"}
@@ -427,5 +451,20 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     )
     db.add(log)
     await db.flush()
+
+    # ---- 通知：负责人，校验退回需重新处理 (#7) ----
+    from app.services.notification_service import create_notification
+    await create_notification(
+        db, user_id=task.assignee_id, type="check_returned",
+        title="校验退回",
+        content=f"节点「{node.name}」校验退回：{opinion}",
+        link=f"/profile/task/{task.id}",
+    )
+
+    # ---- 通知清除：校验退回后删除该校验人的待校验通知 (#11) ----
+    from app.services.notification_service import clear_related
+    await clear_related(
+        db, user_id=current_user_id, types=["check_assigned"],
+    )
 
     return {"message": "已退回，负责人可重新处理"}

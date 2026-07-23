@@ -21,8 +21,8 @@
             <el-button text type="danger" @click="handleDelete">🗑 删除</el-button>
           </el-tooltip>
           <el-divider direction="vertical" />
-          <!-- 文件模板管理按钮（仅编辑已有模板时可用） -->
-          <el-button v-if="!isNewTemplate" text @click="showDocDialog = true">📄 文件模板</el-button>
+          <!-- 文件模板管理按钮（新建/编辑均可用，新建时需先保存） -->
+          <el-button v-if="!isLaunchMode" text @click="showDocDialog = true" :disabled="isNewTemplate && !currentTemplateId()" :title="isNewTemplate && !currentTemplateId() ? '请先保存模板' : ''">📄 文件模板</el-button>
           <el-tooltip content="Ctrl+S 保存" placement="bottom">
             <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
           </el-tooltip>
@@ -93,6 +93,22 @@
         </el-form-item>
         <el-form-item label="补充说明">
           <el-input v-model="launchForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="500" />
+        </el-form-item>
+
+        <!-- 文件模板选择 —— 继承模板关联，可临时调整 -->
+        <el-form-item label="文件模板" v-if="launchDocTemplates.length > 0">
+          <div class="launch-doc-list">
+            <el-checkbox-group v-model="launchDocSelected">
+              <div v-for="d in launchDocTemplates" :key="d.id" class="launch-doc-item">
+                <el-checkbox :label="d.id" :value="d.id">
+                  <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
+                  {{ d.name }}
+                  <span class="launch-doc-orig">({{ d.original_name }})</span>
+                </el-checkbox>
+              </div>
+            </el-checkbox-group>
+            <div class="launch-doc-hint">继承自模板，可取消不需要的；如需新增请返回编辑模式关联</div>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -179,6 +195,10 @@ const loading = ref(false)
 const saving = ref(false)
 const launching = ref(false)
 const showLaunchDialog = ref(false)
+// ─── 发起弹窗文件模板 ────────────────────────────────────
+const launchDocTemplates = ref<DocTemplateItem[]>([])
+const launchDocSelected = ref<number[]>([])
+
 const launchFormRef = ref<FormInstance>()
 const templateName = ref('')
 const canvasRef = ref<InstanceType<typeof FlowCanvas>>()
@@ -257,6 +277,24 @@ async function handleUnlinkDoc(doc: DocTemplateItem) {
     // 用户取消
   }
 }
+
+/** 发起弹窗打开时加载模板关联的文件模板 */
+async function loadLaunchDocTemplates() {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    const data = await getDocTemplates(templateId)
+    launchDocTemplates.value = data.linked
+    launchDocSelected.value = data.linked.map(d => d.id)  // 默认全选
+  } catch {
+    launchDocTemplates.value = []
+  }
+}
+
+// 监听发起弹窗打开 → 加载文件模板
+watch(showLaunchDialog, (val) => {
+  if (val) loadLaunchDocTemplates()
+})
 
 /** 格式化文件大小 */
 function formatFileSize(bytes: number): string {
@@ -641,6 +679,8 @@ async function handleSave() {
       templateId = tpl.id
       // 更新 URL 为真实模板 ID，后续保存即为更新模式
       router.replace({ path: `/flows/designer/${templateId}`, query: { mode: route.query.mode as string } })
+      // 新建后刷新文件模板列表（按钮变为可用）
+      await loadDocTemplates()
     }
 
     await saveDesign(templateId, { nodes, edges })
@@ -731,6 +771,7 @@ async function handleLaunch() {
       sales_manager: bizInfo.value.sales_manager || undefined,
       proposal_id: proposalIdFromQuery.value || undefined,
       node_overrides: nodeOverrides.length > 0 ? nodeOverrides : undefined,
+      doc_template_ids: launchDocSelected.value.length > 0 ? launchDocSelected.value : undefined,
     })
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false
@@ -788,4 +829,15 @@ async function handleLaunch() {
   .doc-upload-hint { font-size: 12px; color: var(--el-text-color-secondary); }
 }
 .doc-table { width: 100%; }
+
+/* ─── 发起弹窗文件模板选择列表 ─── */
+.launch-doc-list {
+  max-height: 160px; overflow-y: auto;
+  .launch-doc-item {
+    padding: 2px 0;
+    .el-checkbox { display: flex; align-items: center; }
+  }
+  .launch-doc-orig { font-size: 11px; color: var(--el-text-color-placeholder); margin-left: 4px; }
+  .launch-doc-hint { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px; }
+}
 </style>

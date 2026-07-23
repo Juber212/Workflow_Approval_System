@@ -24,6 +24,7 @@ from app.models.node_preset import NodePreset
 from app.models.signature import Signature
 from app.models.endorsement import Endorsement
 from app.models.document_template import DocumentTemplate, TemplateDocumentLink
+from app.models.notification import Notification
 
 __all__ = [
     "InstanceStatus", "Priority", "Difficulty",
@@ -33,4 +34,5 @@ __all__ = [
     "FlowInstance", "InstanceNode", "InstanceEdge",
     "Task", "CheckRecord", "Approval", "Endorsement", "File", "OperationLog", "NodePreset",
     "Signature", "DocumentTemplate", "TemplateDocumentLink",
+    "Notification",
 ]

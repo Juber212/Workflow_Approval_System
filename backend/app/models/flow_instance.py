@@ -1,6 +1,6 @@
 """项目模型"""
 
-from sqlalchemy import String, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Integer, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -24,6 +24,7 @@ class FlowInstance(Base):
     product_model: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="产品型号")
     sales_manager: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="销售经理")
     proposal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=True, comment="关联的方案ID（仅项目类型可用）")
+    doc_template_ids: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="实例级文件模板 ID 列表（发起时可调整，为空则继承模板关联）")
     status: Mapped[str] = mapped_column(String(20), default="created", comment="主状态")
     termination_reason: Mapped[str | None] = mapped_column(String(500), comment="终止原因")
     initiated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, comment="发起时间")
