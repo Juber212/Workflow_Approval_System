@@ -179,8 +179,9 @@ class TestReject:
             MagicMock(),                            # 2: clear_related delete
             MagicMock(),                            # 3: UPDATE other approvals → terminated
             MagicMock(),                            # 4: UPDATE pending checks → terminated
-            MockResult(scalars_all=[]),             # 5: SELECT files（空）
-            MockResult(scalar_one=task),            # 6: SELECT task
+            MagicMock(),                            # 5: UPDATE pending endorsements → terminated（难度4场景）
+            MockResult(scalars_all=[]),             # 6: SELECT files（空）
+            MockResult(scalar_one=task),            # 7: SELECT task
         ]
 
         result = await reject(mock_db, approval_id=1, current_user_id=4, opinion="数据不对")

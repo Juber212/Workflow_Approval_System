@@ -153,9 +153,10 @@ class TestCheckFlowIntegration:
             MockResult(scalar_one=user),        # 0: get_current_active_user
             MockResult(scalar_one=check),       # 1: check FOR UPDATE
             MagicMock(),                         # 2: update other checks
-            MockResult(scalar_one=node),         # 3: get node
-            MockResult(scalars_all=[]),          # 4: get files
-            MockResult(scalar_one=task),         # 5: get task
+            MagicMock(),                         # 3: update pending endorsements → terminated（难度4场景）
+            MockResult(scalar_one=node),         # 4: get node
+            MockResult(scalars_all=[]),          # 5: get files
+            MockResult(scalar_one=task),         # 6: get task
         ]
 
         from app.core.security import create_access_token
@@ -252,8 +253,9 @@ class TestApprovalFlowIntegration:
             MagicMock(),                         # 3: clear_related delete
             MagicMock(),                         # 4: update other approvals
             MagicMock(),                         # 5: update pending checks
-            MockResult(scalars_all=[]),          # 6: get files
-            MockResult(scalar_one=task),         # 7: get task
+            MagicMock(),                         # 6: update pending endorsements → terminated（难度4场景）
+            MockResult(scalars_all=[]),          # 7: get files
+            MockResult(scalar_one=task),         # 8: get task
         ]
 
         from app.core.security import create_access_token
