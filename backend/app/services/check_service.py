@@ -221,8 +221,14 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
 
 
 async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str | None, signatures: list[dict] | None = None) -> dict:
-    """校验通过 —— 支持签批 + 全部通过后批量写入 PDF"""
-    c = (await db.execute(select(CheckRecord).where(CheckRecord.id == check_id))).scalar_one_or_none()
+    """校验通过 —— 支持签批 + 全部通过后批量写入 PDF
+
+    并发安全：先锁定目标行再校验，消除 TOCTOU 窗口。
+    """
+    # 先锁定目标校验行（SELECT ... FOR UPDATE —— 校验和锁原子化）
+    c = (await db.execute(
+        select(CheckRecord).where(CheckRecord.id == check_id).with_for_update()
+    )).scalar_one_or_none()
     if c is None:
         raise AppException(ErrorCode.NOT_FOUND, "校验记录不存在")
     if c.checker_id != current_user_id:
@@ -230,11 +236,12 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     if c.status != CheckStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待校验状态可操作")
 
-    # 锁定本 task 所有待校验行（防并发——确保只有一个事务能操作本节点的校验）
+    # 锁定本 task 其他待校验行（防并发——确保只有一个事务能操作本节点的校验）
     await db.execute(
         select(CheckRecord).where(
             CheckRecord.task_id == c.task_id,
             CheckRecord.status == CheckStatus.PENDING,
+            CheckRecord.id != check_id,
         ).with_for_update()
     )
 

@@ -299,9 +299,14 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
 
 
 async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opinion: str | None, signatures: list[dict] | None = None, signature_x: float | None = None, signature_y: float | None = None, signature_page: int | None = None) -> dict:
-    """审批通过 —— 含签名处理 + 流程推进"""
-    # 先查询目标审批记录（不加锁，仅用于校验）
-    a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
+    """审批通过 —— 含签名处理 + 流程推进
+
+    并发安全：先锁定目标行再校验，消除 TOCTOU 窗口。
+    """
+    # 先锁定目标审批行（SELECT ... FOR UPDATE —— 校验和锁原子化）
+    a = (await db.execute(
+        select(Approval).where(Approval.id == approval_id).with_for_update()
+    )).scalar_one_or_none()
     if a is None:
         raise AppException(ErrorCode.NOT_FOUND, "审批记录不存在")
     if a.approver_id != current_user_id:
@@ -309,11 +314,12 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     if a.status != ApprovalStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待审批状态可操作")
 
-    # 锁定本节点所有待审批行（防并发——确保只有一个事务能操作本节点的审批）
+    # 锁定本节点其他待审批行（防并发——确保只有一个事务能操作本节点的审批）
     await db.execute(
         select(Approval).where(
             Approval.node_id == a.node_id,
             Approval.status == ApprovalStatus.PENDING,
+            Approval.id != approval_id,
         ).with_for_update()
     )
 
