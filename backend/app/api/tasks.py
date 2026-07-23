@@ -1,5 +1,4 @@
 """任务 API —— 待办列表、任务详情、提交、草稿保存、文件上传、文件下载"""
-import asyncio
 import os
 from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
 from fastapi.responses import FileResponse
@@ -17,8 +16,7 @@ from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
 )
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, CheckRecord, Approval, File, OperationLog, Signature, DocumentTemplate, FlowInstance, TemplateDocumentLink
-from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
+from app.models import Task, File, FlowInstance, TemplateDocumentLink
 from sqlalchemy import select
 from urllib.parse import quote
 
@@ -79,172 +77,10 @@ async def submit_task(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """提交任务 —— PDF 转换 + 生成校验记录，进入 waiting_check"""
-    from datetime import datetime
-
-    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
-    if task is None:
-        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
-    if task.assignee_id != current_user.id:
-        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可提交")
-    if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
-        raise AppException(ErrorCode.FORBIDDEN, "当前状态不可提交")
-
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
-
-    # 前置校验：文件提交规则
-    # 有文件夹配置时按文件夹规则校验，否则沿用 require_file 布尔开关（向后兼容）
-    folders_config = node.file_folders or []
-    if folders_config:
-        # 查询当前轮次的所有文件
-        current_files = (await db.execute(
-            select(File).where(File.task_id == task_id, File.round == node.round)
-        )).scalars().all()
-
-        # 按文件夹分组统计
-        folder_counts: dict[str, int] = {}
-        for f in current_files:
-            fn = f.folder_name or ""
-            folder_counts[fn] = folder_counts.get(fn, 0) + 1
-
-        # 逐文件夹校验规则
-        errors: list[str] = []
-        for folder in folders_config:
-            name = (folder.get("name") or "").strip()
-            if not name:
-                continue
-            required = folder.get("required", False)
-            count = folder.get("file_count")  # None=不限，N=精确数量
-            actual = folder_counts.get(name, 0)
-
-            if required and actual == 0:
-                errors.append(f"文件夹「{name}」必须至少提交 1 个文件")
-            elif required and count is not None and actual != count:
-                errors.append(f"文件夹「{name}」需要提交 {count} 个文件，当前已提交 {actual} 个")
-
-        if errors:
-            raise AppException(ErrorCode.BAD_REQUEST, "；".join(errors))
-    elif node.require_file:
-        files = (await db.execute(
-            select(File).where(File.task_id == task_id, File.round == node.round)
-        )).scalars().all()
-        if not files:
-            raise AppException(ErrorCode.BAD_REQUEST, "该节点要求必须上传文件")
-
-    # 更新备注和提交时间
-    if data.assignee_note:
-        task.assignee_note = data.assignee_note
-    now = datetime.now()
-    task.submitted_at = now
-
-    # PDF 转换（并发 + 限流）
-    task_files = (await db.execute(
-        select(File).where(File.task_id == task_id, File.round == node.round)
-    )).scalars().all()
-
-    convert_failed = False
-    if task_files:
-        tasks = []
-        for f in task_files:
-            full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
-            if os.path.exists(full_path):
-                # 把转换任务和对应的 DB 记录绑定，方便后续更新路径
-                tasks.append((f, convert_to_pdf(full_path)))
-
-        if tasks:
-            # 并发执行所有转换，返回 (File记录, PDF路径或None)
-            results = await asyncio.gather(*[t for _, t in tasks])
-            file_records = [f for f, _ in tasks]
-
-            for i, r in enumerate(results):
-                if r is None:
-                    convert_failed = True
-                    break
-
-            # 转换成功：同步更新 file_path、stored_name、mime_type
-            if not convert_failed:
-                for f in file_records:
-                    f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
-                    f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
-                    f.mime_type = "application/pdf"
-
-    if convert_failed:
-        await db.rollback()
-        raise AppException(ErrorCode.INTERNAL_ERROR, "文件转换失败，请检查文件格式后重试")
-
-    # 负责人签批：即时写入 PDF（负责人单人操作，无并发风险）
-    sig_ids: list[int] = []
-    if data.signatures and node.require_assignee_signature:
-        for idx, sig in enumerate(data.signatures):
-            sig_record = Signature(
-                file_id=sig["file_id"],
-                signer_id=current_user.id,
-                role_type="assignee",
-                source_id=task_id,
-                node_id=task.node_id,
-                signature_x=sig.get("signature_x", node.signature_x),
-                signature_y=sig.get("signature_y", node.signature_y),
-                signature_page=sig.get("signature_page", node.signature_page),
-                signature_width=sig.get("signature_width"),
-                signature_height=sig.get("signature_height"),
-                applied=False,
-                sort_order=idx,
-            )
-            db.add(sig_record)
-            await db.flush()
-            sig_ids.append(sig_record.id)
-
-        # 即时写入 PDF
-        if sig_ids:
-            from app.services.pdf_signature import apply_signatures_to_files
-            await apply_signatures_to_files(db, sig_ids)
-
-    # 按 checkers 创建 CheckRecord，空校验人则跳过校验环节
-    checkers = node.checkers or []
-    if checkers:
-        task.status = TaskStatus.WAITING_CHECK
-        node.status = InstanceNodeStatus.WAITING_CHECK
-        for ch in checkers:
-            checker_id = ch.get("user_id") if isinstance(ch, dict) else ch  # ch 是 int 时即为 user_id
-            check_rec = CheckRecord(
-                instance_id=task.instance_id,
-                node_id=task.node_id,
-                task_id=task_id,
-                checker_id=checker_id,
-                status=CheckStatus.PENDING,
-                round=node.round,  # 记录当前节点轮次
-            )
-            db.add(check_rec)
-    else:
-        # 无校验人：直接进入等待审批，按 approvers 创建 Approval 记录
-        task.status = TaskStatus.WAITING_APPROVAL
-        node.status = InstanceNodeStatus.WAITING_APPROVAL
-        approvers = node.approvers or []
-        for a in approvers:
-            approver_id = a.get("user_id") if isinstance(a, dict) else a
-            db.add(Approval(
-                instance_id=task.instance_id,
-                node_id=task.node_id,
-                task_id=task_id,
-                approver_id=approver_id,
-                status=ApprovalStatus.PENDING,
-                round=node.round,
-            ))
-
-    # 操作日志
-    db.add(OperationLog(
-        instance_id=task.instance_id,
-        node_id=task.node_id,
-        operator_type="user",
-        operator_id=current_user.id,
-        operation_type="task_submit",
-        round=node.round,
-        description=f"提交了节点「{node.name}」的任务",
-        detail={"node_name": node.name, "round": node.round},
-    ))
-
+    """提交任务 —— PDF 转换 + 签批 + 生成校验/审批记录"""
+    result = await task_service.submit_task(db, task_id, current_user.id, data)
     await db.commit()
-    return ApiResponse.ok(message="任务已提交，等待校验" if checkers else "任务已提交，等待审批")
+    return ApiResponse.ok(message=result["message"])
 
 
 @router.post("/tasks/{task_id}/prepare-sign")
