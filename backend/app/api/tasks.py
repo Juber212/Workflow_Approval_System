@@ -16,7 +16,8 @@ from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
 )
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, File, FlowInstance, TemplateDocumentLink
+from app.models import Task, InstanceNode, File, DocumentTemplate, FlowInstance, TemplateDocumentLink
+from app.models.enums import TaskStatus
 from sqlalchemy import select
 from urllib.parse import quote
 
