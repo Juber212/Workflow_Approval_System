@@ -817,9 +817,9 @@ async def terminate_instance(
         sql_update(CheckRecord)
         .where(
             CheckRecord.instance_id == instance_id,
-            CheckRecord.status == "pending",
+            CheckRecord.status == CheckStatus.PENDING,
         )
-        .values(status="terminated", decided_at=now)
+        .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
 
     # ========== 8. 关闭 pending approvals ==========
@@ -827,9 +827,9 @@ async def terminate_instance(
         sql_update(Approval)
         .where(
             Approval.instance_id == instance_id,
-            Approval.status == "pending",
+            Approval.status == ApprovalStatus.PENDING,
         )
-        .values(status="terminated", decided_at=now)
+        .values(status=ApprovalStatus.TERMINATED, decided_at=now)
     )
 
     # ========== 9. 更新实例状态 ==========

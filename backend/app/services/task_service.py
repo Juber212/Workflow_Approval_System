@@ -144,7 +144,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     if t.assignee_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可查看")
 
-    # 首次打开：pending → processing
+    # 首次打开任务详情：自动标记为"处理中"（设计意图：无需单独的"开始"按钮，打开即开始）
     if t.status == TaskStatus.PENDING:
         t.status = TaskStatus.PROCESSING
         await db.flush()
