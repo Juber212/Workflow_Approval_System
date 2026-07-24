@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+from app.services.notification_service import create_notification, clear_related
 from app.models import (
     FlowInstance, InstanceNode,
     OperationLog,
@@ -225,7 +226,7 @@ async def change_personnel(
     db.add(log)
 
     # ---- 通知：新人员 + 清除旧人员 ----
-    from app.services.notification_service import create_notification, clear_related
+
 
     # 清除被移除的校验人通知
     for uid in _removed_checkers:

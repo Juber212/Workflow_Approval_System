@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import InstanceNode, InstanceEdge, Task, FlowInstance, Approval
 from app.models.enums import InstanceNodeStatus, ApprovalStatus, TaskStatus
+from app.services.notification_service import create_notification
 
 
 async def activate_start_node(db: AsyncSession, instance_id: int) -> None:
@@ -75,7 +76,20 @@ async def propagate_from_node(
     _tasks_for_notify: list[tuple] = []  # 收集创建的 Task（工作节点）用于通知
     _end_approvals: list[tuple] = []  # 收集终审审批记录（结束节点）用于通知：([user_id], instance_name)
 
+    # BFS 循环保护：查询节点总数计算最大迭代次数（防止环形边无限循环）
+    all_nodes = (await db.execute(
+        select(InstanceNode).where(InstanceNode.instance_id == instance_id)
+    )).scalars().all()
+    max_iterations = len(all_nodes) * 2 if all_nodes else 100
+    iteration = 0
+
     while queue:
+        iteration += 1
+        if iteration > max_iterations:  # 超过阈值，可能存在环形边
+            import logging
+            logging.getLogger(__name__).error(f"流程传播异常：instance={instance_id} BFS 超过最大迭代次数")
+            break
+
         node_id = queue.popleft()
 
         node = (
@@ -155,7 +169,6 @@ async def propagate_from_node(
     await db.flush()
 
     # ---- 通知：下游节点负责人有新任务 (#5 / #1) ----
-    from app.services.notification_service import create_notification
     notif_tasks = [
         create_notification(
             db, user_id=_node.assignee_id, type="task_assigned",

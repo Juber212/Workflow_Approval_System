@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+from app.services.notification_service import create_notification, clear_related
 from app.models import (
     FlowInstance, InstanceNode,
     OperationLog,
@@ -145,7 +146,7 @@ async def terminate_instance(
     db.add(log)
 
     # ---- 通知+清除：所有待处理人员收到终止通知，并清除相关待办通知 ----
-    from app.services.notification_service import create_notification, clear_related
+
 
     notified: set[int] = set()  # 已通知用户去重
 

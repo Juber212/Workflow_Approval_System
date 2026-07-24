@@ -23,6 +23,7 @@ from app.models import (
 from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, OperatorType
 from app.schemas.common import PaginatedData
 from app.schemas.check import CheckListItem, CheckDetail
+from app.services.notification_service import create_notification, clear_related
 
 
 async def list_checks(
@@ -270,8 +271,8 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                 sort_order=idx,
             )
             db.add(sig_record)
-            await db.flush()
             sig_ids.append(sig_record.id)
+        await db.flush()  # 批量 flush，减少 DB 往返
 
     # 记录操作日志
     log = OperationLog(
@@ -340,7 +341,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
         await db.flush()
 
         # ---- 通知：每个审批人有新的待审批任务 (#3) ----
-        from app.services.notification_service import create_notification
+
         notif_tasks = [
             create_notification(
                 db, user_id=ap.approver_id, type="approval_assigned",
@@ -354,7 +355,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             await asyncio.gather(*notif_tasks)
 
         # ---- 通知清除：校验完成后删除该校验人的待校验通知 (#11) ----
-        from app.services.notification_service import clear_related
+
         await clear_related(
             db, user_id=current_user_id, types=["check_assigned"],
         )
@@ -408,10 +409,6 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         )
         .values(status=EndorsementStatus.TERMINATED, decided_at=now)
     )
-    # 当前这条保持 returned（不被覆盖）
-    c.status = CheckStatus.RETURNED
-    c.opinion = opinion
-    c.decided_at = now
 
     # 删除当前轮文件（DB 记录 + 物理文件）
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
@@ -453,7 +450,7 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     await db.flush()
 
     # ---- 通知：负责人，校验退回需重新处理 (#7) ----
-    from app.services.notification_service import create_notification
+
     await create_notification(
         db, user_id=task.assignee_id, type="check_returned",
         title="校验退回",
@@ -462,7 +459,7 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     )
 
     # ---- 通知清除：校验退回后删除该校验人的待校验通知 (#11) ----
-    from app.services.notification_service import clear_related
+
     await clear_related(
         db, user_id=current_user_id, types=["check_assigned"],
     )

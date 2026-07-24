@@ -5,7 +5,7 @@
 """
 import logging
 from datetime import datetime
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
+from app.services.notification_service import create_notification, clear_related
 
 logger = logging.getLogger(__name__)
 
@@ -22,58 +23,67 @@ logger = logging.getLogger(__name__)
 async def list_endorsements(
     db: AsyncSession,
     current_user_id: int,
+    *,
     type_filter: str = "project",
-) -> list[dict]:
-    """我的批准列表 —— 查询当前用户作为批准人的待处理/已处理记录"""
-    # 查找 endorser_id 匹配且实例未终止的记录
-    query = (
-        select(Endorsement)
+    status: str | None = None,
+    keyword: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """我的批准列表 —— 分页 + 关键词搜索"""
+    # 基础查询（JOIN 获取实例和节点名，避免 N+1）
+    base_stmt = (
+        select(Endorsement, FlowInstance.name.label("instance_name"),
+               FlowInstance.template_type.label("instance_type"),
+               InstanceNode.name.label("node_name"),
+               InstanceNode.is_end.label("is_end_node"))
+        .join(FlowInstance, Endorsement.instance_id == FlowInstance.id)
+        .join(InstanceNode, Endorsement.node_id == InstanceNode.id)
         .where(Endorsement.endorser_id == current_user_id)
-        .order_by(
-            (Endorsement.status == EndorsementStatus.PENDING).desc(),
-            Endorsement.created_at.desc(),
-        )
     )
-    result = await db.execute(query)
-    endorsements = result.scalars().all()
 
-    items = []
-    for e in endorsements:
-        # 查询关联实例信息
-        inst = (await db.execute(
-            select(FlowInstance).where(FlowInstance.id == e.instance_id)
-        )).scalar_one_or_none()
-        if inst is None:
-            continue
+    # 类型过滤：直接用 FlowInstance.template_type
+    if type_filter:
+        base_stmt = base_stmt.where(FlowInstance.template_type == type_filter)
 
-        # 方案/项目类型过滤
-        tpl = (await db.execute(
-            select(FlowTemplate).where(FlowTemplate.id == inst.template_id)
-        )).scalar_one_or_none()
-        tpl_type = tpl.type if tpl else "project"
-        if type_filter and tpl_type != type_filter:
-            continue
+    if status:
+        base_stmt = base_stmt.where(Endorsement.status == status)
 
-        # 查询节点名称 + 是否结束节点
-        node = (await db.execute(
-            select(InstanceNode).where(InstanceNode.id == e.node_id)
-        )).scalar_one_or_none()
+    if keyword:
+        base_stmt = base_stmt.where(FlowInstance.name.like(f"%{keyword}%"))
 
-        items.append({
-            "id": e.id,
-            "instance_id": e.instance_id,
-            "instance_name": inst.name,
-            "node_id": e.node_id,
-            "node_name": node.name if node else "",
-            "task_id": e.task_id,
-            "endorser_id": e.endorser_id,
-            "status": e.status,
-            "is_end_node": node.is_end if node else False,
-            "round": e.round,
-            "created_at": e.created_at,
-        })
+    # 总数
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar() or 0
 
-    return items
+    # 排序 + 分页
+    base_stmt = base_stmt.order_by(
+        (Endorsement.status == EndorsementStatus.PENDING).desc(),
+        Endorsement.created_at.desc(),
+    )
+    base_stmt = base_stmt.offset((page - 1) * page_size).limit(page_size)
+
+    result = await db.execute(base_stmt)
+    rows = result.all()
+
+    items = [
+        {
+            "id": row.Endorsement.id,
+            "instance_id": row.Endorsement.instance_id,
+            "instance_name": row.instance_name,
+            "node_id": row.Endorsement.node_id,
+            "node_name": row.node_name or "",
+            "task_id": row.Endorsement.task_id,
+            "endorser_id": row.Endorsement.endorser_id,
+            "status": row.Endorsement.status,
+            "is_end_node": row.is_end_node if row.is_end_node is not None else False,
+            "round": row.Endorsement.round,
+            "created_at": row.Endorsement.created_at,
+        }
+        for row in rows
+    ]
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 async def get_endorsement_detail(
@@ -159,7 +169,7 @@ async def get_endorsement_detail(
 
     # 查询批准人签名图片
     current_signature_url = None
-    if endorser_user and endorser_user.signature_path:
+    if endorser_user and endorser_user.signature_image:
         current_signature_url = f"/api/v1/auth/users/{endorser_user.id}/signature-image"
 
     return {
@@ -235,7 +245,7 @@ async def endorse(
     e.decided_at = now
 
     # ---- 通知清除：批准完成后删除该批准人的待批准通知 (#11) ----
-    from app.services.notification_service import clear_related
+
     await clear_related(
         db, user_id=current_user_id, types=["endorsement_assigned"],
     )
@@ -256,21 +266,21 @@ async def endorse(
                 node_id=e.node_id,
                 role_type="endorser",
                 source_id=e.id,
-                user_id=current_user_id,
+                signer_id=current_user_id,
                 signature_x=sig.get("signature_x", 400),
                 signature_y=sig.get("signature_y", 100),
                 signature_page=sig.get("signature_page", -1),
             )
             db.add(s)
-            await db.flush()
             sig_ids.append(s.id)
+        await db.flush()  # 批量 flush，减少 DB 往返
     elif signature_x is not None:  # 旧版单签名兼容
         s = Signature(
             file_id=None,
             node_id=e.node_id,
             role_type="endorser",
             source_id=e.id,
-            user_id=current_user_id,
+            signer_id=current_user_id,
             signature_x=signature_x,
             signature_y=signature_y or 100,
             signature_page=signature_page or -1,
@@ -374,7 +384,7 @@ async def endorse_reject(
     e.decided_at = now
 
     # ---- 通知清除：批准驳回后删除该批准人的待批准通知 (#11) ----
-    from app.services.notification_service import clear_related
+
     await clear_related(
         db, user_id=current_user_id, types=["endorsement_assigned"],
     )
@@ -420,9 +430,10 @@ async def endorse_reject(
     # 物理文件删除
     for f in old_files:
         try:
-            if f.storage_path and os.path.exists(f.storage_path):
-                os.remove(f.storage_path)
-        except Exception as exc:
+            abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+        except OSError as exc:
             logger.warning("删除旧文件失败: %s", exc)
 
     # 7. 节点回到运行状态，round+1
@@ -455,7 +466,7 @@ async def endorse_reject(
     db.add(log)
 
     # ---- 通知：负责人，批准驳回需重新处理 (#10) ----
-    from app.services.notification_service import create_notification
+
     if task_for_notify and task_for_notify.assignee_id:
         await create_notification(
             db, user_id=task_for_notify.assignee_id, type="endorsement_rejected",

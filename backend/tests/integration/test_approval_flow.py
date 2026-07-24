@@ -180,6 +180,7 @@ class TestApprovalFlowIntegration:
     def test_approve_all_approved(self, client_with_mocks, mocker):
         """POST /api/v1/approvals/1/approve → 全部通过"""
         mocker.patch("app.services.approval_service.propagate_from_node", new=AsyncMock())
+        mocker.patch("app.services.approval_service.clear_related", new=AsyncMock())
 
         client = client_with_mocks
         db = client.mock_db
@@ -194,9 +195,9 @@ class TestApprovalFlowIntegration:
             MockResult(scalar_one=user),        # 0: get_current_active_user
             MockResult(scalar_one=approval),    # 1: approval FOR UPDATE
             MagicMock(),                         # 2: lock other pending
-            MockResult(scalars_all=[]),          # 3: remaining → 空
-            MagicMock(),                         # 4: UPDATE task
-            MockResult(scalar_one=node),         # 5: get node
+            MockResult(scalar_one=node),         # 3: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),          # 4: remaining → 空
+            MagicMock(),                         # 5: UPDATE task
             MockResult(scalar_one=inst),         # 6: get FlowInstance
             MockResult(scalar_one=None),         # 7: get FlowTemplate
         ]

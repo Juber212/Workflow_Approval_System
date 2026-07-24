@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+from app.services.notification_service import create_notification, clear_related
 from app.models import (
     Approval,
     Task,
@@ -50,11 +51,7 @@ async def list_approvals(
     # 按实例类型过滤
     if instance_type:
         conditions.append(Approval.instance_id.in_(
-            select(FlowInstance.id).where(
-                FlowInstance.template_id.in_(
-                    select(FlowTemplate.id).where(FlowTemplate.type == instance_type)
-                )
-            )
+            select(FlowInstance.id).where(FlowInstance.template_type == instance_type)
         ))
     if status:
         conditions.append(Approval.status == status)
@@ -329,7 +326,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     a.decided_at = now
 
     # ---- 通知清除：审批完成后删除该审批人的待审批通知 (#11) ----
-    from app.services.notification_service import clear_related
+
     await clear_related(
         db, user_id=current_user_id, types=["approval_assigned"],
     )
@@ -361,8 +358,8 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
                 sort_order=idx,
             )
             db.add(sig_record)
-            await db.flush()
             sig_ids.append(sig_record.id)
+        await db.flush()  # 批量 flush，减少 DB 往返
     # 兼容旧版：无 signatures 但有单签名位置参数 → 自动生成一条签名记录
     elif signature_x is not None or signature_y is not None or signature_page is not None:
         # 获取审批人的签名位置（旧版模式下，默认签在节点第一个 PDF 上）
@@ -404,16 +401,34 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     db.add(log)
     await db.flush()
 
-    # 检查当前 node 的全部 Approval 是否都已 approved
-    pending_apprs = await db.execute(
-        select(Approval).where(
-            Approval.node_id == a.node_id,
-            Approval.status == ApprovalStatus.PENDING,
+    # 查询节点（审批策略判断需要）
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+
+    # 审批策略分支：all_approve（默认）等待全部审批；single_approve 一人通过即推进
+    if getattr(node, 'approval_strategy', 'all_approve') == 'single_approve':
+        # 单人审批通过 → 终止其他 PENDING 审批，直接推进
+        await db.execute(
+            update(Approval)
+            .where(
+                Approval.node_id == a.node_id,
+                Approval.status == ApprovalStatus.PENDING,
+                Approval.id != approval_id,
+            )
+            .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
-    )
-    remaining = pending_apprs.scalars().all()
-    if remaining:
-        return {"all_approved": False, "message": "审批通过，等待其他审批人"}
+    else:
+        # 全部通过策略：检查是否还有待审批人员
+        pending_apprs = await db.execute(
+            select(Approval).where(
+                Approval.node_id == a.node_id,
+                Approval.status == ApprovalStatus.PENDING,
+            )
+        )
+        remaining = pending_apprs.scalars().all()
+        if remaining:
+            return {"all_approved": False, "message": "审批通过，等待其他审批人"}
 
     # 全部审批通过 → 标记当前节点的 Task 为 completed
     if a.task_id:
@@ -422,11 +437,6 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             .where(Task.id == a.task_id)
             .values(status=TaskStatus.COMPLETED, completed_at=now)
         )
-
-    # 全部审批通过 → 签名上 PDF → 推进流程
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # 签批：终审节点跳过 PDF 盖章（终审只需确认文件齐全即可归档）
     if not node.is_end and node.require_approver_signature:
@@ -493,7 +503,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         node.status = InstanceNodeStatus.WAITING_ENDORSEMENT
 
         # ---- 通知：批准人有新的待批准任务 (#4) ----
-        from app.services.notification_service import create_notification
+
         await create_notification(
             db, user_id=node.endorser_id, type="endorsement_assigned",
             title="新的待批准任务",
@@ -543,7 +553,7 @@ async def reject(
     now = datetime.now()
 
     # ---- 通知清除：审批退回后删除该审批人的待审批通知 (#11) ----
-    from app.services.notification_service import clear_related
+
     await clear_related(
         db, user_id=current_user_id, types=["approval_assigned"],
     )
@@ -649,7 +659,7 @@ async def reject(
         await db.flush()
 
         # ---- 通知：目标节点负责人，终审总驳回需重新处理 (#9) ----
-        from app.services.notification_service import create_notification
+
         new_task_id = new_task.id if (target_node.assignee_id and 'new_task' in dir()) else None
         if target_node.assignee_id and new_task_id:
             await create_notification(
@@ -731,7 +741,7 @@ async def reject(
         await db.flush()
 
         # ---- 通知：负责人，审批退回需重新处理 (#8) ----
-        from app.services.notification_service import create_notification
+
         if task and task.assignee_id:
             await create_notification(
                 db, user_id=task.assignee_id, type="approval_rejected",

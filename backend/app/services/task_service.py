@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.config import settings
+from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
+from app.services.notification_service import create_notification, clear_related
 from app.core.error_codes import ErrorCode
 from app.models import (
     Task,
@@ -43,13 +45,8 @@ async def list_tasks(
 
     # 按实例类型过滤（项目/方案）
     if instance_type:
-        tpl_filter = FlowTemplate.type == instance_type
         conditions.append(Task.instance_id.in_(
-            select(FlowInstance.id).where(
-                FlowInstance.template_id.in_(
-                    select(FlowTemplate.id).where(tpl_filter)
-                )
-            )
+            select(FlowInstance.id).where(FlowInstance.template_type == instance_type)
         ))
     if status:
         conditions.append(Task.status == status)
@@ -442,7 +439,6 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     await db.flush()
 
     # ---- 通知：校验人有新的待校验任务 (#2) ----
-    from app.services.notification_service import create_notification
     notif_tasks = [
         create_notification(
             db, user_id=c_id, type="check_assigned",
@@ -466,7 +462,6 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
         await asyncio.gather(*notif_tasks)
 
     # ---- 通知清除：提交后删除该负责人的相关待办通知 (#11) ----
-    from app.services.notification_service import clear_related
     await clear_related(
         db, user_id=current_user_id,
         types=["task_assigned", "check_returned", "approval_rejected", "final_rejected"],
@@ -530,7 +525,7 @@ async def _convert_files_to_pdf(task_id: int, round_num: int, db: AsyncSession):
     # 构建并发转换任务
     convert_tasks = []
     for f in task_files:
-        full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
+        full_path = resolve_file_path(f.file_path)
         if os.path.exists(full_path):
             convert_tasks.append((f, convert_to_pdf(full_path)))
 
