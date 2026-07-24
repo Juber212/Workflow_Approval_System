@@ -331,11 +331,11 @@ async def list_instances(
         )
         .join(Initiator, FlowInstance.initiator_id == Initiator.id)
         .join(Org, FlowInstance.organization_id == Org.id)
-        .join(FlowTemplate, and_(
-            FlowInstance.template_id == FlowTemplate.id,
-            FlowTemplate.type == "project",
-        ), isouter=True)  # LEFT JOIN：模板删除后实例依然可见
+        .join(FlowTemplate, FlowInstance.template_id == FlowTemplate.id, isouter=True)  # LEFT JOIN：模板删除后实例依然可见
     )
+
+    # 过滤：仅项目，排除方案（方案的列表走 /proposals 端点）
+    base_stmt = base_stmt.where(FlowInstance.template_type == "project")
 
     # ========== 筛选条件 ==========
     if organization_id is not None:
@@ -1460,3 +1460,13 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     # 8. 删除实例本身
     await db.delete(instance)
     await db.flush()
+
+    # 9. 删除实例文件夹（文件已在步骤3删除，此处清理残留空目录）
+    import shutil
+    archive_subdir = settings.get_archive_dir(instance.template_type or "project")
+    instance_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, instance.name)
+    try:
+        if os.path.isdir(instance_dir):
+            shutil.rmtree(instance_dir)
+    except OSError:
+        pass  # 目录不存在或权限问题，忽略

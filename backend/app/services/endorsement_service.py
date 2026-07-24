@@ -30,7 +30,7 @@ async def list_endorsements(
         select(Endorsement)
         .where(Endorsement.endorser_id == current_user_id)
         .order_by(
-            Endorsement.status == EndorsementStatus.PENDING.desc(),
+            (Endorsement.status == EndorsementStatus.PENDING).desc(),
             Endorsement.created_at.desc(),
         )
     )
