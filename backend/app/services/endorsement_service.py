@@ -12,6 +12,7 @@ from app.models import (
     Endorsement, FlowInstance, FlowTemplate, InstanceNode, Task,
     EndorsementStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus,
     InstanceStatus, Signature, OperationLog,
+    File, CheckRecord, Approval, User,
 )
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
@@ -91,30 +92,24 @@ async def get_endorsement_detail(
     endorsement_id: int,
     current_user_id: int,
 ) -> dict:
-    """批准详情 —— 含文件、校验/审批进度、签名配置"""
-    e = (await db.execute(
-        select(Endorsement).where(Endorsement.id == endorsement_id)
-    )).scalar_one_or_none()
-    if e is None:
+    """批准详情 —— 含文件、校验/审批进度、签名配置
+
+    查询优化：Endorsement + FlowInstance + InstanceNode 合并为一次 JOIN 查询（3→1）
+    """
+    # 合并查询：Endorsement + FlowInstance + InstanceNode（一次 JOIN 替代 3 次独立查询）
+    row = (await db.execute(
+        select(Endorsement, FlowInstance, InstanceNode)
+        .join(FlowInstance, Endorsement.instance_id == FlowInstance.id)
+        .join(InstanceNode, Endorsement.node_id == InstanceNode.id)
+        .where(Endorsement.id == endorsement_id)
+    )).first()
+    if row is None:
         raise AppException(ErrorCode.NOT_FOUND, "批准记录不存在")
+    e, inst, node = row.Endorsement, row.FlowInstance, row.InstanceNode
     if e.endorser_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "无权查看此批准记录")
 
-    # 查询关联实例
-    inst = (await db.execute(
-        select(FlowInstance).where(FlowInstance.id == e.instance_id)
-    )).scalar_one_or_none()
-    if inst is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联项目不存在")
-
-    # 查询节点
-    node = (await db.execute(
-        select(InstanceNode).where(InstanceNode.id == e.node_id)
-    )).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
-
-    # 查询 Task
+    # 查询 Task（独立结果集，保持单独查询）
     task = None
     if e.task_id:
         task = (await db.execute(
@@ -122,7 +117,6 @@ async def get_endorsement_detail(
         )).scalar_one_or_none()
 
     # 查询当前轮次文件
-    from app.models import File
     files_result = await db.execute(
         select(File).where(
             File.instance_id == e.instance_id,
@@ -133,7 +127,6 @@ async def get_endorsement_detail(
     files = files_result.scalars().all()
 
     # 查询校验/审批记录
-    from app.models import CheckRecord, Approval
     checks_result = await db.execute(
         select(CheckRecord).where(
             CheckRecord.node_id == e.node_id,
@@ -158,14 +151,15 @@ async def get_endorsement_detail(
     )
     all_nodes = nodes_result.scalars().all()
 
-    # 查询用户姓名
-    from app.models import User
-    endorser_user = (await db.execute(
-        select(User).where(User.id == e.endorser_id)
-    )).scalar_one_or_none()
-    initiator_user = (await db.execute(
-        select(User).where(User.id == inst.initiator_id)
-    )).scalar_one_or_none()
+    # 批量查询相关用户（一次 IN 查询替代 2 次独立查询）
+    user_ids_needed = {e.endorser_id, inst.initiator_id}
+    user_ids_needed.discard(None)
+    users_result = await db.execute(
+        select(User).where(User.id.in_(user_ids_needed))
+    )
+    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    endorser_user = users_map.get(e.endorser_id)
+    initiator_user = users_map.get(inst.initiator_id)
 
     # 查询批准人签名图片
     current_signature_url = None
