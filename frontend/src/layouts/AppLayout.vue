@@ -82,9 +82,7 @@ import NotificationBell from '@/components/NotificationBell.vue'
 import SidebarNav from '@/layouts/components/SidebarNav.vue'
 import ChangePasswordDialog from '@/layouts/components/ChangePasswordDialog.vue'
 import { getMeApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
-import { getTasks } from '@/api/task'
-import { getChecks } from '@/api/check'
-import { getApprovals } from '@/api/approval'
+import { fetchSummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
@@ -110,28 +108,18 @@ function roleTagLabel(role: string): string {
 // ==================== 通知计数 ====================
 const isAdmin = computed(() => userStore.userInfo?.roles.includes('system_admin') ?? false)
 
+/** 刷新通知计数 —— 一次请求获取所有汇总数据（替代原来 7 次独立分页查询） */
 async function refreshNotifyCounts() {
   if (isAdmin.value) return
   try {
-    const [tasks, checks, approvals, projectTasks, proposalTasks, projectApprovals, proposalApprovals] = await Promise.all([
-      getTasks({ page_size: 1 }),
-      getChecks({ page_size: 1 }),
-      getApprovals({ page_size: 1 }),
-      getTasks({ page_size: 1, type: 'project' }),
-      getTasks({ page_size: 1, type: 'proposal' }),
-      getApprovals({ page_size: 1, type: 'project' }),
-      getApprovals({ page_size: 1, type: 'proposal' }),
-    ])
-    notifyStore.setCounts(tasks.total, checks.total, approvals.total)
-    notifyStore.setTypedCounts(
-      projectTasks.total + checks.total + projectApprovals.total,
-      proposalTasks.total + proposalApprovals.total,
-    )
-  } catch (e) { console.error('通知数量刷新失败:', e) }
+    const summary = await fetchSummaryCounts()
+    notifyStore.setCounts(summary.task_count, summary.check_count, summary.approval_count)
+    notifyStore.setTypedCounts(summary.project_pending, summary.proposal_pending)
+  } catch (e) { console.error('通知计数刷新失败:', e) }
 }
 
+// 仅挂载时刷新一次，后续由 WebSocket 实时推送更新
 onMounted(refreshNotifyCounts)
-watch(() => route.path, () => { refreshNotifyCounts() })
 
 // ==================== 个人信息弹窗 ====================
 const showUserInfoDialog = ref(false)

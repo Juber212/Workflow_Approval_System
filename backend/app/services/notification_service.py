@@ -118,6 +118,64 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> None:
     await db.flush()
 
 
+async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
+    """获取待办/校验/审批计数汇总 —— 一次请求替代原来的 7 次独立查询
+
+    使用 JOIN + GROUP BY 单次查询获取按类型分组的计数，
+    避免 7 次独立分页查询造成的 429 限流问题。
+    """
+    from app.models import Task, CheckRecord, Approval, FlowInstance
+
+    # 1. 任务计数按实例类型分组 —— 一条 JOIN 查询
+    task_counts = (await db.execute(
+        select(FlowInstance.template_type, func.count(Task.id))
+        .join(Task, Task.instance_id == FlowInstance.id)
+        .where(
+            Task.assignee_id == user_id,
+            Task.status.notin_(["completed", "terminated"]),
+            FlowInstance.template_type.in_(["project", "proposal"]),
+        )
+        .group_by(FlowInstance.template_type)
+    )).all()
+    task_map: dict[str, int] = {row[0]: row[1] for row in task_counts}
+    project_tasks = task_map.get("project", 0)
+    proposal_tasks = task_map.get("proposal", 0)
+
+    # 2. 校验计数（pending 状态，不区分类型）
+    check_count = (await db.execute(
+        select(func.count(CheckRecord.id)).where(
+            CheckRecord.checker_id == user_id,
+            CheckRecord.status == "pending",
+        )
+    )).scalar() or 0
+
+    # 3. 审批计数按实例类型分组 —— 一条 JOIN 查询
+    approval_counts = (await db.execute(
+        select(FlowInstance.template_type, func.count(Approval.id))
+        .join(Approval, Approval.instance_id == FlowInstance.id)
+        .where(
+            Approval.approver_id == user_id,
+            Approval.status == "pending",
+            FlowInstance.template_type.in_(["project", "proposal"]),
+        )
+        .group_by(FlowInstance.template_type)
+    )).all()
+    approval_map: dict[str, int] = {row[0]: row[1] for row in approval_counts}
+    project_approvals = approval_map.get("project", 0)
+    proposal_approvals = approval_map.get("proposal", 0)
+
+    task_total = project_tasks + proposal_tasks
+    approval_total = project_approvals + proposal_approvals
+
+    return {
+        "task_count": task_total,
+        "check_count": check_count,
+        "approval_count": approval_total,
+        "project_pending": project_tasks + check_count + project_approvals,
+        "proposal_pending": proposal_tasks + proposal_approvals,
+    }
+
+
 async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> None:
     """操作完成后删除相关通知（不阻塞主流程）"""
     try:

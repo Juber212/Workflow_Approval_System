@@ -32,6 +32,21 @@ export async function fetchNotifications(page = 1, pageSize = 20): Promise<{
   return data
 }
 
+/** 待办汇总计数响应 */
+export interface SummaryCounts {
+  task_count: number
+  check_count: number
+  approval_count: number
+  project_pending: number
+  proposal_pending: number
+}
+
+/** 获取待办/校验/审批汇总计数 —— 一次请求替代 7 次独立分页查询 */
+export async function fetchSummaryCounts(): Promise<SummaryCounts> {
+  const { data } = await request.get('/notifications/summary')
+  return data
+}
+
 /** 获取未读通知数量 */
 export async function fetchUnreadCount(): Promise<UnreadCount> {
   const { data } = await request.get('/notifications/unread-count')

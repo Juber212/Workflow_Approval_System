@@ -23,6 +23,16 @@ async def list_notifications(
     return ApiResponse.ok(result)
 
 
+@router.get("/notifications/summary", summary="待办汇总计数")
+async def notification_summary(
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取当前用户待办/校验/审批汇总计数（一次请求替代 7 次独立查询）"""
+    result = await ns.get_summary(db, user_id=current_user.id)
+    return ApiResponse.ok(result)
+
+
 @router.get("/notifications/unread-count", summary="未读通知数")
 async def unread_count(
     current_user: CurrentUser = Depends(get_current_active_user),
