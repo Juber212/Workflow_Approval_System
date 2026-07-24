@@ -24,6 +24,11 @@ chinesecalendar>=1.11.0
 # 配置管理
 pydantic-settings>=2.6.0
 
+# 异步任务队列（ARQ + Redis）
+arq>=0.26.0
+redis>=5.0.0
+hiredis>=2.3.0  # Redis 高性能解析器
+
 # 测试
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
