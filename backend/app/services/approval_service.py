@@ -105,22 +105,32 @@ async def list_approvals(
 
 
 async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_id: int) -> dict:
-    """审批详情 —— 含文件、校验/审批进度、驳回目标候选"""
-    a = (await db.execute(select(Approval).where(Approval.id == approval_id))).scalar_one_or_none()
-    if a is None:
+    """审批详情 —— 含文件、校验/审批进度、驳回目标候选
+
+    查询优化：Approval + InstanceNode + FlowInstance 合并为一次 JOIN（3→1）
+    """
+    # 合并查询：Approval + InstanceNode + FlowInstance（一次 JOIN 替代 3 次独立查询）
+    row = (await db.execute(
+        select(Approval, InstanceNode, FlowInstance)
+        .join(InstanceNode, Approval.node_id == InstanceNode.id)
+        .join(FlowInstance, Approval.instance_id == FlowInstance.id)
+        .where(Approval.id == approval_id)
+    )).first()
+    if row is None:
         raise AppException(ErrorCode.NOT_FOUND, "审批记录不存在")
+    a, node, inst = row.Approval, row.InstanceNode, row.FlowInstance
     if a.approver_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅审批人可查看")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one_or_none()
-    if inst is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
-    approver_user = (await db.execute(select(User).where(User.id == a.approver_id))).scalar_one_or_none()
-    # 查发起人
-    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
+    # 批量查询相关用户（一次 IN 查询替代 2 次独立查询）
+    user_ids_needed = {a.approver_id, inst.initiator_id}
+    user_ids_needed.discard(None)
+    users_result = await db.execute(
+        select(User).where(User.id.in_(user_ids_needed))
+    )
+    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    approver_user = users_map.get(a.approver_id)
+    initiator = users_map.get(inst.initiator_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     all_nodes_result = await db.execute(
