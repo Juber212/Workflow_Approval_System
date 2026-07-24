@@ -1,7 +1,8 @@
-"""项目服务 — 按功能拆分到 app/services/instance/ 子模块
+"""项目服务 —— 按功能拆分到子模块
 
-本文件保留为兼容入口，实际实现在 instance/ 子目录中。
+外部调用方无需改动 import 路径：from app.services.instance_service import xyz
 """
+
 from app.services.instance._helpers import (
     _get_type_label,
     _batch_get_node_stats,
