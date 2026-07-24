@@ -1,6 +1,5 @@
 """文件服务 —— 上传、删除、PDF 转换"""
 import os
-import uuid
 
 from fastapi import UploadFile
 from sqlalchemy import select
@@ -12,6 +11,30 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import File, Task, InstanceNode, FlowInstance
 from app.models.enums import TaskStatus, UploadType
+
+
+def _unique_stored_name(directory: str, original_name: str) -> str:
+    """为原始文件名生成唯一存储名，同名时自动追加序号
+
+    Args:
+        directory: 目标存储目录
+        original_name: 用户上传的原始文件名
+
+    Returns:
+        唯一的存储文件名，如 技术方案.docx / 技术方案 (1).docx
+    """
+    # 清理文件名中的路径分隔符，防止路径穿越
+    base, ext = os.path.splitext(original_name)
+    safe_base = base.replace("/", "_").replace("\\", "_")
+    candidate = f"{safe_base}{ext}" if ext else safe_base
+    counter = 1
+    while os.path.exists(os.path.join(directory, candidate)):
+        if ext:
+            candidate = f"{safe_base} ({counter}){ext}"
+        else:
+            candidate = f"{safe_base} ({counter})"
+        counter += 1
+    return candidate
 
 
 async def upload_file(
@@ -59,9 +82,9 @@ async def upload_file(
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one()
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
-    # 生成唯一文件名
+    # 生成唯一文件名（用原始文件名，同名时自动追加序号）
     ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
-    stored_name = f"{uuid.uuid4().hex}{ext}"
+    stored_name = _unique_stored_name(archive_dir, upload_file_obj.filename or "file")
 
     # 创建存储目录（根据模板类型分目录，有文件夹时存入子目录）
     archive_subdir = settings.get_archive_dir(inst.template_type or "project")

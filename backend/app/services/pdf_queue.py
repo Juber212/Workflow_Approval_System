@@ -15,7 +15,6 @@ from arq.connections import RedisSettings
 from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import select
 
-from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.redis import ARQ_REDIS_URL, get_pubsub_redis_url
 from app.models.file import File
@@ -107,8 +106,9 @@ async def convert_file_job(ctx, file_id: int, file_path: str) -> dict:
             result = await convert_to_pdf(full_path)
 
             if result:
-                # 转换成功：convert_to_pdf 返回绝对路径，需转回相对路径存储
-                file.file_path = os.path.relpath(result, settings.STORAGE_ROOT)
+                # 转换成功：更新路径和文件名（只改扩展名，保留原始文件名 base）
+                # convert_to_pdf 已生成 同目录/同base.pdf，并删除了源文件
+                file.file_path = os.path.splitext(file.file_path)[0] + ".pdf"
                 file.stored_name = os.path.splitext(file.stored_name)[0] + ".pdf"
                 file.mime_type = "application/pdf"
                 file.conversion_status = "ready"
