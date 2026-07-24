@@ -177,7 +177,7 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
 
 
 async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> None:
-    """操作完成后删除相关通知（不阻塞主流程）"""
+    """操作完成后删除相关通知，并通过 WebSocket 通知前端刷新未读数（不阻塞主流程）"""
     try:
         from sqlalchemy import delete
         await db.execute(
@@ -187,5 +187,10 @@ async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> 
             )
         )
         await db.flush()
+        # 通知前端刷新铃铛未读数（fire-and-forget，失败不影响主流程）
+        try:
+            await manager.send_to_user(user_id, {"type": "refresh_count"})
+        except Exception:
+            pass
     except Exception:
         logger.debug(f"清除通知失败: user_id={user_id}, types={types}", exc_info=True)

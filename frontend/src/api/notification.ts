@@ -129,7 +129,10 @@ export function useNotificationSocket() {
         const msg = JSON.parse(event.data)
         if (msg.type === 'notification' && msg.data) {
           latestNotice.value = msg.data
-          // 只更新未读计数，具体数字可从 API 重新拉取
+          // 推送新通知时刷新未读数
+          fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
+        } else if (msg.type === 'refresh_count') {
+          // 后端 clear_related 后通知前端刷新铃铛未读数（静默，不弹出气泡）
           fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
         }
       } catch {
