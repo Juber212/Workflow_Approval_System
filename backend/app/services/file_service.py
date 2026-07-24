@@ -95,7 +95,7 @@ async def upload_file(
         original_name=upload_file_obj.filename or "unknown",
         stored_name=stored_name,
         file_path=file_path_rel,
-        file_size=len(contents),
+        file_size=file_size,
         mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
     )
     try:
