@@ -15,6 +15,7 @@
 依赖：pypdf, Pillow
 """
 
+import asyncio
 import logging
 import os
 import zlib
@@ -168,7 +169,8 @@ async def apply_signatures_to_node_pdfs(
             continue
 
         try:
-            _insert_signatures(
+            await asyncio.to_thread(
+                _insert_signatures,
                 pdf_path=abs_path,
                 signature_paths=signature_paths,
                 signature_positions=signature_positions,
@@ -177,6 +179,7 @@ async def apply_signatures_to_node_pdfs(
             )
             signed_count += 1
         except Exception as e:
+            # 安全网：PDF 签名插入涉及文件 I/O + pypdf 多类型异常
             logger.warning(f"[签名] 文件 {file_record.id} 签名失败: {e}")
             continue
 
@@ -278,7 +281,8 @@ async def apply_signatures_to_files(
             continue
 
         try:
-            _insert_signatures(
+            await asyncio.to_thread(
+                _insert_signatures,
                 pdf_path=abs_path,
                 signature_paths=sig_paths,
                 signature_positions=sig_positions,
@@ -295,6 +299,7 @@ async def apply_signatures_to_files(
                 .values(applied=True)
             )
         except Exception as e:
+            # 安全网：DB 更新失败不中断其他文件的签名标记
             logger.warning(f"[签名] 文件 {file_id} 签名写入失败: {e}")
             continue
 
@@ -383,10 +388,13 @@ def _insert_signatures(
         with open(tmp_path, "wb") as f:
             writer.write(f)
         os.replace(tmp_path, pdf_path)  # 原子替换（跨平台）
-    except Exception:
-        # 清理残留临时文件
+    except OSError:
+        # 清理残留临时文件（文件写入失败/磁盘空间不足）
         if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
         raise
 
 
@@ -505,5 +513,6 @@ def _create_signature_stamp(sig_path: str, max_width: int = 100, max_height: int
 
         return stamp_page, w, h
 
-    except Exception:
+    except (OSError, ValueError):
+        # PIL 图片处理 / pypdf PDF 操作失败时静默降级
         return None, 0, 0

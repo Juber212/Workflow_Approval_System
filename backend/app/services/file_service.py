@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import File, Task, InstanceNode, FlowInstance
@@ -30,7 +31,7 @@ async def upload_file(
     if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
         raise AppException(ErrorCode.FORBIDDEN, "当前状态不可上传文件")
 
-    # 校验文件类型
+    # 校验文件类型（先 Client MIME 粗筛，再魔数精确校验）
     if upload_file_obj.content_type not in settings.allowed_mime_types_list:
         raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {upload_file_obj.content_type}")
 
@@ -38,6 +39,17 @@ async def upload_file(
     contents = await upload_file_obj.read()
     if len(contents) > settings.max_file_size_bytes:
         raise AppException(ErrorCode.BAD_REQUEST, "文件大小不能超过 50MB")
+
+    # 文件魔数校验（防止伪造 Content-Type）
+    import filetype
+    detected = filetype.guess(contents[:8192])  # 读前 8KB 检测魔数
+    if detected is None:
+        # 未知类型：可能是纯文本/CSV 等无魔数文件，退回到扩展名白名单
+        ext = os.path.splitext(upload_file_obj.filename or "")[1].lower()
+        if ext not in (".txt", ".csv", ".json", ".xml"):
+            raise AppException(ErrorCode.BAD_REQUEST, f"无法识别文件类型，请上传支持的格式")
+    elif detected.mime not in settings.allowed_mime_types_list:
+        raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {detected.mime}（检测到真实类型与声明不符）")
 
     # 获取实例名称和节点信息
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one()
@@ -60,9 +72,10 @@ async def upload_file(
     # 写入物理文件
     file_path = os.path.join(archive_dir, stored_name)
 
-    # 写入文件
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    # 写入文件（异步 I/O，避免阻塞事件循环）
+    import aiofiles
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(contents)
 
     # 创建 File 记录（失败时清理物理文件，防止孤儿文件残留）
     file_record = File(
@@ -82,7 +95,7 @@ async def upload_file(
     try:
         db.add(file_record)
         await db.flush()
-    except Exception:
+    except Exception:  # 安全网：任何 DB 异常都需清理已写入的物理文件，避免孤儿文件
         # DB 写入失败，清理已写入的物理文件
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -111,7 +124,7 @@ async def delete_file(db: AsyncSession, task_id: int, file_id: int, current_user
         raise AppException(ErrorCode.NOT_FOUND, "文件不存在")
 
     # 物理删除
-    abs_path = os.path.join(settings.STORAGE_ROOT, file_rec.file_path)
+    abs_path = resolve_file_path(file_rec.file_path)
     if os.path.exists(abs_path):
         os.remove(abs_path)
 

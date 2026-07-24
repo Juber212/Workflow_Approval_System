@@ -53,11 +53,11 @@ async def create_notification(
                     "created_at": notif.created_at.isoformat() if notif.created_at else None,
                 },
             })
-        except Exception:
+        except Exception:  # 安全网：WebSocket 推送不可靠，失败不阻塞通知创建
             logger.debug(f"WebSocket 推送失败: user_id={user_id}", exc_info=True)
 
         return notif
-    except Exception:
+    except Exception:  # 安全网：通知创建任何环节失败都不影响主业务流程
         logger.error(f"创建通知失败: user_id={user_id}, type={type}", exc_info=True)
         return None
 

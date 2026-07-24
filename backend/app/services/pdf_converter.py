@@ -61,7 +61,8 @@ async def _image_to_pdf(image_path: str) -> str | None:
         # 删除源文件
         os.remove(image_path)
         return pdf_path
-    except Exception as e:
+    except (OSError, ValueError) as e:
+        # PIL 图片读取/写入失败
         logger.warning(f"[PDF转换] 图片转PDF失败: file={image_path}, err={e}")
         return None
 
