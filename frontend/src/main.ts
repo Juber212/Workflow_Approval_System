@@ -23,4 +23,24 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
 
+// ==================== 全局异常兜底 ====================
+app.config.errorHandler = (err, _instance, info) => {
+  console.error('[Vue 全局错误]', err, `(组件: ${info})`)
+  // 仅记录到控制台，不打断用户操作
+}
+
+// ==================== 网络状态检测 ====================
+const showOfflineBanner = () => {
+  document.body.style.setProperty('--offline-banner', '"当前网络已断开"')
+}
+
+window.addEventListener('offline', () => {
+  console.warn('[网络] 连接断开')
+  document.body.classList.add('is-offline')
+})
+window.addEventListener('online', () => {
+  console.log('[网络] 已恢复连接')
+  document.body.classList.remove('is-offline')
+})
+
 app.mount('#app')
