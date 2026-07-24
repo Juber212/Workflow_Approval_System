@@ -107,8 +107,8 @@ async def convert_file_job(ctx, file_id: int, file_path: str) -> dict:
             result = await convert_to_pdf(full_path)
 
             if result:
-                # 转换成功：更新文件路径为 PDF 路径
-                file.file_path = result
+                # 转换成功：convert_to_pdf 返回绝对路径，需转回相对路径存储
+                file.file_path = os.path.relpath(result, settings.STORAGE_ROOT)
                 file.stored_name = os.path.splitext(file.stored_name)[0] + ".pdf"
                 file.mime_type = "application/pdf"
                 file.conversion_status = "ready"
