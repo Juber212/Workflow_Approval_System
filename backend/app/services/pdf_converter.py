@@ -14,7 +14,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 # 限流信号量（全局，2 并发）
-_semaphore = asyncio.Semaphore(2)
+_semaphore = asyncio.Semaphore(4)  # 30-50 人并发场景，2→4
 
 # 最大超时秒数
 CONVERT_TIMEOUT = 60

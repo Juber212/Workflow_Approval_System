@@ -5,13 +5,15 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-# 异步引擎
+# 异步引擎（connect_args 兜底 charset，防止 aiomysql 连接参数丢失导致中文注释乱码）
 engine = create_async_engine(
     settings.database_url,
     echo=settings.DEBUG,
-    pool_size=10,
+    pool_size=20,  # 30-50 人并发场景，10→20
     max_overflow=20,
-    pool_pre_ping=False,  # aiomysql 新版 ping() 签名不兼容，禁用连接池预检
+    pool_pre_ping=False,  # aiomysql 新版 ping() 签名不兼容，禁用连接池预检；用 pool_recycle 兜底
+    pool_recycle=3600,   # 1 小时回收连接，防止 MySQL wait_timeout 后拿到 stale 连接
+    connect_args={"charset": "utf8mb4"},
 )
 
 # 异步会话工厂
