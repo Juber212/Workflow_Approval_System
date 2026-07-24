@@ -106,9 +106,9 @@ export function useNotificationSocket() {
     const token = localStorage.getItem('token')
     if (!token) return
 
-    // 构建 WebSocket URL
+    // 构建 WebSocket URL（token 不再经 URL 传递，改为首条消息认证）
     const base = API_BASE.replace(/^http/, 'ws') || ''
-    const wsUrl = `${base}/api/v1/ws?token=${token}`
+    const wsUrl = `${base}/api/v1/ws`
 
     try {
       ws = new WebSocket(wsUrl)
@@ -118,6 +118,8 @@ export function useNotificationSocket() {
     }
 
     ws.onopen = () => {
+      // 连接建立后立即发送认证消息（首条消息，避免 token 出现在日志中）
+      ws!.send(JSON.stringify({ type: 'auth', token }))
       wsConnected.value = true
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
     }
@@ -135,10 +137,12 @@ export function useNotificationSocket() {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       wsConnected.value = false
-      // 5 秒后自动重连
-      reconnectTimer = setTimeout(connect, 5000)
+      // 认证失败（4001）不重连，其他情况 5 秒后自动重连
+      if (event.code !== 4001) {
+        reconnectTimer = setTimeout(connect, 5000)
+      }
     }
 
     ws.onerror = () => {
