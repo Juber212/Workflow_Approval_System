@@ -1,51 +1,19 @@
 """实例列表查询服务"""
 
-import os
-import uuid
+from ._helpers import _batch_get_node_stats, _batch_get_active_node_info, format_current_handlers, enrich_handler_info_with_names
 
-from ._helpers import _batch_get_node_stats, _batch_get_current_assignees
-
-from fastapi import UploadFile
-from datetime import datetime
-
-from sqlalchemy import select, func, case, and_, delete as sql_delete, update as sql_update
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.core.config import settings
-from app.core.exceptions import AppException
-from app.core.error_codes import ErrorCode
 from app.models import (
-    FlowTemplate, TemplateNode, TemplateEdge,
-    FlowInstance, InstanceNode, InstanceEdge,
-    OperationLog, User, Organization,
-    Task, CheckRecord, Approval, Endorsement, File,
+    FlowTemplate,
+    FlowInstance, InstanceNode,
+    User, Organization,
 )
-from app.models.enums import UploadType, InstanceStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus, CheckStatus, EndorsementStatus
 from app.schemas.common import PaginatedData
-from app.schemas.instance import (
-    CreateInstanceRequest,
-    InstanceResponse,
-    InstanceNodeBrief,
-    InstanceListItem,
-    InstanceDetailResponse,
-    DetailNodeInfo,
-    NodeFileBrief,
-    CheckRecordBrief,
-    ApprovalBrief,
-    LogItemBrief,
-    SupplementFileResponse,
-    ChangePersonnelRequest,
-    ChangePriorityRequest,
-)
-from app.api.deps import CurrentUser
-from app.engine.flow_engine import (
-    calculate_incoming_counts,
-    activate_start_node,
-    propagate_from_node,
-)
-from app.utils.workday import add_workdays
-from datetime import date as date_type
+from app.schemas.instance import InstanceListItem
+
 
 
 
@@ -56,6 +24,9 @@ async def list_instances(
     status: list[str] | None = None,
     priority: str | None = None,
     keyword: str | None = None,
+    date_from: str | None = None,   # 创建时间起始（ISO 日期字符串）
+    date_to: str | None = None,     # 创建时间截止
+    initiator_id: int | None = None,  # 发起人筛选
     sort_by: str | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -65,7 +36,7 @@ async def list_instances(
     返回每个实例的：
     - current_node_index: 已完成/跳过节点数（反映当前进度）
     - total_nodes: 总节点数
-    - current_assignee_name: 当前活跃节点的负责人姓名
+    - current_handlers: 当前处理人（根据节点状态动态：负责人/校验人/审批人/批准人）
     """
 
     # ========== 基础查询（联表获取名称字段；template_name 已冗余在实例表） ==========
@@ -100,6 +71,13 @@ async def list_instances(
     if keyword:
         # 模糊搜索实例名称
         base_stmt = base_stmt.where(FlowInstance.name.like(f"%{keyword}%"))
+
+    if date_from:
+        base_stmt = base_stmt.where(FlowInstance.created_at >= date_from)
+    if date_to:
+        base_stmt = base_stmt.where(FlowInstance.created_at <= f"{date_to} 23:59:59")
+    if initiator_id is not None:
+        base_stmt = base_stmt.where(FlowInstance.initiator_id == initiator_id)
 
     # ========== 总数 ==========
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -141,14 +119,37 @@ async def list_instances(
     result = await db.execute(list_stmt)
     rows = result.all()
 
-    # ========== 批量查询节点统计和当前负责人（避免 N+1） ==========
+    # ========== 批量查询节点统计和当前处理人（避免 N+1） ==========
     instance_ids = [row[0].id for row in rows]
 
     # 单次 GROUP BY 查询所有实例的节点统计
     node_stats_map = await _batch_get_node_stats(db, instance_ids)
 
-    # 单次查询所有实例的当前负责人
-    assignee_map = await _batch_get_current_assignees(db, instance_ids)
+    # 批量查询活跃节点信息（含各角色人员），计算当前处理人
+    active_node_map = await _batch_get_active_node_info(db, instance_ids)
+    # 收集所有需要姓名的 user_id（checker/approver 首人），批量查一次
+    all_checker_ids: set[int] = set()
+    all_approver_ids: set[int] = set()
+    for info in active_node_map.values():
+        cids = info.get("checker_ids") or []
+        if cids:
+            all_checker_ids.add(cids[0])
+        aids = info.get("approver_ids") or []
+        if aids:
+            all_approver_ids.add(aids[0])
+    handler_user_ids = all_checker_ids | all_approver_ids
+    handler_user_map: dict[int, str] = {}
+    if handler_user_ids:
+        from app.models import User as UserModel
+        users_result = await db.execute(
+            select(UserModel.id, UserModel.real_name).where(UserModel.id.in_(list(handler_user_ids)))
+        )
+        handler_user_map = {uid: name for uid, name in users_result.all()}
+    # 计算当前处理人显示文本
+    handler_map: dict[int, str] = {}
+    for inst_id, info in active_node_map.items():
+        enrich_handler_info_with_names(info, handler_user_map)
+        handler_map[inst_id] = format_current_handlers(info)
 
     # 批量查询关联方案名称（避免 N+1）
     proposal_ids = list(set(
@@ -184,7 +185,7 @@ async def list_instances(
             status=(instance.status or "created").lower(),
             current_node_index=node_stats["processed"],
             total_nodes=node_stats["total"],
-            current_assignee_name=assignee_map.get(instance.id),
+            current_handlers=handler_map.get(instance.id, "—"),
             proposal_name=proposal_name_map.get(instance.proposal_id) if instance.proposal_id else None,
             initiated_at=instance.initiated_at,
             completed_at=instance.completed_at,
