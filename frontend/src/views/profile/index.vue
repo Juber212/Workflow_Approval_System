@@ -95,6 +95,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!taskLoading && tasks.length === 0" description="暂无待办任务" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="taskPage" v-model:page-size="taskPageSize" :page-sizes="[20,50,100]" :total="taskTotal" layout="total,sizes,prev,pager,next" @current-change="fetchTasks" @size-change="fetchTasks" /></div>
       </template>
 
       <!-- 校验列表 -->
@@ -122,6 +123,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!checkLoading && checks.length === 0" description="暂无待校验" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="checkPage" v-model:page-size="checkPageSize" :page-sizes="[20,50,100]" :total="checkTotal" layout="total,sizes,prev,pager,next" @current-change="fetchChecks" @size-change="fetchChecks" /></div>
       </template>
 
       <!-- 审批列表 -->
@@ -152,10 +154,14 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!approvalLoading && approvals.length === 0" description="暂无待审批" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="approvalPage" v-model:page-size="approvalPageSize" :page-sizes="[20,50,100]" :total="approvalTotal" layout="total,sizes,prev,pager,next" @current-change="fetchApprovals" @size-change="fetchApprovals" /></div>
       </template>
 
       <!-- 批准列表 -->
       <template v-if="activeTab === 'endorsements'">
+        <div class="list-toolbar">
+          <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchEndorsements" />
+        </div>
         <el-table :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
@@ -175,14 +181,23 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!endorsementLoading && endorsements.length === 0" description="暂无待批准" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="endorsementPage" v-model:page-size="endorsementPageSize" :page-sizes="[20,50,100]" :total="endorsementTotal" layout="total,sizes,prev,pager,next" @current-change="fetchEndorsements" @size-change="fetchEndorsements" /></div>
       </template>
 
       <!-- 我发起的流程 -->
       <template v-if="activeTab === 'initiated'">
+        <div class="list-toolbar">
+          <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchInitiated" />
+        </div>
         <el-table :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="name" label="项目" min-width="140" />
           <el-table-column label="优先级" min-width="64" align="center">
             <template #default="{ row }"><span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
+          </el-table-column>
+          <el-table-column prop="current_handlers" label="当前处理人" min-width="90" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.current_handlers || '-' }}</span>
+            </template>
           </el-table-column>
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
@@ -197,6 +212,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!initiatedLoading && initiatedList.length === 0" description="暂无发起的流程" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="initiatedPage" v-model:page-size="initiatedPageSize" :page-sizes="[20,50,100]" :total="initiatedTotal" layout="total,sizes,prev,pager,next" @current-change="fetchInitiated" @size-change="fetchInitiated" /></div>
       </template>
     </template>
 
@@ -246,6 +262,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!propTaskLoading && propTasks.length === 0" description="暂无方案设计任务" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="propTaskPage" v-model:page-size="propTaskPageSize" :page-sizes="[20,50,100]" :total="propTaskTotal" layout="total,sizes,prev,pager,next" @current-change="fetchPropTasks" @size-change="fetchPropTasks" /></div>
       </template>
 
       <!-- 方案审批 -->
@@ -265,6 +282,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!propApprovalLoading && propApprovals.length === 0" description="暂无待审批方案" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="propApprovalPage" v-model:page-size="propApprovalPageSize" :page-sizes="[20,50,100]" :total="propApprovalTotal" layout="total,sizes,prev,pager,next" @current-change="fetchPropApprovals" @size-change="fetchPropApprovals" /></div>
       </template>
 
       <!-- 方案批准列表 -->
@@ -284,10 +302,14 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!propEndorsementLoading && propEndorsements.length === 0" description="暂无待批准方案" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="propEndorsementPage" v-model:page-size="propEndorsementPageSize" :page-sizes="[20,50,100]" :total="propEndorsementTotal" layout="total,sizes,prev,pager,next" @current-change="fetchPropEndorsements" @size-change="fetchPropEndorsements" /></div>
       </template>
 
       <!-- 我发起的方案 -->
       <template v-if="propActiveTab === 'initiated'">
+        <div class="list-toolbar">
+          <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="fetchPropInitiated" />
+        </div>
         <el-table :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="140" />
           <el-table-column label="发起时间" min-width="140">
@@ -303,6 +325,7 @@
           </el-table-column>
         </el-table>
         <el-empty v-if="!propInitiatedLoading && propInitiatedList.length === 0" description="暂无发起的方案" :image-size="50" />
+        <div class="list-pagination"><el-pagination v-model:current-page="propInitiatedPage" v-model:page-size="propInitiatedPageSize" :page-sizes="[20,50,100]" :total="propInitiatedTotal" layout="total,sizes,prev,pager,next" @current-change="fetchPropInitiated" @size-change="fetchPropInitiated" /></div>
       </template>
     </template>
   </div>
@@ -343,15 +366,19 @@ const avatarInitial = computed(() => (userStore.userInfo?.real_name || '').charA
 const tasks = ref<TaskListItem[]>([])
 const taskLoading = ref(false)
 const taskCount = ref(0)
+const taskTotal = ref(0)
+const taskPage = ref(1)
+const taskPageSize = ref(20)
 const taskKeyword = ref('')
 const taskStatus = ref('')
 
 async function fetchTasks() {
   taskLoading.value = true
   try {
-    const data = await getTasks({ status: taskStatus.value || undefined, keyword: taskKeyword.value || undefined, type: 'project' })
+    const data = await getTasks({ status: taskStatus.value || undefined, keyword: taskKeyword.value || undefined, type: 'project', page: taskPage.value, page_size: taskPageSize.value })
     tasks.value = data.items
     taskCount.value = data.total
+    taskTotal.value = data.total
   } finally { taskLoading.value = false }
 }
 
@@ -359,14 +386,18 @@ async function fetchTasks() {
 const checks = ref<CheckListItem[]>([])
 const checkLoading = ref(false)
 const checkCount = ref(0)
+const checkTotal = ref(0)
+const checkPage = ref(1)
+const checkPageSize = ref(20)
 const checkKeyword = ref('')
 
 async function fetchChecks() {
   checkLoading.value = true
   try {
-    const data = await getChecks({ keyword: checkKeyword.value || undefined })
+    const data = await getChecks({ keyword: checkKeyword.value || undefined, page: checkPage.value, page_size: checkPageSize.value })
     checks.value = data.items
     checkCount.value = data.total
+    checkTotal.value = data.total
   } finally { checkLoading.value = false }
 }
 
@@ -374,14 +405,18 @@ async function fetchChecks() {
 const approvals = ref<ApprovalListItem[]>([])
 const approvalLoading = ref(false)
 const approvalCount = ref(0)
+const approvalTotal = ref(0)
+const approvalPage = ref(1)
+const approvalPageSize = ref(20)
 const approvalKeyword = ref('')
 
 async function fetchApprovals() {
   approvalLoading.value = true
   try {
-    const data = await getApprovals({ keyword: approvalKeyword.value || undefined, type: 'project' })
+    const data = await getApprovals({ keyword: approvalKeyword.value || undefined, type: 'project', page: approvalPage.value, page_size: approvalPageSize.value })
     approvals.value = data.items
     approvalCount.value = data.total
+    approvalTotal.value = data.total
   } finally { approvalLoading.value = false }
 }
 
@@ -389,25 +424,35 @@ async function fetchApprovals() {
 const endorsements = ref<EndorsementListItem[]>([])
 const endorsementLoading = ref(false)
 const endorsementCount = ref(0)
+const endorsementTotal = ref(0)
+const endorsementPage = ref(1)
+const endorsementPageSize = ref(20)
+const endorsementKeyword = ref('')
 
 async function fetchEndorsements() {
   endorsementLoading.value = true
   try {
-    const data = await getEndorsements({ type: 'project' })
+    const data = await getEndorsements({ type: 'project', keyword: endorsementKeyword.value || undefined, page: endorsementPage.value, page_size: endorsementPageSize.value })
     endorsements.value = data.items
     endorsementCount.value = data.total
+    endorsementTotal.value = data.total
   } finally { endorsementLoading.value = false }
 }
 
 // ========== 项目：我发起的 ==========
 const initiatedList = ref<MyInitiatedItem[]>([])
 const initiatedLoading = ref(false)
+const initiatedTotal = ref(0)
+const initiatedPage = ref(1)
+const initiatedPageSize = ref(20)
+const initiatedKeyword = ref('')
 
 async function fetchInitiated() {
   initiatedLoading.value = true
   try {
-    const data = await getMyInitiated({ page: 1, page_size: 50, type: 'project' })
+    const data = await getMyInitiated({ page: initiatedPage.value, page_size: initiatedPageSize.value, type: 'project', keyword: initiatedKeyword.value || undefined })
     initiatedList.value = data.items
+    initiatedTotal.value = data.total
   } finally { initiatedLoading.value = false }
 }
 
@@ -415,13 +460,17 @@ async function fetchInitiated() {
 const propTasks = ref<TaskListItem[]>([])
 const propTaskLoading = ref(false)
 const propTaskCount = ref(0)
+const propTaskTotal = ref(0)
+const propTaskPage = ref(1)
+const propTaskPageSize = ref(20)
 
 async function fetchPropTasks() {
   propTaskLoading.value = true
   try {
-    const data = await getTasks({ type: 'proposal' })
+    const data = await getTasks({ type: 'proposal', page: propTaskPage.value, page_size: propTaskPageSize.value })
     propTasks.value = data.items
     propTaskCount.value = data.total
+    propTaskTotal.value = data.total
   } finally { propTaskLoading.value = false }
 }
 
@@ -429,13 +478,17 @@ async function fetchPropTasks() {
 const propApprovals = ref<ApprovalListItem[]>([])
 const propApprovalLoading = ref(false)
 const propApprovalCount = ref(0)
+const propApprovalTotal = ref(0)
+const propApprovalPage = ref(1)
+const propApprovalPageSize = ref(20)
 
 async function fetchPropApprovals() {
   propApprovalLoading.value = true
   try {
-    const data = await getApprovals({ type: 'proposal' })
+    const data = await getApprovals({ type: 'proposal', page: propApprovalPage.value, page_size: propApprovalPageSize.value })
     propApprovals.value = data.items
     propApprovalCount.value = data.total
+    propApprovalTotal.value = data.total
   } finally { propApprovalLoading.value = false }
 }
 
@@ -443,25 +496,34 @@ async function fetchPropApprovals() {
 const propEndorsements = ref<EndorsementListItem[]>([])
 const propEndorsementLoading = ref(false)
 const propEndorsementCount = ref(0)
+const propEndorsementTotal = ref(0)
+const propEndorsementPage = ref(1)
+const propEndorsementPageSize = ref(20)
 
 async function fetchPropEndorsements() {
   propEndorsementLoading.value = true
   try {
-    const data = await getEndorsements({ type: 'proposal' })
+    const data = await getEndorsements({ type: 'proposal', page: propEndorsementPage.value, page_size: propEndorsementPageSize.value })
     propEndorsements.value = data.items
     propEndorsementCount.value = data.total
+    propEndorsementTotal.value = data.total
   } finally { propEndorsementLoading.value = false }
 }
 
 // ========== 方案：我发起的 ==========
 const propInitiatedList = ref<MyInitiatedItem[]>([])
 const propInitiatedLoading = ref(false)
+const propInitiatedTotal = ref(0)
+const propInitiatedPage = ref(1)
+const propInitiatedPageSize = ref(20)
+const propInitiatedKeyword = ref('')
 
 async function fetchPropInitiated() {
   propInitiatedLoading.value = true
   try {
-    const data = await getMyInitiated({ page: 1, page_size: 50, type: 'proposal' })
+    const data = await getMyInitiated({ page: propInitiatedPage.value, page_size: propInitiatedPageSize.value, type: 'proposal', keyword: propInitiatedKeyword.value || undefined })
     propInitiatedList.value = data.items
+    propInitiatedTotal.value = data.total
   } finally { propInitiatedLoading.value = false }
 }
 
@@ -561,4 +623,7 @@ watch(propActiveTab, (tab) => {
   &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
   &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); }
 }
+
+/* 分页 */
+.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 </style>

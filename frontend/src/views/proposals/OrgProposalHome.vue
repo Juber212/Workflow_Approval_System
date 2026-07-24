@@ -59,11 +59,15 @@
       </div>
     </div>
 
-    <div class="list-pagination" v-if="total > pageSize">
+    <div class="list-pagination">
       <el-pagination
-        v-model:current-page="page" :page-size="pageSize"
-        :total="total" layout="prev, pager, next"
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        layout="total, sizes, prev, pager, next"
         @current-change="fetchList"
+        @size-change="fetchList"
       />
     </div>
 

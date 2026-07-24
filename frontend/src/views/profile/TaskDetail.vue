@@ -199,6 +199,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getToken } from '@/api/request'
 import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, type TaskDetail, type TaskFileItem } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
@@ -213,7 +214,7 @@ import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDia
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
-const AUTH_TOKEN = () => localStorage.getItem('token') || ''
+const AUTH_TOKEN = () => getToken() || ''
 
 const loading = ref(false)
 const detail = ref<TaskDetail | null>(null)

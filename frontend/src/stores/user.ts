@@ -1,3 +1,4 @@
+import { getToken } from '@/api/request'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserInfo } from '@/types/user'
@@ -5,7 +6,7 @@ import { loginApi, logoutApi, getMeApi, toUserInfo } from '@/api/auth'
 
 /** 用户状态管理 —— 存储当前登录用户信息与 token */
 export const useUserStore = defineStore('user', () => {
-  const token = ref<string>(localStorage.getItem('token') || '')
+  const token = ref<string>(getToken() || '')
   const userInfo = ref<UserInfo | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)

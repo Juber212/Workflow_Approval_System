@@ -7,6 +7,7 @@
       </div>
       <div class="page-header__actions">
         <el-button :icon="Refresh" circle @click="fetchData" :loading="loading" />
+        <NotificationBell />
       </div>
     </div>
 
@@ -92,7 +93,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="current_node_name" label="当前节点" min-width="72" />
-            <el-table-column prop="current_assignee_name" label="负责人" min-width="64" />
+            <el-table-column prop="current_handlers" label="当前处理人" min-width="80" />
             <el-table-column label="进度" min-width="160" align="center">
               <template #default="{ row }">
                 <div class="bt-progress">
@@ -140,6 +141,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import { getDashboard, type DashboardData } from '@/api/dashboard'
 import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const router = useRouter()
 const loading = ref(false)

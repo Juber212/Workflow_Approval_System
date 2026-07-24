@@ -76,6 +76,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { getToken } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -141,7 +142,7 @@ async function loadSignatureBlob() {
   const uid = userInfoDetail.value?.user_id
   if (!uid || !userInfoDetail.value?.has_signature) return
   try {
-    const token = localStorage.getItem('token')
+    const token = getToken()
     const resp = await fetch(`/api/v1/auth/users/${uid}/signature-image`, {
       headers: { Authorization: `Bearer ${token}` },
     })

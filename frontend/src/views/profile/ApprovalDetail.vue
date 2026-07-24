@@ -157,6 +157,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getToken } from '@/api/request'
 import { getApprovalDetail, approveApproval, rejectApproval, type ApprovalDetail } from '@/api/approval'
 import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
@@ -166,7 +167,7 @@ import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
-const AUTH_TOKEN = () => localStorage.getItem('token') || ''
+const AUTH_TOKEN = () => getToken() || ''
 
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()

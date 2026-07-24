@@ -52,9 +52,9 @@ export interface EndorsementDetail {
 }
 
 /** 获取我的批准列表 */
-export async function getEndorsements(params: { type?: string } = {}) {
+export async function getEndorsements(params: { type?: string; status?: string; keyword?: string; page?: number; page_size?: number } = {}) {
   const res = await request.get('/endorsements', { params })
-  return res.data as { items: EndorsementListItem[]; total: number }
+  return res.data as { items: EndorsementListItem[]; total: number; page: number; page_size: number }
 }
 
 /** 获取批准详情 */

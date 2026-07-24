@@ -1,5 +1,5 @@
 /** 任务 API —— 待办列表、详情、提交、草稿、文件上传 */
-import request from './request'
+import request, { getToken } from './request'
 import type { PaginatedResponse } from './index'
 import type { SignatureSlot } from './signature'
 
@@ -164,7 +164,7 @@ export async function deleteTaskFile(taskId: number, fileId: number) {
 
 /** 预览文件 —— 通过 fetch + Token 获取 blob 后在新标签页打开（PDF/图片）或下载（其他） */
 export async function previewFile(fileId: number): Promise<void> {
-  const token = localStorage.getItem('token')
+  const token = getToken()
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   const resp = await fetch(`${baseUrl}/files/${fileId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -187,7 +187,7 @@ export async function previewFile(fileId: number): Promise<void> {
 
 /** 下载文件 —— 获取文件 blob 后触发浏览器保存对话框 */
 export async function downloadFile(fileId: number): Promise<void> {
-  const token = localStorage.getItem('token')
+  const token = getToken()
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   const resp = await fetch(`${baseUrl}/files/${fileId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},

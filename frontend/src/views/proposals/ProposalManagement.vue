@@ -15,24 +15,47 @@
       <h3 class="section-label">全部方案</h3>
     </div>
 
-    <!-- 操作栏 -->
-    <div class="instance-toolbar">
-      <div class="filter-tabs">
-        <button
-          v-for="f in statusFilters" :key="f.value"
-          class="filter-tab" :class="{ 'is-active': statusFilter === f.value }"
-          @click="handleStatusFilter(f.value)"
-        >
-          <span class="filter-label">{{ f.label }}</span>
-          <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
-        </button>
+    <!-- 筛选卡片 -->
+    <div class="card">
+      <div class="instance-toolbar">
+        <div class="filter-tabs">
+          <button
+            v-for="f in statusFilters" :key="f.value"
+            class="filter-tab" :class="{ 'is-active': statusFilter === f.value }"
+            @click="handleStatusFilter(f.value)"
+          >
+            <span class="filter-label">{{ f.label }}</span>
+            <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
+          </button>
+        </div>
+        <div class="instance-toolbar__right">
+          <el-input
+            v-model="keyword" placeholder="搜索方案名称" clearable
+            :prefix-icon="Search" size="default" style="width: 200px"
+            @input="handleSearch"
+          />
+          <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
+            <el-icon><ArrowDown v-if="!showAdvancedSearch" /><ArrowUp v-else /></el-icon>
+            高级搜索
+          </el-button>
+        </div>
       </div>
-      <div class="instance-toolbar__right">
-        <el-input
-          v-model="keyword" placeholder="搜索方案名称" clearable
-          :prefix-icon="Search" size="default" style="width: 220px"
-          @input="handleSearch"
+      <!-- 高级搜索面板 -->
+      <div class="card__advanced-search" v-show="showAdvancedSearch">
+        <el-date-picker
+          v-model="dateRange" type="daterange" range-separator="至"
+          start-placeholder="发起起始" end-placeholder="发起截止"
+          format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="default"
+          style="width: 260px" @change="handleSearch"
         />
+        <el-select v-model="priority" placeholder="优先级" clearable size="default" style="width: 120px" @change="handleSearch">
+          <el-option label="紧急" value="urgent" /><el-option label="高" value="high" />
+          <el-option label="普通" value="normal" /><el-option label="低" value="low" />
+        </el-select>
+        <el-select v-model="initiatorId" placeholder="发起人" clearable filterable remote
+          :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleSearch">
+          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+        </el-select>
       </div>
     </div>
 
@@ -68,11 +91,15 @@
     </div>
 
     <!-- 分页 -->
-    <div class="list-pagination" v-if="total > pageSize">
+    <div class="list-pagination">
       <el-pagination
-        v-model:current-page="page" :page-size="pageSize"
-        :total="total" layout="prev, pager, next"
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="total"
+        layout="total, sizes, prev, pager, next"
         @current-change="fetchList"
+        @size-change="fetchList"
       />
     </div>
 
@@ -84,9 +111,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { getProposals, getProposalOrganizations, type ProposalListItem, type ProposalOrgCardItem } from '@/api/proposal'
-import { getOrgOptions } from '@/api/admin'
+import { getOrgOptions, searchUsers } from '@/api/admin'
 import { permanentDeleteInstance } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
@@ -110,6 +137,12 @@ const page = ref(1)
 const pageSize = ref(20)
 const statusFilter = ref('all')
 const keyword = ref('')
+/** 高级搜索 */
+const showAdvancedSearch = ref(false)
+const dateRange = ref<[string, string] | null>(null)
+const priority = ref('')
+const initiatorId = ref<number | null>(null)
+const initiatorOptions = ref<{ user_id: number; real_name: string }[]>([])
 const statusCounts = ref<Record<string, number>>({})
 
 const statusFilters = [
@@ -126,6 +159,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
+  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
 })
 
 /** 合并组织列表 + 方案统计，确保所有组织卡片都显示（无方案也显示） */
@@ -189,6 +223,10 @@ async function fetchList() {
     const data = await getProposals({
       keyword: keyword.value || undefined,
       status: statusFilter.value === 'all' ? undefined : statusFilter.value,
+      priority: priority.value || undefined,
+      date_from: dateRange.value?.[0],
+      date_to: dateRange.value?.[1],
+      initiator_id: initiatorId.value ?? undefined,
       page: page.value,
       page_size: pageSize.value,
     })
@@ -210,6 +248,18 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => { page.value = 1; fetchList() }, 300)
+}
+
+/** 远程搜索发起人 */
+let initiatorSearchTimer: ReturnType<typeof setTimeout> | null = null
+async function searchInitiators(query: string) {
+  if (!query) { initiatorOptions.value = []; return }
+  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
+  initiatorSearchTimer = setTimeout(async () => {
+    try {
+      initiatorOptions.value = await searchUsers({ keyword: query, page_size: 20 })
+    } catch { /* ignore */ }
+  }, 300)
 }
 
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
@@ -243,7 +293,7 @@ async function handlePermanentDelete(row: ProposalListItem) {
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 
-.instance-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
+.instance-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
 
 .filter-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-tab { height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff; border-radius: 6px; font-size: 13px; color: var(--el-text-color-regular); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; transition: all 0.2s; &:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); } &.is-active { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; } }
@@ -251,6 +301,12 @@ async function handlePermanentDelete(row: ProposalListItem) {
 .filter-count { opacity: 0.7; }
 
 .inst-name { font-weight: 500; color: var(--el-text-color-primary); }
+/* 高级搜索面板（卡片内，筛选栏下方） */
+.card__advanced-search {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px 14px; flex-wrap: wrap;
+}
+
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
 </style>

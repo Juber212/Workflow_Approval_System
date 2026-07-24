@@ -5,6 +5,11 @@ import { ElMessage } from 'element-plus'
 /** API 基础 URL（不含 /api/v1 后缀） */
 export const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1$/, '') || ''
 
+/** 统一获取认证 Token（所有 token 访问的唯一入口） */
+export function getToken(): string | null {
+  return localStorage.getItem('token')
+}
+
 /** Axios 实例 —— 统一 baseURL、超时、拦截器 */
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const request: AxiosInstance = axios.create({
@@ -16,7 +21,7 @@ const request: AxiosInstance = axios.create({
 /** 请求拦截器 —— 自动注入 Token */
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token')
+    const token = getToken()
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -35,7 +40,7 @@ request.interceptors.response.use(
     // HTTP 4xx/5xx 错误响应
     if (error.response) {
       const { status, data } = error.response
-      // 401 未认证 → 跳转登录
+      // 401 未认证 → 静默跳转登录（不显示错误消息避免闪烁）
       if (status === 401) {
         localStorage.removeItem('token')
         window.location.href = '/login'

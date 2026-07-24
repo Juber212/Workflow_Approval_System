@@ -142,7 +142,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getEndorsementDetail, endorse, endorseReject, type EndorsementDetail } from '@/api/endorsement'
+import { getToken } from '@/api/request'
+import { getEndorsementDetail, endorseApprove, endorseReject, type EndorsementDetail } from '@/api/endorsement'
 import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
@@ -151,7 +152,7 @@ import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
-const AUTH_TOKEN = () => localStorage.getItem('token') || ''
+const AUTH_TOKEN = () => getToken() || ''
 
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
@@ -223,10 +224,7 @@ async function doEndorse() {
   if (!detail.value) return
   endorsing.value = true
   try {
-    await endorse(detail.value.id, {
-      opinion: opinion.value || null,
-      signatures: sigSlots.value || undefined,
-    })
+    await endorseApprove(detail.value.id, opinion.value || null, sigSlots.value || undefined)
     ElMessage.success('批准通过')
     router.push('/profile')
   } finally { endorsing.value = false }
@@ -246,7 +244,7 @@ async function handleReject() {
 
   rejecting.value = true
   try {
-    await endorseReject(detail.value.id, { opinion: opinion.value })
+    await endorseReject(detail.value.id, opinion.value)
     ElMessage.success('已驳回')
     router.push('/profile')
   } finally { rejecting.value = false }

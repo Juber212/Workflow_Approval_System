@@ -59,13 +59,15 @@
     <el-empty v-if="!loading && list.length === 0" description="暂无文件模板" :image-size="60" />
 
     <!-- 分页 -->
-    <div v-if="total > pageSize" class="pager-wrap">
+    <div class="pager-wrap">
       <el-pagination
         v-model:current-page="page"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
         :total="total"
-        layout="total, prev, pager, next"
+        layout="total, sizes, prev, pager, next"
         @current-change="fetchList"
+        @size-change="fetchList"
       />
     </div>
 

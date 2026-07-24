@@ -63,6 +63,9 @@ export interface InstanceListParams {
   status?: string
   priority?: string
   keyword?: string
+  date_from?: string
+  date_to?: string
+  initiator_id?: number
   sort_by?: string
   page?: number
   page_size?: number
@@ -81,7 +84,7 @@ export interface InstanceListItem {
   status: string
   current_node_index: number
   total_nodes: number
-  current_assignee_name: string | null
+  current_handlers: string  // 当前处理人（根据节点状态动态显示：负责人/校验人/审批人/批准人）
   proposal_name: string | null
   initiated_at: string | null
   completed_at: string | null
@@ -294,12 +297,13 @@ export interface MyInitiatedItem {
   name: string
   status: string
   priority: string
+  current_handlers: string  // 当前处理人（根据节点状态动态显示）
   initiated_at: string | null
   completed_at: string | null
   created_at: string | null
 }
 
-export async function getMyInitiated(params: { page?: number; page_size?: number; type?: string }): Promise<{ items: MyInitiatedItem[]; total: number }> {
+export async function getMyInitiated(params: { page?: number; page_size?: number; type?: string; keyword?: string }): Promise<{ items: MyInitiatedItem[]; total: number }> {
   const res = await request.get('/instances/my-initiated', { params })
   return res.data
 }

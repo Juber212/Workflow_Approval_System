@@ -1,5 +1,5 @@
 /** 项目模板 API —— 简化版：无版本、无状态 */
-import request from './request'
+import request, { getToken } from './request'
 import type { PaginatedResponse } from './index'
 
 // ==================== 类型 ====================
@@ -168,7 +168,7 @@ export async function unlinkDocTemplate(templateId: number, docId: number): Prom
 
 /** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
 export async function downloadDocTemplate(taskId: number, docId: number): Promise<void> {
-  const token = localStorage.getItem('token')
+  const token = getToken()
   const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   const resp = await fetch(`${baseUrl}/tasks/${taskId}/document-templates/${docId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},

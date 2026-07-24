@@ -24,7 +24,7 @@ export interface BottleneckItem {
   organization_name: string
   progress_chain: string[]
   current_node_name: string
-  current_assignee_name: string
+  current_handlers: string  // 当前处理人（根据节点状态动态显示：负责人/校验人/审批人/批准人）
   priority: string
   difficulty: string
   finished_count: number

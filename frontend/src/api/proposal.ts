@@ -40,7 +40,11 @@ export interface ProposalCreateRequest {
 export async function getProposals(params: {
   organization_id?: number
   status?: string
+  priority?: string
   keyword?: string
+  date_from?: string
+  date_to?: string
+  initiator_id?: number
   page?: number
   page_size?: number
 }) {

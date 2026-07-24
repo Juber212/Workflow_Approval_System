@@ -301,3 +301,71 @@ async function handleLogout() {
   &__role { font-size: 11px; color: var(--el-text-color-placeholder); }
 }
 </style>
+
+<!-- Popover 样式（非 scoped：Teleport 到 body 后 scoped 样式无法命中） -->
+<style lang="scss">
+/* 遮罩层 —— 点击空白处关闭弹窗 */
+.user-popover-mask {
+  position: fixed; inset: 0; z-index: 1999;
+}
+
+/* 用户操作弹窗 */
+.user-popover {
+  position: fixed;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  min-width: 180px;
+
+  &__head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px 10px;
+  }
+
+  &__avatar {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 16px; font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  &__name {
+    font-size: 14px; font-weight: 500;
+    color: var(--el-text-color-primary);
+  }
+
+  &__org {
+    font-size: 12px; color: var(--el-text-color-secondary);
+    margin-top: 1px;
+  }
+
+  &__divider {
+    height: 1px;
+    background: var(--el-border-color-lighter);
+    margin: 4px 0;
+  }
+
+  &__item {
+    display: block; width: 100%;
+    padding: 8px 12px;
+    border: none; background: transparent;
+    border-radius: 6px;
+    font-size: 13px; color: var(--el-text-color-regular);
+    text-align: left; cursor: pointer;
+    line-height: 1.4;
+    &:hover { background: #f2f3f5; }
+
+    &--danger {
+      color: var(--el-color-danger);
+      &:hover { background: var(--el-color-danger-light-9); }
+    }
+  }
+}
+</style>

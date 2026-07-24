@@ -153,6 +153,7 @@
 - PDF 加载失败时输出 console.warn 便于调试
 */
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { getToken } from '@/api/request'
 import axios from 'axios'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
@@ -271,7 +272,7 @@ async function loadSigBlob(url: string | null | undefined) {
     return
   }
   try {
-    const token = localStorage.getItem('token')
+    const token = getToken()
     console.log('[SignaturePreview] 加载签名图:', url, 'token:', token ? '已获取' : '无')
     const res = await axios.get(url, {
       responseType: 'blob',

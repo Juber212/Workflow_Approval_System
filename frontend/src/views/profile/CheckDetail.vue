@@ -121,6 +121,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { getToken } from '@/api/request'
 import { getCheckDetail, passCheck, returnCheck, type CheckDetail } from '@/api/check'
 import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
@@ -133,7 +134,7 @@ import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDia
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
-const AUTH_TOKEN = () => localStorage.getItem('token') || ''
+const AUTH_TOKEN = () => getToken() || ''
 
 const loading = ref(false)
 const detail = ref<CheckDetail | null>(null)

@@ -1,7 +1,7 @@
 /** 通知 API —— 站内通知列表 + 未读数 + WebSocket 实时推送 */
 
 import { ref, onMounted, onUnmounted } from 'vue'
-import request, { API_BASE } from './request'
+import request, { API_BASE, getToken } from './request'
 
 /** 通知对象（与后端 NotificationOut 对应） */
 export interface NotificationItem {
@@ -103,7 +103,7 @@ export function useNotificationSocket() {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   function connect() {
-    const token = localStorage.getItem('token')
+    const token = getToken()
     if (!token) return
 
     // 构建 WebSocket URL（token 不再经 URL 传递，改为首条消息认证）

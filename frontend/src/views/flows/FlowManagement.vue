@@ -16,24 +16,47 @@
       <h3 class="section-label">全部项目</h3>
     </div>
 
-    <!-- 实例操作栏 -->
-    <div class="instance-toolbar">
-      <div class="filter-tabs">
-        <button
-          v-for="f in instanceFilters" :key="f.value"
-          class="filter-tab" :class="{ 'is-active': instanceStatusFilter === f.value }"
-          @click="handleInstanceFilter(f.value)"
-        >
-          <span class="filter-label">{{ f.label }}</span>
-          <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
-        </button>
+    <!-- 筛选卡片 -->
+    <div class="card">
+      <div class="instance-toolbar">
+        <div class="filter-tabs">
+          <button
+            v-for="f in instanceFilters" :key="f.value"
+            class="filter-tab" :class="{ 'is-active': instanceStatusFilter === f.value }"
+            @click="handleInstanceFilter(f.value)"
+          >
+            <span class="filter-label">{{ f.label }}</span>
+            <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
+          </button>
+        </div>
+        <div class="instance-toolbar__right">
+          <el-input
+            v-model="instanceKeyword" placeholder="搜索项目名称" clearable
+            :prefix-icon="Search" size="default" style="width: 200px"
+            @input="handleInstanceSearch"
+          />
+          <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
+            <el-icon><ArrowDown v-if="!showAdvancedSearch" /><ArrowUp v-else /></el-icon>
+            高级搜索
+          </el-button>
+        </div>
       </div>
-      <div class="instance-toolbar__right">
-        <el-input
-          v-model="instanceKeyword" placeholder="搜索项目名称" clearable
-          :prefix-icon="Search" size="default" style="width: 220px"
-          @input="handleInstanceSearch"
+      <!-- 高级搜索面板 -->
+      <div class="card__advanced-search" v-show="showAdvancedSearch">
+        <el-date-picker
+          v-model="instanceDateRange" type="daterange" range-separator="至"
+          start-placeholder="发起起始" end-placeholder="发起截止"
+          format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="default"
+          style="width: 260px" @change="handleInstanceSearch"
         />
+        <el-select v-model="instancePriority" placeholder="优先级" clearable size="default" style="width: 120px" @change="handleInstanceSearch">
+          <el-option label="紧急" value="urgent" /><el-option label="高" value="high" />
+          <el-option label="普通" value="normal" /><el-option label="低" value="low" />
+        </el-select>
+        <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
+          :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
+          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+        </el-select>
       </div>
     </div>
 
@@ -75,10 +98,10 @@
             </template>
           </el-table-column>
           <!-- ===== 固定列 ===== -->
-          <!-- 5. 当前负责人 -->
-          <el-table-column label="当前负责人" width="110" show-overflow-tooltip>
+          <!-- 5. 当前处理人 -->
+          <el-table-column label="当前处理人" width="110" show-overflow-tooltip>
             <template #default="{ row }">
-              <span class="inst-meta">{{ row.current_assignee_name || '-' }}</span>
+              <span class="inst-meta">{{ row.current_handlers || '-' }}</span>
             </template>
           </el-table-column>
           <!-- 6. 状态 -->
@@ -122,11 +145,15 @@
     </div>
 
     <!-- 分页 -->
-    <div class="list-pagination" v-if="instanceTotal > instancePageSize">
+    <div class="list-pagination">
       <el-pagination
-        v-model:current-page="instancePage" :page-size="instancePageSize"
-        :total="instanceTotal" layout="prev, pager, next"
+        v-model:current-page="instancePage"
+        v-model:page-size="instancePageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="instanceTotal"
+        layout="total, sizes, prev, pager, next"
         @current-change="fetchInstances"
+        @size-change="fetchInstances"
       />
     </div>
   </div>
@@ -139,11 +166,12 @@
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
+import { searchUsers } from '@/api/admin'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
@@ -165,6 +193,12 @@ const instancePage = ref(1)
 const instancePageSize = ref(20)
 const instanceStatusFilter = ref('all')
 const instanceKeyword = ref('')
+/** 高级搜索 */
+const showAdvancedSearch = ref(false)
+const instanceDateRange = ref<[string, string] | null>(null)
+const instancePriority = ref('')
+const instanceInitiatorId = ref<number | null>(null)
+const initiatorOptions = ref<{ user_id: number; real_name: string }[]>([])
 /** 各状态实例数量（从 API 获取） */
 const statusCounts = ref<Record<string, number>>({})
 
@@ -183,6 +217,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
+  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
 })
 
 async function fetchOrgs() {
@@ -225,6 +260,10 @@ async function fetchInstances() {
       status: instanceStatusFilter.value === 'all' ? undefined : instanceStatusFilter.value,
       keyword: instanceKeyword.value || undefined,
       sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
+      priority: instancePriority.value || undefined,
+      date_from: instanceDateRange.value?.[0],
+      date_to: instanceDateRange.value?.[1],
+      initiator_id: instanceInitiatorId.value ?? undefined,
     })
     instances.value = data.items
     instanceTotal.value = data.total
@@ -255,6 +294,16 @@ function handleInstanceSearch() {
   }, 300)
 }
 
+/** 远程搜索发起人 */
+let initiatorSearchTimer: ReturnType<typeof setTimeout> | null = null
+async function searchInitiators(query: string) {
+  if (!query) { initiatorOptions.value = []; return }
+  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
+  initiatorSearchTimer = setTimeout(async () => {
+    try { initiatorOptions.value = await searchUsers({ keyword: query, page_size: 20 }) } catch { /* ignore */ }
+  }, 300)
+}
+
 function goInstanceDetail(id: number) { router.push(`/flows/instances/${id}`) }
 function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id) }
 
@@ -281,7 +330,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 
-.instance-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
+.instance-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
 
 .filter-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-tab { height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff; border-radius: 6px; font-size: 13px; color: var(--el-text-color-regular); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; transition: all 0.2s; &:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); } &.is-active { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; } }
@@ -302,6 +351,12 @@ async function handlePermanentDelete(row: InstanceListItem) {
 
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
+
+/* 高级搜索面板（卡片内，表头上方） */
+.card__advanced-search {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px 14px; flex-wrap: wrap;
+}
 </style>
 
 <style lang="scss">
