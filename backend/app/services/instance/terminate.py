@@ -172,6 +172,55 @@ async def terminate_instance(
     )
     db.add(log)
 
+    # ---- 通知+清除：所有待处理人员收到终止通知，并清除相关待办通知 ----
+    from app.services.notification_service import create_notification, clear_related
+
+    notified: set[int] = set()  # 已通知用户去重
+
+    # 待处理 task 的负责人
+    pending_tasks = (await db.execute(
+        select(Task).where(Task.instance_id == instance_id, Task.status.in_(["pending", "processing"]))
+    )).scalars().all()
+    for t in pending_tasks:
+        if t.assignee_id and t.assignee_id not in notified:
+            notified.add(t.assignee_id)
+            await clear_related(db, user_id=t.assignee_id, types=["task_assigned"])
+            await create_notification(db, user_id=t.assignee_id, type="instance_terminated",
+                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+
+    # 待处理校验的校验人
+    pending_checks = (await db.execute(
+        select(CheckRecord).where(CheckRecord.instance_id == instance_id, CheckRecord.status == "pending")
+    )).scalars().all()
+    for c in pending_checks:
+        if c.checker_id and c.checker_id not in notified:
+            notified.add(c.checker_id)
+            await clear_related(db, user_id=c.checker_id, types=["check_assigned"])
+            await create_notification(db, user_id=c.checker_id, type="instance_terminated",
+                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+
+    # 待处理审批的审批人
+    pending_approvals = (await db.execute(
+        select(Approval).where(Approval.instance_id == instance_id, Approval.status == "pending")
+    )).scalars().all()
+    for a in pending_approvals:
+        if a.approver_id and a.approver_id not in notified:
+            notified.add(a.approver_id)
+            await clear_related(db, user_id=a.approver_id, types=["approval_assigned"])
+            await create_notification(db, user_id=a.approver_id, type="instance_terminated",
+                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+
+    # 待处理批准的批准人
+    pending_endorsements = (await db.execute(
+        select(Endorsement).where(Endorsement.instance_id == instance_id, Endorsement.status == "pending")
+    )).scalars().all()
+    for e in pending_endorsements:
+        if e.endorser_id and e.endorser_id not in notified:
+            notified.add(e.endorser_id)
+            await clear_related(db, user_id=e.endorser_id, types=["endorsement_assigned"])
+            await create_notification(db, user_id=e.endorser_id, type="instance_terminated",
+                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+
     return {
         "id": instance.id,
         "name": instance.name,

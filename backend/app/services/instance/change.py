@@ -102,6 +102,12 @@ async def change_personnel(
     now = datetime.now()
     changes: list[str] = []  # 记录变更描述
 
+    # 捕获旧值，用于后续通知清除
+    _old_assignee_id = node.assignee_id
+    _old_endorser_id = node.endorser_id
+    _removed_checkers: set[int] = set()
+    _removed_approvers: set[int] = set()
+
     # ========== 3. 处理校验人变更 ==========
     if body.checkers is not None:
         old_ids = extract_user_ids(node.checkers)
@@ -110,6 +116,7 @@ async def change_personnel(
 
         removed = old_ids - new_ids
         added = new_ids - old_ids
+        _removed_checkers = removed  # 记录用于通知清除
 
         if removed or added:
             # 不在新列表的 pending CheckRecord → terminated
@@ -153,6 +160,7 @@ async def change_personnel(
 
         removed = old_ids - new_ids
         added = new_ids - old_ids
+        _removed_approvers = removed  # 记录用于通知清除
 
         if removed or added:
             # 不在新列表的 pending Approval → terminated
@@ -183,9 +191,26 @@ async def change_personnel(
 
     # ========== 4b. 处理批准人变更（单人，直接更新） ==========
     if body.endorser_id is not None and body.endorser_id != node.endorser_id:
-        old_name = f"ID:{node.endorser_id}" if node.endorser_id else "无"
+        # 终止旧批准人的 pending Endorsement
+        if _old_endorser_id:
+            await db.execute(
+                sql_update(Endorsement)
+                .where(Endorsement.node_id == node_id, Endorsement.endorser_id == _old_endorser_id,
+                       Endorsement.status == "pending")
+                .values(status="terminated", decided_at=now)
+            )
+        # 创建新批准人的 Endorsement（如果节点处于等待批准状态）
+        if body.endorser_id:
+            db.add(Endorsement(
+                instance_id=instance_id,
+                node_id=node_id,
+                task_id=None,
+                endorser_id=body.endorser_id,
+                status="pending",
+                round=node.round,
+            ))
         node.endorser_id = body.endorser_id
-        changes.append(f"批准人: {old_name} → ID:{body.endorser_id}")
+        changes.append(f"批准人: ID:{_old_endorser_id or '无'} → ID:{body.endorser_id}")
 
     # ========== 5. 处理负责人变更 ==========
     if body.assignee_id is not None and body.assignee_id != node.assignee_id:
@@ -226,14 +251,25 @@ async def change_personnel(
     )
     db.add(log)
 
-    # ---- 通知：新人员被分配到任务 (#6) ----
-    from app.services.notification_service import create_notification
+    # ---- 通知：新人员 + 清除旧人员 ----
+    from app.services.notification_service import create_notification, clear_related
+
+    # 清除被移除的校验人通知
+    for uid in _removed_checkers:
+        await clear_related(db, user_id=uid, types=["check_assigned"])
+    # 清除被移除的审批人通知
+    for uid in _removed_approvers:
+        await clear_related(db, user_id=uid, types=["approval_assigned"])
+    # 清除旧负责人通知
+    if _old_assignee_id:
+        await clear_related(db, user_id=_old_assignee_id, types=["task_assigned"])
+    # 清除旧批准人通知
+    if _old_endorser_id:
+        await clear_related(db, user_id=_old_endorser_id, types=["endorsement_assigned"])
+
     # 查询当前节点所有 pending 的校验/审批记录（即刚分配给新人员的）
     new_checks = (await db.execute(
-        select(CheckRecord).where(
-            CheckRecord.node_id == node_id,
-            CheckRecord.status == "pending",
-        )
+        select(CheckRecord).where(CheckRecord.node_id == node_id, CheckRecord.status == "pending")
     )).scalars().all()
     for nc in new_checks:
         await create_notification(
@@ -244,10 +280,7 @@ async def change_personnel(
         )
 
     new_apprs = (await db.execute(
-        select(Approval).where(
-            Approval.node_id == node_id,
-            Approval.status == "pending",
-        )
+        select(Approval).where(Approval.node_id == node_id, Approval.status == "pending")
     )).scalars().all()
     for na in new_apprs:
         await create_notification(
@@ -257,13 +290,10 @@ async def change_personnel(
             link=f"/profile/approval/{na.id}",
         )
 
-    # 负责人变更：查询当前活跃 task
+    # 负责人变更：通知新负责人
     if body.assignee_id is not None:
         active_task = (await db.execute(
-            select(Task).where(
-                Task.node_id == node_id,
-                Task.status.in_(["pending", "processing"]),
-            )
+            select(Task).where(Task.node_id == node_id, Task.status.in_(["pending", "processing"]))
         )).scalar_one_or_none()
         if active_task:
             await create_notification(
@@ -271,6 +301,24 @@ async def change_personnel(
                 title="新的待办任务",
                 content=f"节点「{node.name}」人员变更，你被分配为负责人",
                 link=f"/profile/task/{active_task.id}",
+            )
+
+    # 批准人变更：通知新批准人
+    if body.endorser_id is not None and body.endorser_id != _old_endorser_id:
+        if body.endorser_id:
+            pending_e = (await db.execute(
+                select(Endorsement).where(
+                    Endorsement.node_id == node_id,
+                    Endorsement.endorser_id == body.endorser_id,
+                    Endorsement.status == "pending",
+                ).order_by(Endorsement.id.desc()).limit(1)
+            )).scalar_one_or_none()
+            link = f"/profile/endorse/{pending_e.id}" if pending_e else None
+            await create_notification(
+                db, user_id=body.endorser_id, type="endorsement_assigned",
+                title="新的待批准任务",
+                content=f"节点「{node.name}」人员变更，你被分配为批准人",
+                link=link,
             )
 
     return {

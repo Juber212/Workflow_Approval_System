@@ -72,7 +72,8 @@ async def propagate_from_node(
         queue.append(edge.target_node_id)
 
     activated_ids: list[int] = []
-    _tasks_for_notify: list[tuple] = []  # 收集创建的 Task 用于通知
+    _tasks_for_notify: list[tuple] = []  # 收集创建的 Task（工作节点）用于通知
+    _end_approvals: list[tuple] = []  # 收集终审审批记录（结束节点）用于通知：([user_id], instance_name)
 
     while queue:
         node_id = queue.popleft()
@@ -120,6 +121,8 @@ async def propagate_from_node(
                         status=ApprovalStatus.PENDING,
                         round=node.round,  # 记录当前节点轮次
                     ))
+                    # 收集终审审批人用于后续通知
+                    _end_approvals.append((approver_id, node.id))
 
             activated_ids.append(node.id)
 
@@ -165,6 +168,29 @@ async def propagate_from_node(
     ]
     if notif_tasks:
         await asyncio.gather(*notif_tasks)
+
+    # ---- 终审通知：通知发起人进行终审 ----
+    if _end_approvals:
+        inst = (await db.execute(
+            select(FlowInstance).where(FlowInstance.id == instance_id)
+        )).scalar_one_or_none()
+        if inst:
+            # 查询刚创建的终审 Approval 记录获取审批 ID 用于链接
+            for _approver_id, _e_node_id in _end_approvals:
+                end_approval = (await db.execute(
+                    select(Approval).where(
+                        Approval.node_id == _e_node_id,
+                        Approval.approver_id == _approver_id,
+                        Approval.status == ApprovalStatus.PENDING,
+                    ).order_by(Approval.id.desc()).limit(1)
+                )).scalar_one_or_none()
+                link = f"/profile/approval/{end_approval.id}" if end_approval else None
+                await create_notification(
+                    db, user_id=_approver_id, type="approval_assigned",
+                    title="待终审",
+                    content=f"「{inst.name}」已到达终审环节，请审核全部文件",
+                    link=link,
+                )
 
     return activated_ids
 
