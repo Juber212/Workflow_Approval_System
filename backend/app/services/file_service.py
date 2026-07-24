@@ -35,14 +35,18 @@ async def upload_file(
     if upload_file_obj.content_type not in settings.allowed_mime_types_list:
         raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {upload_file_obj.content_type}")
 
-    # 读取并校验大小
-    contents = await upload_file_obj.read()
-    if len(contents) > settings.max_file_size_bytes:
+    # 流式获取文件大小（seek 到尾端再回位，避免全量读入内存）
+    upload_file_obj.file.seek(0, 2)  # os.SEEK_END
+    file_size = upload_file_obj.file.tell()
+    upload_file_obj.file.seek(0)  # 回到开头
+    if file_size > settings.max_file_size_bytes:
         raise AppException(ErrorCode.BAD_REQUEST, "文件大小不能超过 50MB")
 
-    # 文件魔数校验（防止伪造 Content-Type）
+    # 文件魔数校验（仅读取前 8KB，防止伪造 Content-Type）
     import filetype
-    detected = filetype.guess(contents[:8192])  # 读前 8KB 检测魔数
+    header = upload_file_obj.file.read(8192)
+    upload_file_obj.file.seek(0)  # 回到开头以便后续流式写入
+    detected = filetype.guess(header)
     if detected is None:
         # 未知类型：可能是纯文本/CSV 等无魔数文件，退回到扩展名白名单
         ext = os.path.splitext(upload_file_obj.filename or "")[1].lower()
@@ -69,13 +73,15 @@ async def upload_file(
         file_path_rel = os.path.join(archive_subdir, inst.name, stored_name)
     os.makedirs(archive_dir, exist_ok=True)
 
-    # 写入物理文件
+    # 流式写入物理文件（分块读 + 异步写，避免大文件全量加载到内存）
     file_path = os.path.join(archive_dir, stored_name)
-
-    # 写入文件（异步 I/O，避免阻塞事件循环）
     import aiofiles
     async with aiofiles.open(file_path, "wb") as f:
-        await f.write(contents)
+        while True:
+            chunk = upload_file_obj.file.read(64 * 1024)  # 64KB 分块
+            if not chunk:
+                break
+            await f.write(chunk)
 
     # 创建 File 记录（失败时清理物理文件，防止孤儿文件残留）
     file_record = File(

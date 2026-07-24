@@ -98,21 +98,27 @@ async def supplement_files(
                 f"不支持的文件类型: {upload_file_obj.content_type}（{upload_file_obj.filename}）",
             )
 
-        # 5b. 校验文件大小
-        contents = await upload_file_obj.read()
-        if len(contents) > settings.max_file_size_bytes:
+        # 5b. 流式校验文件大小（seek 到尾端避免全量读入内存）
+        upload_file_obj.file.seek(0, 2)
+        file_size_val = upload_file_obj.file.tell()
+        upload_file_obj.file.seek(0)
+        if file_size_val > settings.max_file_size_bytes:
             raise AppException(
                 ErrorCode.FILE_TOO_LARGE,
                 f"文件大小超过限制（最大 50MB）: {upload_file_obj.filename}",
             )
 
-        # 5c. 写入磁盘
+        # 5c. 流式写入磁盘（分块读 + 写，避免大文件全量加载）
         ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
         stored_name = f"{uuid.uuid4().hex}{ext}"
         file_path = os.path.join(archive_dir, stored_name)
 
         with open(file_path, "wb") as f:
-            f.write(contents)
+            while True:
+                chunk = upload_file_obj.file.read(64 * 1024)  # 64KB 分块
+                if not chunk:
+                    break
+                f.write(chunk)
 
         # 5d. 创建 File 记录（task_id=NULL、upload_type=supplement）
         file_record = File(
@@ -125,7 +131,7 @@ async def supplement_files(
             original_name=upload_file_obj.filename or "unknown",
             stored_name=stored_name,
             file_path=os.path.join(archive_subdir, instance.name, stored_name),
-            file_size=len(contents),
+            file_size=file_size_val,
             mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
         )
         db.add(file_record)
