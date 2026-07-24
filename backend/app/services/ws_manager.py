@@ -18,8 +18,12 @@ class ConnectionManager:
         self._connections: dict[int, list[WebSocket]] = {}
 
     async def connect(self, user_id: int, websocket: WebSocket):
-        """接受 WebSocket 连接并注册"""
+        """接受 WebSocket 连接并注册（兼容旧调用方）"""
         await websocket.accept()
+        self.register(user_id, websocket)
+
+    def register(self, user_id: int, websocket: WebSocket):
+        """注册已接受的 WebSocket 连接（用于首条消息认证场景）"""
         if user_id not in self._connections:
             self._connections[user_id] = []
         self._connections[user_id].append(websocket)

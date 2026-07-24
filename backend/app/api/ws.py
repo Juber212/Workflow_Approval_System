@@ -25,6 +25,7 @@ async def websocket_endpoint(websocket: WebSocket):
     服务端验证通过后，通过该连接实时推送通知。
     连接后 10 秒内未认证则自动断开。
     """
+    # 先接受连接（完成 WebSocket 握手），再接收认证消息
     await websocket.accept()
 
     # 等待客户端首条认证消息，超时 10 秒
@@ -61,7 +62,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="token 中缺少用户标识")
         return
 
-    await manager.connect(user_id, websocket)
+    manager.register(user_id, websocket)
     try:
         # 保持连接，接收后续消息（心跳等），等待客户端断开
         while True:
