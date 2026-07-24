@@ -82,18 +82,23 @@ async def upload_file(
     inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one()
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
-    # 生成唯一文件名（用原始文件名，同名时自动追加序号）
-    ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
-    stored_name = _unique_stored_name(archive_dir, upload_file_obj.filename or "file")
-
     # 创建存储目录（根据模板类型分目录，有文件夹时存入子目录）
     archive_subdir = settings.get_archive_dir(inst.template_type or "project")
     if folder_name:
         archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name, folder_name)
-        file_path_rel = os.path.join(archive_subdir, inst.name, folder_name, stored_name)
     else:
         archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name)
+
+    # 生成唯一文件名（用原始文件名，同名时自动追加序号）
+    ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
+    stored_name = _unique_stored_name(archive_dir, upload_file_obj.filename or "file")
+
+    # 文件相对路径（存入 DB）
+    if folder_name:
+        file_path_rel = os.path.join(archive_subdir, inst.name, folder_name, stored_name)
+    else:
         file_path_rel = os.path.join(archive_subdir, inst.name, stored_name)
+
     os.makedirs(archive_dir, exist_ok=True)
 
     # 流式写入物理文件（分块读 + 异步写，避免大文件全量加载到内存）
