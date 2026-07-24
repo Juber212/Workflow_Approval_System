@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+from app.core.rate_limit import RateLimitMiddleware
 from app.schemas.common import ApiResponse
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
@@ -38,9 +39,26 @@ from app.services.config_service import config_service
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     setup_logging()
+
+    # 安全校验：生产环境必须设置强 SECRET_KEY
+    if not settings.SECRET_KEY:
+        import sys
+        print("❌ 严重安全错误: SECRET_KEY 未设置！")
+        print("   请通过环境变量 SECRET_KEY 设置一个至少 64 字符的随机密钥。")
+        print("   示例: openssl rand -hex 32")
+        sys.exit(1)
+
     # 启动时加载系统配置到内存缓存
     await config_service.load(async_session_factory)
+
+    # 启动 Redis Pub/Sub → WebSocket 桥接器（50+ 优化：异步 PDF 转换完成通知）
+    from app.services.ws_bridge import start_bridge, stop_bridge
+    await start_bridge()
+
     yield
+
+    # 关闭桥接器
+    await stop_bridge()
     # 关闭时主动释放数据库连接池，避免事件循环关闭后 aiomysql 清理报错
     await engine.dispose()
 
@@ -61,6 +79,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# API 限流中间件（CORS 之后加载，确保跨域请求也能被限流）
+app.add_middleware(RateLimitMiddleware)
 
 
 # ================= 全局异常处理器 =================
