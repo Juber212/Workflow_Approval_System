@@ -60,9 +60,8 @@ class CheckStatus(str, enum.Enum):
 
 
 class OperatorType(str, enum.Enum):
-    """操作者类型"""
+    """操作者类型（仅 user —— 系统操作不记录日志，直接忽略）"""
     USER = "user"
-    SYSTEM = "system"
 
 
 class UploadType(str, enum.Enum):
