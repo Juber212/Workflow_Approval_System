@@ -12,6 +12,7 @@ from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.schemas.task import TaskSaveDraft, TaskSubmit
 from app.services import task_service, file_service
+from app.services.pdf_queue import enqueue_batch_conversion
 from app.services.pdf_converter import convert_to_pdf
 from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
@@ -91,10 +92,11 @@ async def prepare_sign(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """预提交：转换文件为 PDF 并返回文件列表，供签批预览弹框使用
+    """预提交：将文件转换任务入队，立即返回（50+ 并发优化）
 
-    将任务所有文件转为 PDF（Word/Excel/图片 → PDF），更新 DB 记录，
-    返回 PDF 文件列表。用户签批确认后再调用 submit 提交。
+    改造前：同步转换所有文件为 PDF（阻塞 5-30 秒），转换完成后返回 PDF 列表。
+    改造后：将转换任务入队 ARQ，立即返回 conversion_pending=true，
+    前端等待 WebSocket 通知或轮询 status 端点。
     """
     import os
     from datetime import datetime
@@ -109,36 +111,38 @@ async def prepare_sign(
 
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
 
-    # PDF 转换（并发 + 限流），与 submit 逻辑一致
+    # 查询所有文件
     task_files = (await db.execute(
         select(File).where(File.task_id == task_id, File.round == node.round)
     )).scalars().all()
 
+    conversion_pending = False
+    file_ids: list[int] = []
+
     if task_files:
-        tasks = []
+        # 分类：PDF 直接 ready，非 PDF 标记 pending 并入队
+        to_convert: list[dict] = []
         for f in task_files:
             full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
-            if os.path.exists(full_path):
-                tasks.append((f, convert_to_pdf(full_path)))
+            if f.file_path.lower().endswith(".pdf") and os.path.exists(full_path):
+                # 已是 PDF，无需转换
+                f.conversion_status = "ready"
+            elif os.path.exists(full_path):
+                # 需要转换的文件：标记 pending，准备入队
+                f.conversion_status = "pending"
+                to_convert.append({"id": f.id, "file_path": f.file_path})
+                conversion_pending = True
+            file_ids.append(f.id)
 
-        if tasks:
-            results = await asyncio.gather(*[t for _, t in tasks])
-            file_records = [f for f, _ in tasks]
+        await db.commit()
 
-            for i, r in enumerate(results):
-                if r is None:
-                    await db.rollback()
-                    raise AppException(ErrorCode.INTERNAL_ERROR, "文件转换失败，请检查文件格式后重试")
+        # 入队异步转换（不等待结果）
+        if to_convert:
+            await enqueue_batch_conversion(to_convert, task_id, current_user.id)
+    else:
+        await db.commit()
 
-            # 转换成功：更新 file_path、stored_name、mime_type
-            for f in file_records:
-                f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
-                f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
-                f.mime_type = "application/pdf"
-
-    await db.commit()
-
-    # 重新查询更新后的文件列表返回给前端
+    # 返回当前文件列表和转换状态
     updated_files = (await db.execute(
         select(File).where(File.task_id == task_id, File.round == node.round)
     )).scalars().all()
@@ -149,10 +153,54 @@ async def prepare_sign(
                 "id": f.id,
                 "original_name": f.original_name,
                 "mime_type": f.mime_type,
+                "conversion_status": f.conversion_status,
                 "url": f"/api/v1/files/{f.id}/download",
             }
             for f in updated_files
         ],
+        "conversion_pending": conversion_pending,
+        "file_ids": [f.id for f in updated_files],
+    })
+
+
+@router.get("/tasks/{task_id}/files/status")
+async def get_files_conversion_status(
+    task_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询任务文件的转换状态（前端轮询兜底）
+
+    当 WebSocket 未收到 conversion_all_done 消息时，前端每 2 秒轮询此端点。
+    返回文件列表及各自状态，前端根据状态决定是否打开签批弹框。
+    """
+    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if task.assignee_id != current_user.id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可操作")
+
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+
+    task_files = (await db.execute(
+        select(File).where(File.task_id == task_id, File.round == node.round)
+    )).scalars().all()
+
+    all_ready = all(f.conversion_status == "ready" for f in task_files)
+    has_failed = any(f.conversion_status == "failed" for f in task_files)
+
+    return ApiResponse.ok({
+        "files": [
+            {
+                "id": f.id,
+                "original_name": f.original_name,
+                "conversion_status": f.conversion_status,
+                "conversion_error": f.conversion_error,
+            }
+            for f in task_files
+        ],
+        "all_ready": all_ready,
+        "has_failed": has_failed,
     })
 
 

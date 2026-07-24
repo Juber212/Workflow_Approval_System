@@ -519,9 +519,12 @@ async def _validate_file_submission(node: InstanceNode, task_id: int, db: AsyncS
 
 
 async def _convert_files_to_pdf(task_id: int, round_num: int, db: AsyncSession):
-    """将任务关联文件并发转为 PDF，转换成功则更新 DB 记录"""
-    from app.services.pdf_converter import convert_to_pdf
+    """检查文件转换状态（50+ 优化：转换已由 ARQ Worker 后台完成）
 
+    改造前：同步调用 convert_to_pdf 转换所有文件（阻塞 5-30 秒）。
+    改造后：检查 File.conversion_status，确保所有文件已转换完成。
+    若仍有 pending/converting，拒绝提交提示稍后重试。
+    """
     task_files = (await db.execute(
         select(File).where(File.task_id == task_id, File.round == round_num)
     )).scalars().all()
@@ -529,27 +532,19 @@ async def _convert_files_to_pdf(task_id: int, round_num: int, db: AsyncSession):
     if not task_files:
         return
 
-    # 构建并发转换任务
-    convert_tasks = []
     for f in task_files:
-        full_path = resolve_file_path(f.file_path)
-        if os.path.exists(full_path):
-            convert_tasks.append((f, convert_to_pdf(full_path)))
-
-    if not convert_tasks:
-        return
-
-    # 并发执行 + 限流
-    results = await asyncio.gather(*[t for _, t in convert_tasks])
-    file_records = [f for f, _ in convert_tasks]
-
-    # 任一转换失败 → 回滚
-    for r in results:
-        if r is None:
-            raise AppException(ErrorCode.PDF_CONVERSION_FAILED, "文件转换失败，请检查文件格式后重试")
-
-    # 更新文件路径
-    for f in file_records:
-        f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
-        f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
-        f.mime_type = "application/pdf"
+        if f.conversion_status == "failed":
+            raise AppException(
+                ErrorCode.PDF_CONVERSION_FAILED,
+                f"文件「{f.original_name}」转换失败: {f.conversion_error or '未知错误'}，请重新上传"
+            )
+        if f.conversion_status in ("pending", "converting"):
+            raise AppException(
+                ErrorCode.BAD_REQUEST,
+                f"文件「{f.original_name}」仍在转换中，请稍后重试"
+            )
+        # ready 状态：确保 DB 路径已更新为 PDF 扩展名
+        if f.conversion_status == "ready" and f.mime_type != "application/pdf":
+            f.file_path = os.path.splitext(f.file_path)[0] + ".pdf"
+            f.stored_name = os.path.splitext(f.stored_name)[0] + ".pdf"
+            f.mime_type = "application/pdf"
