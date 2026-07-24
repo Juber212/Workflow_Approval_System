@@ -134,6 +134,11 @@ export function useNotificationSocket() {
         } else if (msg.type === 'refresh_count') {
           // 后端 clear_related 后通知前端刷新铃铛未读数（静默，不弹出气泡）
           fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
+        } else if (msg.type === 'conversion_all_done') {
+          // PDF 转换全部完成（50+ 优化）：触发自定义事件，供 TaskDetail 监听
+          window.dispatchEvent(new CustomEvent('conversion-all-done', {
+            detail: { task_id: msg.task_id, status: msg.status, total: msg.total, ready: msg.ready, failed: msg.failed }
+          }))
         }
       } catch {
         // 消息解析失败，静默忽略

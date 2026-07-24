@@ -139,12 +139,39 @@ export interface PrepareSignFile {
   id: number
   original_name: string
   mime_type: string | null
+  conversion_status: string  // ready | pending | converting | failed
   url: string
 }
 
-export async function prepareSign(taskId: number): Promise<PrepareSignFile[]> {
+export interface PrepareSignResponse {
+  files: PrepareSignFile[]
+  conversion_pending: boolean  // true = 需要等待后台转换
+  file_ids: number[]
+}
+
+export async function prepareSign(taskId: number): Promise<PrepareSignResponse> {
   const res = await request.post(`/tasks/${taskId}/prepare-sign`)
-  return res.data.files  // res = { code, message, data: { files: [...] } }
+  return res.data  // { code, message, data: { files, conversion_pending, file_ids } }
+}
+
+/** 文件转换状态查询响应 */
+export interface FileStatusItem {
+  id: number
+  original_name: string
+  conversion_status: string
+  conversion_error: string | null
+}
+
+export interface FilesStatusResponse {
+  files: FileStatusItem[]
+  all_ready: boolean
+  has_failed: boolean
+}
+
+/** 轮询文件转换状态（WebSocket 未收到通知时的兜底方案） */
+export async function getFilesStatus(taskId: number): Promise<FilesStatusResponse> {
+  const res = await request.get(`/tasks/${taskId}/files/status`)
+  return res.data
 }
 
 /** 上传任务文件 —— 支持指定文件夹 */

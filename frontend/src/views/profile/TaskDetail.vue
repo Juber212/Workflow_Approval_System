@@ -170,8 +170,8 @@
       <!-- 操作按钮 -->
       <div class="actions-bar" v-if="canSubmit">
         <el-button size="large" @click="handleSaveDraft" :loading="saving">保存草稿</el-button>
-        <el-button size="large" type="primary" @click="handleSubmit" :loading="submitting || preparing">
-          {{ preparing ? '正在转换文件...' : detail.rejected_type ? '重新提交并进入校验' : '提交并进入校验' }}
+        <el-button size="large" type="primary" @click="handleSubmit" :loading="submitting || preparing || waitingConversion">
+          {{ waitingConversion ? '文件转换中，请稍候...' : preparing ? '准备中...' : detail.rejected_type ? '重新提交并进入校验' : '提交并进入校验' }}
         </el-button>
       </div>
       <div class="actions-bar" v-else-if="detail.status === 'waiting_check'">
@@ -196,11 +196,11 @@
 
 <script setup lang="ts">
 /** 任务处理页 —— 上传文件 + 提交/保存草稿，支持文件夹分组上传 */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getToken } from '@/api/request'
-import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, type TaskDetail, type TaskFileItem } from '@/api/task'
+import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, type TaskDetail, type TaskFileItem } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
 import type { SignatureSlot } from '@/api/signature'
@@ -223,6 +223,9 @@ const uploading = ref(false)
 const saving = ref(false)
 const submitting = ref(false)
 const preparing = ref(false)  // 预提交转化 PDF 中的状态
+const waitingConversion = ref(false)  // 等待 ARQ Worker 后台转换完成
+let conversionPollTimer: ReturnType<typeof setInterval> | null = null
+let currentConversionFileIds: number[] = []  // 正在等待转换的文件 ID 列表
 
 // 签批弹框
 const showSignatureDialog = ref(false)
@@ -320,6 +323,11 @@ onMounted(async () => {
   } finally { loading.value = false }
 })
 
+// 离开页面时清理转换轮询定时器
+onUnmounted(() => {
+  stopConversionPolling()
+})
+
 function beforeUpload(file: File) {
   if (file.size > 50 * 1024 * 1024) { ElMessage.error('文件不能超过 50MB'); return false }
   return true
@@ -376,12 +384,24 @@ async function handleSubmit() {
   // 节点要求负责人签批 → 检查签名图片
   if (detail.value.require_assignee_signature) {
     if (detail.value.current_signature_url) {
-      // 有签名图 → 先调用 prepareSign 将文件转为 PDF → 弹签批弹窗
+      // 有签名图 → 调用 prepareSign（立即返回）→ 等待转换 → 弹签批弹窗
       preparing.value = true
       try {
-        const pdfList = await prepareSign(detail.value.id)
-        // 将后端返回的 PDF 文件列表设置到弹框
-        pdfFiles.value = pdfList.map(f => ({
+        const result = await prepareSign(detail.value.id)
+
+        if (result.conversion_pending) {
+          // 文件需要后台转换，进入等待模式
+          waitingConversion.value = true
+          currentConversionFileIds = result.file_ids
+          // 启动轮询兜底（每 2 秒检查一次，直到全部完成或失败）
+          startConversionPolling(detail.value!.id)
+          // 也监听 WebSocket 通知（由 notification.ts 的 useNotificationSocket 触发自定义事件）
+          listenConversionDone()
+          return
+        }
+
+        // 无需转换（所有文件已是 PDF），直接打开签批弹窗
+        pdfFiles.value = result.files.map(f => ({
           file_id: f.id,
           name: f.original_name,
           url: f.url,
@@ -393,7 +413,6 @@ async function handleSubmit() {
         sigSlots.value = null
         showSignatureDialog.value = true
       } catch (err: any) {
-        // axios 响应拦截器已显示后端错误消息，这里只兜底网络异常
         if (!err?.response) {
           ElMessage.error('网络连接异常，请检查网络')
         }
@@ -425,6 +444,84 @@ async function doSubmit() {
     ElMessage.success('任务已提交，等待校验')
     router.push('/profile')
   } finally { submitting.value = false }
+}
+
+/** 签批预览确认回调 */
+// ==================== 异步转换等待（50+ 优化） ====================
+
+/** 启动轮询：每 2 秒检查文件转换状态（WebSocket 通知的兜底方案） */
+function startConversionPolling(taskId: number) {
+  stopConversionPolling()
+  conversionPollTimer = setInterval(async () => {
+    try {
+      const status = await getFilesStatus(taskId)
+      if (status.all_ready || status.has_failed) {
+        stopConversionPolling()
+        handleConversionComplete(status)
+      }
+    } catch {
+      // 轮询静默失败，下次继续
+    }
+  }, 2000)
+}
+
+/** 停止轮询 */
+function stopConversionPolling() {
+  if (conversionPollTimer) {
+    clearInterval(conversionPollTimer)
+    conversionPollTimer = null
+  }
+}
+
+/** 监听 WebSocket 推送的 conversion_all_done 事件 */
+function listenConversionDone() {
+  const currentTaskId = detail.value?.id
+  const handler = (e: Event) => {
+    const cd = (e as CustomEvent).detail
+    // 确认是当前任务的通知
+    if (cd.task_id !== currentTaskId) return
+    stopConversionPolling()
+    handleConversionComplete(cd)
+  }
+
+  window.addEventListener('conversion-all-done', handler, { once: true })
+}
+
+/** 转换完成后：检查结果 → 打开签批弹框或显示错误 */
+async function handleConversionComplete(status: { total: number; ready: number; failed: number; status?: string }) {
+  waitingConversion.value = false
+  currentConversionFileIds = []
+
+  if (status.failed > 0) {
+    ElMessage.error(`${status.failed} 个文件转换失败，请检查文件格式后重新上传再提交`)
+    return
+  }
+
+  // 重新调用 prepareSign 获取更新后的 PDF 文件列表
+  try {
+    const result = await prepareSign(detail.value!.id)
+    if (result.conversion_pending) {
+      // 理论上不应发生（状态已 ready），但防御性处理
+      waitingConversion.value = true
+      startConversionPolling(detail.value!.id)
+      return
+    }
+    pdfFiles.value = result.files.map(f => ({
+      file_id: f.id,
+      name: f.original_name,
+      url: f.url,
+    }))
+    if (pdfFiles.value.length === 0) {
+      ElMessage.warning('没有可签批的 PDF 文件，请先上传文件')
+      return
+    }
+    sigSlots.value = null
+    showSignatureDialog.value = true
+  } catch (err: any) {
+    if (!err?.response) {
+      ElMessage.error('获取 PDF 文件列表失败，请刷新重试')
+    }
+  }
 }
 
 /** 签批预览确认回调 */
