@@ -23,5 +23,10 @@ class File(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False, comment="最终PDF存储相对路径")
     file_size: Mapped[int | None] = mapped_column(BigInteger, comment="最终PDF大小（字节）")
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="application/pdf", comment="最终文件MIME类型")
+    conversion_status: Mapped[str] = mapped_column(
+        String(20), default="ready",
+        comment="PDF转换状态: pending/converting/ready/failed。PDF文件默认ready"
+    )
+    conversion_error: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="转换失败原因")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, comment="创建时间")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
