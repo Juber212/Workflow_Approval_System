@@ -188,6 +188,7 @@ import PropertyPanel from './designer/PropertyPanel.vue'
 import PresetEditor from './designer/PresetEditor.vue'
 import NodeListView from './designer/NodeListView.vue'
 import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
+import { formatFileSize } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -295,13 +296,6 @@ async function loadLaunchDocTemplates() {
 watch(showLaunchDialog, (val) => {
   if (val) loadLaunchDocTemplates()
 })
-
-/** 格式化文件大小 */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-}
 
 /** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')

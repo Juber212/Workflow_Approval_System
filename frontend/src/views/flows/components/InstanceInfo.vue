@@ -86,6 +86,7 @@
 import { computed } from 'vue'
 import ProgressBar from './ProgressBar.vue'
 import type { InstanceDetailResponse } from '@/api/instance'
+import { formatTime } from '@/utils/format'
 
 const props = defineProps<{
   detail: InstanceDetailResponse
@@ -156,11 +157,6 @@ const canSupplement = computed(() => {
   return s === 'completed'
 })
 
-// ========== 工具方法 ==========
-function formatTime(val: string | null): string {
-  if (!val) return '-'
-  return val.replace('T', ' ').substring(0, 16)
-}
 </script>
 
 <style lang="scss" scoped>
