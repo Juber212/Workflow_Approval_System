@@ -100,26 +100,34 @@ async def list_checks(
 
 
 async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int) -> dict:
-    """校验详情 —— 含文件、负责人备注、并行校验进度"""
-    c = (await db.execute(select(CheckRecord).where(CheckRecord.id == check_id))).scalar_one_or_none()
-    if c is None:
+    """校验详情 —— 含文件、负责人备注、并行校验进度
+
+    查询优化：CheckRecord + Task + InstanceNode + FlowInstance 合并为一次 JOIN（4→1）
+    """
+    # 合并查询：CheckRecord + Task + InstanceNode + FlowInstance（一次 JOIN 替代 4 次独立查询）
+    row = (await db.execute(
+        select(CheckRecord, Task, InstanceNode, FlowInstance)
+        .join(Task, CheckRecord.task_id == Task.id)
+        .join(InstanceNode, CheckRecord.node_id == InstanceNode.id)
+        .join(FlowInstance, CheckRecord.instance_id == FlowInstance.id)
+        .where(CheckRecord.id == check_id)
+    )).first()
+    if row is None:
         raise AppException(ErrorCode.NOT_FOUND, "校验记录不存在")
+    c, task, node, inst = row.CheckRecord, row.Task, row.InstanceNode, row.FlowInstance
     if c.checker_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅校验人可查看详情")
 
-    task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
-    if task is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联任务不存在")
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == c.instance_id))).scalar_one_or_none()
-    if inst is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
-    checker_user = (await db.execute(select(User).where(User.id == c.checker_id))).scalar_one_or_none()
-    # 查发起人 + 提交人（负责人）
-    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
-    submitter = (await db.execute(select(User).where(User.id == task.assignee_id))).scalar_one_or_none()
+    # 批量查询相关用户（一次 IN 查询替代 3 次独立查询）
+    user_ids_needed = {c.checker_id, inst.initiator_id, task.assignee_id}
+    user_ids_needed.discard(None)
+    users_result = await db.execute(
+        select(User).where(User.id.in_(user_ids_needed))
+    )
+    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    checker_user = users_map.get(c.checker_id)
+    initiator = users_map.get(inst.initiator_id)
+    submitter = users_map.get(task.assignee_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     all_nodes_result = await db.execute(
