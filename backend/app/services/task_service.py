@@ -137,10 +137,20 @@ async def list_tasks(
 
 
 async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) -> dict:
-    """任务详情 —— 含文件/校验/审批进度聚合"""
-    t = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
-    if t is None:
+    """任务详情 —— 含文件/校验/审批进度聚合
+
+    查询优化：Task + InstanceNode + FlowInstance 合并为一次 JOIN（3→1）
+    """
+    # 合并查询：Task + InstanceNode + FlowInstance（一次 JOIN 替代 3 次独立查询）
+    row = (await db.execute(
+        select(Task, InstanceNode, FlowInstance)
+        .join(InstanceNode, Task.node_id == InstanceNode.id)
+        .join(FlowInstance, Task.instance_id == FlowInstance.id)
+        .where(Task.id == task_id)
+    )).first()
+    if row is None:
         raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    t, node, inst = row.Task, row.InstanceNode, row.FlowInstance
 
     # 权限校验：仅任务负责人可查看
     if t.assignee_id != current_user_id:
@@ -151,18 +161,15 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         t.status = TaskStatus.PROCESSING
         await db.flush()
 
-    # 查节点
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == t.node_id))).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
-    # 查实例
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == t.instance_id))).scalar_one_or_none()
-    if inst is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
-    # 查负责人
-    assignee = (await db.execute(select(User).where(User.id == t.assignee_id))).scalar_one_or_none()
-    # 查发起人
-    initiator = (await db.execute(select(User).where(User.id == inst.initiator_id))).scalar_one_or_none()
+    # 批量查询负责人 + 发起人（一次 IN 查询替代 2 次独立查询）
+    user_ids_needed = {t.assignee_id, inst.initiator_id}
+    user_ids_needed.discard(None)
+    users_result = await db.execute(
+        select(User).where(User.id.in_(user_ids_needed))
+    )
+    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    assignee = users_map.get(t.assignee_id)
+    initiator = users_map.get(inst.initiator_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     all_nodes_result = await db.execute(
