@@ -266,4 +266,6 @@ async def get_signature_image(
     if not os.path.exists(full_path):
         raise AppException(ErrorCode.NOT_FOUND, "签名文件不存在")
 
-    return FileResponse(full_path, media_type="image/png")
+    return FileResponse(full_path, media_type="image/png", headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+    })

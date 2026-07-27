@@ -143,7 +143,7 @@ async function loadSignatureBlob() {
   if (!uid || !userInfoDetail.value?.has_signature) return
   try {
     const token = getToken()
-    const resp = await fetch(`/api/v1/auth/users/${uid}/signature-image`, {
+    const resp = await fetch(`/api/v1/auth/users/${uid}/signature-image?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!resp.ok) return

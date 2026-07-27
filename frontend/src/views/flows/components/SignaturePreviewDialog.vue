@@ -277,7 +277,7 @@ async function loadSigBlob(url: string | null | undefined) {
     const res = await axios.get(url, {
       responseType: 'blob',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-      // 不设置 baseURL，url 已是完整路径
+      params: { t: Date.now() },  // 时间戳破缓存，确保更换签名后获取最新图片
     })
     sigBlobUrl.value = URL.createObjectURL(res.data)
     console.log('[SignaturePreview] 签名图加载成功, blob:', sigBlobUrl.value)
