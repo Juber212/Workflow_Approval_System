@@ -60,6 +60,32 @@
 
 ---
 
+## 2026-07-27 — 签批预览修复 + 首页卡片链接 + 超期预警
+
+### 签批预览 4 项修复
+
+| # | 问题 | 根因 | 涉及文件 |
+|---|------|------|----------|
+| 7 | 签批日期实际位置比预览偏左 | 预览日期居中于槽位宽，后端居中于图片实际宽（object-fit:contain 后不一致） | `pdf_signature.py` |
+| 8 | 签名跑页（第1页签批跳到第2页） | 前端 1-based 页码 → 后端直接当 pypdf 0-based 索引，差一页 | `pdf_signature.py` |
+| 9 | 签名标签遮挡签名 | 用户希望完全不显示标签 | `SignaturePreviewDialog.vue` |
+| 10 | PDF 预览模糊 | canvas 未乘 devicePixelRatio，高分屏像素不足 | `SignaturePreviewDialog.vue` |
+
+### 首页卡片链接
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 11 | 首页 4 张卡片可点击跳转：进行中→流程管理(运行中)、已归档→流程管理(已完成)、本月归档→流程管理(已完成)、超期预警→独立页面 | `dashboard/index.vue` |
+| 12 | FlowManagement + ProposalManagement 状态筛选与 URL query 双向同步，支持外部链接预选 | `FlowManagement.vue`, `ProposalManagement.vue` |
+
+### 超期预警页面
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 13 | 新建 `/overdue` 页面 + `GET /notifications/overdue` API，展示系统全部超期项（任务/校验/审批/批准）分组列表 | `notification_service.py`, `notifications.py`, `OverdueWarning.vue`, `router/index.ts` |
+
+---
+
 ## 2026-07-23 — 难度等级 + 批准人（Endorser）
 
 ### 新增功能
