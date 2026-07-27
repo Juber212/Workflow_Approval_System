@@ -17,6 +17,7 @@ from app.models import (
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
 from app.services.notification_service import create_notification, clear_related
+from app.services.pdf_signature import get_role_signature_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +205,7 @@ async def get_endorsement_detail(
                        "decided_at": a.decided_at} for a in approvals],
         "decided_at": e.decided_at,
         "created_at": e.created_at,
+        "role_signature": await get_role_signature_defaults(db, "endorser"),
     }
 
 
@@ -264,6 +266,11 @@ async def endorse(
                 signature_x=sig.get("signature_x", 400),
                 signature_y=sig.get("signature_y", 100),
                 signature_page=sig.get("signature_page", -1),
+                sign_date=sig.get("sign_date"),
+                show_date=sig.get("show_date", True),
+                date_x=sig.get("date_x"),
+                date_y=sig.get("date_y"),
+                date_font_size=sig.get("date_font_size", 14),
             )
             db.add(s)
             sig_ids.append(s.id)

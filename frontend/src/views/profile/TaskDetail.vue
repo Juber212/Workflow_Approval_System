@@ -186,8 +186,8 @@
       :pdf-files="pdfFiles"
       :auth-token="AUTH_TOKEN()"
       :sig-url="detail.current_signature_url"
-      :default-x="detail.signature_x"
-      :default-y="detail.signature_y"
+      :default-x="detail.role_signature?.x ?? detail.signature_x"
+      :default-y="detail.role_signature?.y ?? detail.signature_y"
       :default-page="detail.signature_page"
       @confirm="onSignatureConfirm"
     />

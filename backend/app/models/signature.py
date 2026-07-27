@@ -1,8 +1,8 @@
 """签名记录模型 —— 统一管理负责人/校验人/审批人的签名记录"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, ForeignKey, Float
 from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime
+from datetime import datetime, date
 
 from app.core.database import Base
 
@@ -23,4 +23,10 @@ class Signature(Base):
     signature_height: Mapped[float | None] = mapped_column(Float, nullable=True, default=None, comment="签名指定高度（NULL=使用全局配置）")
     applied: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否已写入PDF")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, comment="同文件同角色多次签名排序")
+    # 签批日期
+    sign_date: Mapped[date | None] = mapped_column(Date, nullable=True, comment="签名日期")
+    show_date: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否在PDF上显示日期")
+    date_x: Mapped[float | None] = mapped_column(Float, nullable=True, comment="日期文本X坐标")
+    date_y: Mapped[float | None] = mapped_column(Float, nullable=True, comment="日期文本Y坐标")
+    date_font_size: Mapped[int] = mapped_column(Integer, default=14, comment="日期字号(pt)")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

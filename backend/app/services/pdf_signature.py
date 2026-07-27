@@ -44,11 +44,16 @@ logger = logging.getLogger(__name__)
 _SIG_KEYS = [
     "pdf_signature_x", "pdf_signature_y", "pdf_signature_offset",
     "pdf_signature_page", "pdf_signature_max_width", "pdf_signature_max_height",
+    # 角色维度签名默认（X/Y，不含 pages——pages 由 PDF 总页数自动决定）
+    "pdf_signature_assignee_x", "pdf_signature_assignee_y",
+    "pdf_signature_checker_x", "pdf_signature_checker_y",
+    "pdf_signature_approver_x", "pdf_signature_approver_y",
+    "pdf_signature_endorser_x", "pdf_signature_endorser_y",
 ]
 
 
-def _get_sig_default(key: str) -> int:
-    """从 settings 获取签名的默认值"""
+def _get_sig_default(key: str) -> int | str:
+    """从 settings 获取签名的默认值（pages 类 key 返回字符串）"""
     mapping = {
         "pdf_signature_x": settings.PDF_SIGNATURE_X,
         "pdf_signature_y": settings.PDF_SIGNATURE_Y,
@@ -56,6 +61,15 @@ def _get_sig_default(key: str) -> int:
         "pdf_signature_page": settings.PDF_SIGNATURE_PAGE,
         "pdf_signature_max_width": settings.PDF_SIGNATURE_MAX_WIDTH,
         "pdf_signature_max_height": settings.PDF_SIGNATURE_MAX_HEIGHT,
+        # 角色维度签名默认值（X/Y 坐标）
+        "pdf_signature_assignee_x": settings.PDF_SIGNATURE_ASSIGNEE_X,
+        "pdf_signature_assignee_y": settings.PDF_SIGNATURE_ASSIGNEE_Y,
+        "pdf_signature_checker_x": settings.PDF_SIGNATURE_CHECKER_X,
+        "pdf_signature_checker_y": settings.PDF_SIGNATURE_CHECKER_Y,
+        "pdf_signature_approver_x": settings.PDF_SIGNATURE_APPROVER_X,
+        "pdf_signature_approver_y": settings.PDF_SIGNATURE_APPROVER_Y,
+        "pdf_signature_endorser_x": settings.PDF_SIGNATURE_ENDORSER_X,
+        "pdf_signature_endorser_y": settings.PDF_SIGNATURE_ENDORSER_Y,
     }
     return mapping.get(key, 0)
 
@@ -79,6 +93,22 @@ async def _get_signature_configs(db: AsyncSession) -> dict:
         else:
             parsed[key] = default
     return parsed
+
+
+async def get_role_signature_defaults(db: AsyncSession, role: str) -> dict:
+    """返回指定角色的默认签名坐标 {x, y}
+
+    从 SystemConfig 读取角色维度的签名默认值（X/Y），
+    缺失时回退到 settings 默认值（400/100）。
+
+    role 参数: "assignee" | "checker" | "approver" | "endorser"
+    """
+    cfg = await _get_signature_configs(db)
+    prefix = f"pdf_signature_{role}_"
+    return {
+        "x": cfg.get(f"{prefix}x", 400),
+        "y": cfg.get(f"{prefix}y", 100),
+    }
 
 
 async def apply_signatures_to_node_pdfs(
@@ -110,6 +140,18 @@ async def apply_signatures_to_node_pdfs(
     approver_ids = [a.approver_id for a in approvals]
     users_result = await db.execute(select(User).where(User.id.in_(approver_ids)))
     users_map = {u.id: u for u in users_result.scalars().all()}
+
+    # 查询关联的签名记录（获取日期信息）
+    approval_ids = [a.id for a in approvals]
+    sigs_result = await db.execute(
+        select(Signature).where(
+            Signature.source_id.in_(approval_ids),
+            Signature.role_type == "approver",
+        )
+    )
+    sigs_by_approval = {}
+    for s in sigs_result.scalars().all():
+        sigs_by_approval.setdefault(s.source_id, []).append(s)
 
     # 读取节点默认位置
     node_result = await db.execute(select(InstanceNode).where(InstanceNode.id == node_id))
@@ -145,7 +187,32 @@ async def apply_signatures_to_node_pdfs(
         pos_y = a.signature_y if a.signature_y is not None else base_y
         pos_page = a.signature_page if a.signature_page is not None else default_page
 
-        signature_positions.append({"x": pos_x, "y": pos_y, "page": pos_page})
+        # 从关联的签名记录中获取日期信息
+        related_sigs = sigs_by_approval.get(a.id, [])
+        sig_date = None
+        show_date = True
+        date_x = None
+        date_y = None
+        date_font_size = 14
+        if related_sigs:
+            # 取第一个有日期的签名记录
+            for s in related_sigs:
+                if s.sign_date:
+                    sig_date = s.sign_date.isoformat()
+                    show_date = s.show_date if s.show_date is not None else True
+                    date_x = s.date_x
+                    date_y = s.date_y
+                    date_font_size = s.date_font_size if s.date_font_size else 12
+                    break
+
+        signature_positions.append({
+            "x": pos_x, "y": pos_y, "page": pos_page,
+            "sign_date": sig_date,
+            "show_date": show_date,
+            "date_x": date_x,
+            "date_y": date_y,
+            "date_font_size": date_font_size,
+        })
 
     if not signature_paths:
         return 0  # 无有效签名图片，跳过
@@ -275,6 +342,13 @@ async def apply_signatures_to_files(
                 "page": s.signature_page if s.signature_page is not None else cfg["pdf_signature_page"],
                 "width": s.signature_width,   # NULL → 使用全局兜底
                 "height": s.signature_height,
+                # 签批日期
+                # sign_date 可能是 date 对象或 ISO 字符串
+                "sign_date": s.sign_date.isoformat() if hasattr(s.sign_date, 'isoformat') else (str(s.sign_date) if s.sign_date else None),
+                "show_date": s.show_date if s.show_date is not None else True,
+                "date_x": s.date_x,
+                "date_y": s.date_y,
+                "date_font_size": s.date_font_size if s.date_font_size else 12,
             })
 
         if not sig_paths:
@@ -305,6 +379,142 @@ async def apply_signatures_to_files(
 
     return signed_count
 
+
+# ─── 中文日期字体查找 ────────────────────────────────────────────
+
+def _get_cjk_font_path() -> str | None:
+    """查找系统可用的中文字体路径（Windows / macOS / Linux）"""
+    candidates = [
+        # Windows
+        "C:/Windows/Fonts/simsun.ttc",
+        "C:/Windows/Fonts/msyh.ttc",
+        "C:/Windows/Fonts/simhei.ttf",
+        # macOS
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        # Linux
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _create_date_text_stamp(date_text: str, font_size: int = 12):
+    """将日期文本渲染为透明底 PNG 图片的 PDF 叠印页
+
+    使用 3 倍超采样渲染，PDF 上缩放后保持清晰锐利。
+
+    返回：(stamp_page, img_w, img_h) 或 (None, 0, 0)
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        # 3 倍超采样渲染，避免 PDF 缩放后文字模糊
+        render_size = font_size * 3
+
+        font_path = _get_cjk_font_path()
+        if font_path:
+            font = ImageFont.truetype(font_path, render_size)
+        else:
+            font = ImageFont.load_default()
+
+        # 测量文本尺寸（用 getbbox 获取精确边界）
+        temp_img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        temp_draw = ImageDraw.Draw(temp_img)
+        bbox = temp_draw.textbbox((0, 0), date_text, font=font)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+
+        if tw <= 0 or th <= 0:
+            return None, 0, 0
+
+        # 创建透明底图片并绘制文字（无额外边距，与前端预览对齐）
+        img = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.text((0, 0), date_text, fill=(0, 0, 0, 255), font=font)
+
+        w, h = img.size
+
+        # 创建 PDF stamp 页（与签名图用同一技术路径）
+        stamp_writer = PdfWriter()
+        stamp_writer.add_blank_page(width=float(w), height=float(h))
+        stamp_page = stamp_writer.pages[0]
+
+        # 分离 RGB / Alpha
+        alpha = img.split()[3] if img.mode == "RGBA" else None
+        rgb_img = img.convert("RGB")
+        rgb_raw = rgb_img.tobytes("raw", "RGB")
+        rgb_compressed = zlib.compress(rgb_raw, 9)
+
+        # Alpha SMask
+        smask_ref = None
+        if alpha is not None:
+            alpha_raw = alpha.tobytes("raw", "L")
+            alpha_compressed = zlib.compress(alpha_raw, 9)
+            smask_stream = DecodedStreamObject()
+            smask_stream.set_data(alpha_compressed)
+            smask_stream.update(DictionaryObject({
+                NameObject("/Type"): NameObject("/XObject"),
+                NameObject("/Subtype"): NameObject("/Image"),
+                NameObject("/Width"): NumberObject(w),
+                NameObject("/Height"): NumberObject(h),
+                NameObject("/ColorSpace"): NameObject("/DeviceGray"),
+                NameObject("/BitsPerComponent"): NumberObject(8),
+                NameObject("/Filter"): NameObject("/FlateDecode"),
+            }))
+            smask_ref = stamp_writer._add_object(smask_stream)
+
+        # RGB Image XObject
+        img_dict = DictionaryObject({
+            NameObject("/Type"): NameObject("/XObject"),
+            NameObject("/Subtype"): NameObject("/Image"),
+            NameObject("/Width"): NumberObject(w),
+            NameObject("/Height"): NumberObject(h),
+            NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
+            NameObject("/BitsPerComponent"): NumberObject(8),
+            NameObject("/Filter"): NameObject("/FlateDecode"),
+        })
+        if smask_ref is not None:
+            img_dict[NameObject("/SMask")] = smask_ref
+
+        img_stream = DecodedStreamObject()
+        img_stream.set_data(rgb_compressed)
+        img_stream.update(img_dict)
+        img_ref = stamp_writer._add_object(img_stream)
+
+        # Resources
+        resources_dict = DictionaryObject()
+        xobj_dict = DictionaryObject()
+        xobj_dict[NameObject("/Im0")] = img_ref
+        resources_dict[NameObject("/XObject")] = xobj_dict
+        stamp_page[NameObject("/Resources")] = resources_dict
+
+        # 内容流
+        content_bytes = "q {:.5f} 0 0 {:.5f} 0 0 cm /Im0 Do Q".format(
+            float(w), float(h)
+        ).encode("ascii")
+        content_obj = DecodedStreamObject()
+        content_obj.set_data(content_bytes)
+        stamp_page[NameObject("/Contents")] = content_obj
+        stamp_page.compress_content_streams()
+
+        # 序列化后重新读取
+        out = BytesIO()
+        stamp_writer.write(out)
+        out.seek(0)
+        reader = PdfReader(out)
+        stamp_page = reader.pages[0]
+
+        return stamp_page, w, h
+
+    except (OSError, ValueError):
+        return None, 0, 0
+
+
+# ─── PDF 签名插入主函数 ──────────────────────────────────────────
 
 def _insert_signatures(
     pdf_path: str,
@@ -371,7 +581,7 @@ def _insert_signatures(
         center_x = (sig_w - actual_w) / 2
         center_y = (sig_h - actual_h) / 2
 
-        # PDF 坐标原点在左下角，Y 需要减去缩放后的 stamp 高度
+        # 前端使用 CSS top 坐标系（距页面顶部），这里转换为 PDF 底部坐标系
         stamp_h = float(stamp_page.mediabox.height)
         pdf_y = page_h - sig_y - (stamp_h * scale) - center_y
 
@@ -381,6 +591,46 @@ def _insert_signatures(
             ty=pdf_y,
         )
         writer.pages[target_page].merge_transformed_page(stamp_page, trans)
+
+        # ── 插入签批日期文字（签名下方）──
+        sign_date = pos.get("sign_date")
+        show_date = pos.get("show_date", False)
+        if show_date and sign_date:
+            # 解析日期字符串为中文格式
+            try:
+                from datetime import date as date_type
+                if isinstance(sign_date, str):
+                    dt = date_type.fromisoformat(sign_date)
+                else:
+                    dt = sign_date
+                date_text = f"{dt.year}年{dt.month}月{dt.day}日"
+            except (ValueError, TypeError):
+                date_text = str(sign_date)
+
+            date_result = _create_date_text_stamp(date_text, font_size=pos.get("date_font_size", 10))
+            if isinstance(date_result, tuple):
+                date_stamp, dw, dh = date_result
+            else:
+                date_stamp = date_result
+                dw, dh = 0, 0
+            if date_stamp is not None and dw > 0:
+                # 日期默认位置：签名正下方 28px + 水平居中于签名
+                # _create_date_text_stamp 3x 超采样，还原比例 = target_font_size / dh
+                target_font_size = pos.get("date_font_size", 10)
+                date_scale = (target_font_size / dh) if dh > 0 else 0.3
+                date_stamp_w = dw * date_scale  # 日期 stamp 在 PDF 中的渲染宽度
+                # 默认 X：签名中心（sig_x + actual_w/2），可用 date_x 覆盖
+                if pos.get("date_x") is not None:
+                    date_tx = pos["date_x"] - date_stamp_w / 2  # 居中
+                else:
+                    date_tx = sig_x + actual_w / 2 - date_stamp_w / 2  # 签名居中
+                date_y = pos.get("date_y") if pos.get("date_y") is not None else sig_y + 28
+                date_pdf_y = page_h - date_y - (dh * date_scale)  # CSS top → PDF 底部坐标
+                date_trans = Transformation().scale(sx=date_scale, sy=date_scale).translate(
+                    tx=date_tx,
+                    ty=date_pdf_y,
+                )
+                writer.pages[target_page].merge_transformed_page(date_stamp, date_trans)
 
     # 先写入临时文件，成功后再原子替换，防止写入失败损坏原 PDF
     tmp_path = pdf_path + ".tmp"

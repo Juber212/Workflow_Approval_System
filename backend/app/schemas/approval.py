@@ -60,6 +60,8 @@ class ApprovalDetail(BaseModel):
     signature_page: int = -1
     # 当前审批人的签名图片 URL
     current_signature_url: str | None = None
+    # 角色维度签名默认配置（从 SystemConfig 读取）
+    role_signature: dict | None = None
     # 本审批记录的签名明细
     signatures: list[dict] = []
     decided_at: datetime | None = None

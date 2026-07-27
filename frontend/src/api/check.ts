@@ -47,6 +47,7 @@ export interface CheckDetail {
   signature_y: number
   signature_page: number
   current_signature_url: string | null
+  role_signature: { x: number; y: number } | null  // 角色维度签名默认坐标
   decided_at: string | null
   created_at: string | null
 }

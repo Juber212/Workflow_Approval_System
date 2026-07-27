@@ -50,6 +50,7 @@ export interface ApprovalDetail {
   signature_y: number
   signature_page: number
   current_signature_url: string | null
+  role_signature: { x: number; y: number } | null  // 角色维度签名默认坐标
   signatures: { id: number; file_id: number; signature_x: number; signature_y: number; signature_page: number; applied: boolean }[]
   decided_at: string | null
   created_at: string | null

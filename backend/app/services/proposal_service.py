@@ -250,21 +250,30 @@ async def list_proposals(
     *,
     organization_id: int | None = None,
     status: str | None = None,
+    priority: str | None = None,
     keyword: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    initiator_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
-    """方案列表 —— 返回所有 type=proposal 模板创建的实例"""
-    # 找到所有方案模板 ID
-    proposal_tpl_ids_sub = select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
+    """方案列表 —— 返回所有 template_type=proposal 的实例（不依赖模板是否存在）"""
+    conditions = [FlowInstance.template_type == "proposal"]
     if organization_id:
-        proposal_tpl_ids_sub = proposal_tpl_ids_sub.where(FlowTemplate.organization_id == organization_id)
-
-    conditions = [FlowInstance.template_id.in_(proposal_tpl_ids_sub)]
+        conditions.append(FlowInstance.organization_id == organization_id)
     if status:
         conditions.append(FlowInstance.status == status)
+    if priority:
+        conditions.append(FlowInstance.priority == priority)
     if keyword:
         conditions.append(FlowInstance.name.like(f"%{keyword}%"))
+    if date_from:
+        conditions.append(FlowInstance.created_at >= date_from)
+    if date_to:
+        conditions.append(FlowInstance.created_at <= f"{date_to} 23:59:59")
+    if initiator_id is not None:
+        conditions.append(FlowInstance.initiator_id == initiator_id)
 
     base_stmt = select(FlowInstance).where(*conditions)
     count_stmt = select(func.count()).select_from(FlowInstance).where(*conditions)

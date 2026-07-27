@@ -41,9 +41,9 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock 其他 pending approvals
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalars_all=[]),             # 3: check remaining pending → 无，全部通过
-            MagicMock(),                            # 4: UPDATE task → completed（结果不读）
-            MockResult(scalar_one=node),            # 5: SELECT node
+            MockResult(scalar_one=node),            # 3: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),             # 4: check remaining pending → 无，全部通过
+            MagicMock(),                            # 5: UPDATE task → completed（结果不读）
             # require_approver_signature=False 跳过签名查询
             MockResult(scalar_one=inst),            # 6: SELECT FlowInstance
             MockResult(scalar_one=None),            # 7: SELECT FlowTemplate（project 类型非 proposal）
@@ -60,13 +60,15 @@ class TestApprove:
         """还有审批人未通过 → 返回 all_approved=False"""
         approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
         pending_approval2 = make_approval(id=2, task_id=10, node_id=5, approver_id=6, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, approvers=[{"user_id":4},{"user_id":6}])
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalar_one=approval),           # 0: SELECT approval FOR UPDATE
             MagicMock(),                                # 1: lock other pending
             MagicMock(),                                # 2: clear_related delete
-            MockResult(scalars_all=[pending_approval2]), # 3: 还有 pending
+            MockResult(scalar_one=node),               # 3: SELECT node（审批策略判断）
+            MockResult(scalars_all=[pending_approval2]), # 4: 还有 pending
         ]
 
         result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
@@ -89,9 +91,9 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock other pending
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalars_all=[]),             # 3: check remaining → 空
-            MagicMock(),                            # 4: UPDATE task → completed
-            MockResult(scalar_one=node),            # 5: SELECT node
+            MockResult(scalar_one=node),            # 3: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),             # 4: check remaining → 空
+            MagicMock(),                            # 5: UPDATE task → completed
             MockResult(scalar_one=inst),            # 6: SELECT FlowInstance
             MockResult(scalar_one=None),            # 7: SELECT FlowTemplate（非 proposal）
             MagicMock(),                            # 8: UPDATE task → waiting_endorsement（难度4）
@@ -117,9 +119,10 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock other pending
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalars_all=[]),             # 3: check remaining → 空
+            MockResult(scalar_one=node),            # 3: SELECT node（is_end=True）
+            MockResult(scalars_all=[]),             # 4: check remaining → 空
             # task_id=None, 跳过 UPDATE task
-            MockResult(scalar_one=node),            # 4: SELECT node（is_end=True）
+            # is_end=True, 跳过签名查询
             MockResult(scalar_one=inst),            # 5: SELECT FlowInstance
         ]
 

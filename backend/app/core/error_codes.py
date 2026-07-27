@@ -41,3 +41,6 @@ class ErrorCode(IntEnum):
     FILE_TYPE_UNSUPPORTED = 41500
     FILE_TOO_LARGE = 41501
     PDF_CONVERSION_FAILED = 50001
+
+    # 限流 (429xx)
+    RATE_LIMITED = 42900

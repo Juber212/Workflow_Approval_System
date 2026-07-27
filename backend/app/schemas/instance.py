@@ -73,7 +73,7 @@ class InstanceListItem(BaseModel):
     status: str
     current_node_index: int = 0
     total_nodes: int = 0
-    current_assignee_name: str | None = None
+    current_handlers: str = ""  # 当前处理人（根据节点状态动态显示：负责人/校验人/审批人/批准人）
     proposal_name: str | None = None  # 关联的方案名称
     initiated_at: datetime | None = None
     completed_at: datetime | None = None

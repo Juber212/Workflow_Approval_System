@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-07-27 — 签批功能增强（Step 2~4）
+
+### 新增功能
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 1 | 签批日期：PDF 签名下方显示中文日期（可配置是否显示、日期值、字号、位置） | `signature.py`, `pdf_signature.py`, `SignaturePreviewDialog.vue` |
+| 2 | 日期独立拖拽 + 3x 超采样渲染（PDF 上清晰锐利） | `pdf_signature.py`, `SignaturePreviewDialog.vue` |
+| 3 | 多槽位同时可见：不同槽位颜色区分（蓝/绿/橙/红/灰），点击切换激活 | `SignaturePreviewDialog.vue` |
+| 4 | PDF 加载后自动按总页数创建槽位（每页一个签名） | `SignaturePreviewDialog.vue` |
+| 5 | 「应用到所有页面」：调好一个槽位后一键同步到同文件所有页面 | `SignaturePreviewDialog.vue` |
+| 6 | 日期居中于签名 + 签名缩放时日期字号等比跟随 | `SignaturePreviewDialog.vue`, `pdf_signature.py` |
+| 7 | 角色维度默认签名位置：4 角色 × X/Y（管理员在系统配置页管理） | `config.py`, `seed.py`, `pdf_signature.py`, 4 个 detail service |
+| 8 | 分页显示槽位：只渲染当前页面槽位，翻页自动切换 | `SignaturePreviewDialog.vue` |
+| 9 | 详情 API 返回 `role_signature`：前端优先级「角色配置 > 节点默认」 | 4 个 detail service + 4 个 schema |
+
+### 修复
+
+| # | 问题 | 文件 |
+|---|------|------|
+| 10 | 翻页时激活槽位页码被强制改写（签名跟着翻页跑） | `SignaturePreviewDialog.vue` (goPage) |
+| 11 | 取消选中文档后预览残留旧 PDF 内容 | `SignaturePreviewDialog.vue` |
+| 12 | 中文输入法逗号导致 pages 解析失败 | `pdf_signature.py` |
+| 13 | 日期默认字号调整为 10pt | `SignaturePreviewDialog.vue`, `pdf_signature.py` |
+| 14 | 签名标签遮挡签名内容 → 悬停显示 + 激活始终显示 | `SignaturePreviewDialog.vue` |
+
+---
+
 ## 2026-07-23 — 难度等级 + 批准人（Endorser）
 
 ### 新增功能

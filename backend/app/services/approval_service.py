@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
+from app.services.pdf_signature import get_role_signature_defaults
 from app.models import (
     Approval,
     Task,
@@ -284,6 +285,8 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         signature_page=node.signature_page,
         # 当前审批人的签名图片 URL
         current_signature_url=f"/api/v1/auth/users/{a.approver_id}/signature-image" if approver_user and approver_user.signature_image else None,
+        # 角色维度签名默认配置
+        role_signature=await get_role_signature_defaults(db, "approver"),
         # 本审批记录的签名明细（从 signatures 表获取）
         signatures=[
             {
@@ -364,6 +367,11 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
                 signature_page=sig.get("signature_page", -1),
                 signature_width=sig.get("signature_width"),
                 signature_height=sig.get("signature_height"),
+                sign_date=sig.get("sign_date"),
+                show_date=sig.get("show_date", True),
+                date_x=sig.get("date_x"),
+                date_y=sig.get("date_y"),
+                date_font_size=sig.get("date_font_size", 14),
                 applied=False,
                 sort_order=idx,
             )

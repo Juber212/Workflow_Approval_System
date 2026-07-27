@@ -30,12 +30,26 @@ CONFIGS = [
     {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名X坐标"},
     {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名Y坐标"},
     {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
+    # ── 角色维度签名默认位置 ──
+    {"config_key": "pdf_signature_assignee_x", "config_value": "400", "description": "负责人签名默认X坐标"},
+    {"config_key": "pdf_signature_assignee_y", "config_value": "100", "description": "负责人签名默认Y坐标"},
+    {"config_key": "pdf_signature_checker_x", "config_value": "400", "description": "校验人签名默认X坐标"},
+    {"config_key": "pdf_signature_checker_y", "config_value": "100", "description": "校验人签名默认Y坐标"},
+    {"config_key": "pdf_signature_approver_x", "config_value": "400", "description": "审批人签名默认X坐标"},
+    {"config_key": "pdf_signature_approver_y", "config_value": "100", "description": "审批人签名默认Y坐标"},
+    {"config_key": "pdf_signature_endorser_x", "config_value": "400", "description": "批准人签名默认X坐标"},
+    {"config_key": "pdf_signature_endorser_y", "config_value": "100", "description": "批准人签名默认Y坐标"},
 ]
 
-# 默认管理员
+# 默认管理员密码从环境变量读取，未设置则拒绝运行
+import os as _os
+_DEFAULT_ADMIN_PASSWORD = _os.getenv("DEFAULT_ADMIN_PASSWORD", "")
+if not _DEFAULT_ADMIN_PASSWORD:
+    raise RuntimeError("环境变量 DEFAULT_ADMIN_PASSWORD 未设置，请先设置默认管理员密码后重试")
+
 DEFAULT_ADMIN = {
     "username": "admin",
-    "password": "admin123",
+    "password": _DEFAULT_ADMIN_PASSWORD,
     "real_name": "系统管理员",
 }
 
@@ -96,7 +110,7 @@ async def seed():
             await session.flush()
 
             session.add(UserRole(user_id=admin_user.id, role_id=admin_role.id))
-            print(f"  + 管理员: {DEFAULT_ADMIN['username']} (密码: {DEFAULT_ADMIN['password']})")
+            print(f"  + 管理员: {DEFAULT_ADMIN['username']}（密码已从环境变量设置）")
 
         await session.commit()
         print("\n种子数据写入完成")

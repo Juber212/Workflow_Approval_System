@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.services.notification_service import create_notification, clear_related
+from app.services.pdf_signature import get_role_signature_defaults
 from app.core.error_codes import ErrorCode
 from app.models import (
     Task,
@@ -322,6 +323,8 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         signature_page=node.signature_page,
         # 当前负责人的签名图片 URL
         current_signature_url=f"/api/v1/auth/users/{t.assignee_id}/signature-image" if assignee and assignee.signature_image else None,
+        # 角色维度签名默认配置
+        role_signature=await get_role_signature_defaults(db, "assignee"),
         submitted_at=t.submitted_at,
         created_at=t.created_at,
     )
@@ -383,6 +386,11 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
                 signature_page=sig.get("signature_page", node.signature_page),
                 signature_width=sig.get("signature_width"),
                 signature_height=sig.get("signature_height"),
+                sign_date=sig.get("sign_date"),
+                show_date=sig.get("show_date", True),
+                date_x=sig.get("date_x"),
+                date_y=sig.get("date_y"),
+                date_font_size=sig.get("date_font_size", 14),
                 applied=False,
                 sort_order=idx,
             )

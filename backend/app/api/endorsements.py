@@ -1,5 +1,5 @@
 """批准 API —— 难度4级的最终审核环节"""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_current_active_user, CurrentUser
@@ -14,13 +14,24 @@ router = APIRouter(prefix="/api/v1", tags=["批准"])
 
 @router.get("/endorsements")
 async def get_endorsements(
-    type: str = "project",
+    type: str = Query("project", description="实例类型：project / proposal"),
+    status: str | None = Query(None, description="批准状态筛选"),
+    keyword: str | None = Query(None, description="实例名称搜索"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """我的批准列表 —— 按类型筛选（project / proposal）"""
-    items = await list_endorsements(db, current_user.id, type_filter=type)
-    return ApiResponse.ok(data={"items": items, "total": len(items)})
+    """我的批准列表 —— 分页 + 搜索"""
+    result = await list_endorsements(
+        db, current_user.id,
+        type_filter=type,
+        status=status,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return ApiResponse.ok(data=result)
 
 
 @router.get("/endorsements/{endorsement_id}")

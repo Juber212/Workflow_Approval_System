@@ -44,6 +44,7 @@ class EndorsementDetail(BaseModel):
     signature_y: float = 100
     signature_page: int = -1
     current_signature_url: str | None = None  # 当前批准人的签名图片URL
+    role_signature: dict | None = None  # 角色维度签名默认配置（从 SystemConfig 读取）
     current_node_index: int = 0
     total_nodes: int = 0
     nodes: list[dict] = []      # 节点简要列表（进度链）

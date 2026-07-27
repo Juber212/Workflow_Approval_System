@@ -63,6 +63,8 @@ class TaskDetail(BaseModel):
     signature_page: int = -1
     # 当前负责人的签名图片 URL
     current_signature_url: str | None = None
+    # 角色维度签名默认配置（从 SystemConfig 读取）
+    role_signature: dict | None = None
     submitted_at: datetime | None = None
     created_at: datetime | None = None
 

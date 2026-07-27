@@ -10,6 +10,16 @@ export interface SignatureSlot {
   signature_width?: number | null
   /** 签名高度（px），null=使用全局默认 */
   signature_height?: number | null
+  /** 是否显示签批日期 */
+  show_date?: boolean
+  /** 签批日期 ISO 字符串（如 "2024-07-24"） */
+  sign_date?: string | null
+  /** 日期文本 X 坐标，null=默认签名下方 */
+  date_x?: number | null
+  /** 日期文本 Y 坐标，null=默认签名下方 */
+  date_y?: number | null
+  /** 日期字体大小（pt），默认 12 */
+  date_font_size?: number | null
 }
 
 /** 签名记录 —— API 返回 */

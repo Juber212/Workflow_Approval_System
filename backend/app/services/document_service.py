@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.utils.file_utils import resolve_file_path
 from app.models import (
     DocumentTemplate, FlowTemplate, FlowInstance, Task,
     InstanceNode, User, Organization,
@@ -267,7 +268,7 @@ def get_doc_template_abs_path(doc: DocumentTemplate) -> str:
             return path
     else:
         # 相对路径：先尝试与 STORAGE_ROOT 拼接
-        path = os.path.join(settings.STORAGE_ROOT, doc.file_path)
+        path = resolve_file_path(doc.file_path)
         if os.path.exists(path):
             return path
         # 如果 file_path 已包含 STORAGE_ROOT 目录名（如 "storage/doc_templates/..."），

@@ -5,7 +5,9 @@
 from app.services.instance._helpers import (
     _get_type_label,
     _batch_get_node_stats,
-    _batch_get_current_assignees,
+    _batch_get_active_node_info,
+    format_current_handlers,
+    enrich_handler_info_with_names,
 )
 from app.services.instance.create import create_instance
 from app.services.instance.list import list_instances
@@ -24,7 +26,9 @@ from app.services.instance.delete import permanent_delete_instance
 __all__ = [
     "_get_type_label",
     "_batch_get_node_stats",
-    "_batch_get_current_assignees",
+    "_batch_get_active_node_info",
+    "format_current_handlers",
+    "enrich_handler_info_with_names",
     "create_instance",
     "list_instances",
     "get_instance_detail",

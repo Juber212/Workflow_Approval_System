@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     PDF_SIGNATURE_MAX_WIDTH: int = 100   # 签名最大宽度
     PDF_SIGNATURE_MAX_HEIGHT: int = 26   # 签名最大高度
 
+    # ── 角色维度签名默认值（全局配置，管理员在系统管理页配置）──
+    # 负责人 (assignee) 默认签名位置
+    PDF_SIGNATURE_ASSIGNEE_X: int = 400
+    PDF_SIGNATURE_ASSIGNEE_Y: int = 100
+    # 校验人 (checker) 默认签名位置
+    PDF_SIGNATURE_CHECKER_X: int = 400
+    PDF_SIGNATURE_CHECKER_Y: int = 100
+    # 审批人 (approver) 默认签名位置
+    PDF_SIGNATURE_APPROVER_X: int = 400
+    PDF_SIGNATURE_APPROVER_Y: int = 100
+    # 批准人 (endorser) 默认签名位置
+    PDF_SIGNATURE_ENDORSER_X: int = 400
+    PDF_SIGNATURE_ENDORSER_Y: int = 100
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173"
 

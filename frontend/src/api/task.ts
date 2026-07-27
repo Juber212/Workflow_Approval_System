@@ -57,6 +57,7 @@ export interface TaskDetail {
   signature_y: number
   signature_page: number
   current_signature_url: string | null  // 当前负责人的签名图片 URL
+  role_signature: { x: number; y: number } | null  // 角色维度签名默认坐标
   submitted_at: string | null
   created_at: string | null
 }

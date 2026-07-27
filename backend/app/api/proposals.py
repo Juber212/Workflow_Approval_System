@@ -29,18 +29,30 @@ async def create_proposal(
 async def list_proposals(
     organization_id: int | None = Query(None, description="组织筛选"),
     status: str | None = Query(None, description="状态筛选"),
+    priority: str | None = Query(None, description="优先级筛选（urgent/high/normal/low）"),
     keyword: str | None = Query(None, description="名称搜索"),
+    date_from: str | None = Query(None, description="创建时间起始（YYYY-MM-DD）"),
+    date_to: str | None = Query(None, description="创建时间截止（YYYY-MM-DD）"),
+    initiator_id: int | None = Query(None, description="发起人 ID 筛选"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """方案列表（所有人可见）"""
+    """方案列表（所有人可见，非管理员默认只看本所）"""
+    # 组织隔离：非管理员默认只看本所数据
+    if organization_id is None and not current_user.is_admin():
+        organization_id = current_user.organization_id
+
     result = await proposal_service.list_proposals(
         db,
         organization_id=organization_id,
         status=status,
+        priority=priority,
         keyword=keyword,
+        date_from=date_from,
+        date_to=date_to,
+        initiator_id=initiator_id,
         page=page,
         page_size=page_size,
     )

@@ -231,12 +231,66 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[Bott
         orgs_result = await db.execute(select(Organization).where(Organization.id.in_(org_ids)))
         orgs = {o.id: o.name for o in orgs_result.scalars().all()}
 
-    # 批量查当前负责人
-    assignee_ids = list(set(n.assignee_id for n in all_nodes if n.assignee_id))
-    users_map = {}
-    if assignee_ids:
-        users_result = await db.execute(select(User).where(User.id.in_(assignee_ids)))
-        users_map = {u.id: u.real_name for u in users_result.scalars().all()}
+    # 批量查所有人员姓名（负责人 + 校验人 + 审批人 + 批准人）
+    all_personnel_ids: set[int] = set()
+    for n in all_nodes:
+        if n.assignee_id:
+            all_personnel_ids.add(n.assignee_id)
+        if n.endorser_id:
+            all_personnel_ids.add(n.endorser_id)
+        if n.checkers:
+            for c in n.checkers:
+                uid = c.get("user_id") if isinstance(c, dict) else c
+                if uid:
+                    all_personnel_ids.add(uid)
+        if n.approvers:
+            for a in n.approvers:
+                uid = a.get("user_id") if isinstance(a, dict) else a
+                if uid:
+                    all_personnel_ids.add(uid)
+    users_map: dict[int, str] = {}
+    if all_personnel_ids:
+        users_result = await db.execute(
+            select(User.id, User.real_name).where(User.id.in_(list(all_personnel_ids)))
+        )
+        users_map = {uid: name for uid, name in users_result.all()}
+
+    # 辅助函数：根据节点状态计算当前处理人
+    def _calc_handlers(node: InstanceNode) -> str:
+        status = (node.status or "").lower()
+        if status in ("running", "pending", "processing"):
+            name = users_map.get(node.assignee_id, "") if node.assignee_id else ""
+            return name or "—"
+        if status == "waiting_check":
+            cids = []
+            if node.checkers:
+                for c in node.checkers:
+                    uid = c.get("user_id") if isinstance(c, dict) else c
+                    if uid:
+                        cids.append(uid)
+            if not cids:
+                return "—"
+            if len(cids) == 1:
+                return users_map.get(cids[0], "") or "—"
+            first_name = users_map.get(cids[0], "") or "?"
+            return f"{first_name}等{len(cids)}人"
+        if status == "waiting_approval":
+            aids = []
+            if node.approvers:
+                for a in node.approvers:
+                    uid = a.get("user_id") if isinstance(a, dict) else a
+                    if uid:
+                        aids.append(uid)
+            if not aids:
+                return "—"
+            if len(aids) == 1:
+                return users_map.get(aids[0], "") or "—"
+            first_name = users_map.get(aids[0], "") or "?"
+            return f"{first_name}等{len(aids)}人"
+        if status == "waiting_endorsement":
+            name = users_map.get(node.endorser_id, "") if node.endorser_id else ""
+            return name or "—"
+        return "—"
 
     items = []
     for inst in instances:
@@ -247,7 +301,7 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[Bott
         # 构建节点进度链
         progress_chain = []
         current_node_name = ""
-        current_assignee_name = ""
+        current_handlers = "—"
         all_finished = True
         has_overdue = False
         has_near_overdue = False
@@ -257,11 +311,11 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[Bott
             status_icon = "waiting"  # 待开始
             if node.status == "finished":
                 status_icon = "done"
-            elif node.status in ("running", "waiting_check", "waiting_approval"):
+            elif node.status in ("running", "waiting_check", "waiting_approval", "waiting_endorsement"):
                 status_icon = "active"
                 all_finished = False
                 current_node_name = node.name
-                current_assignee_name = users_map.get(node.assignee_id, "") if node.assignee_id else ""
+                current_handlers = _calc_handlers(node)
                 if node.deadline:
                     if node.deadline < now:
                         has_overdue = True
@@ -294,7 +348,7 @@ async def _get_bottleneck_tracking(db: AsyncSession, now: datetime) -> list[Bott
             organization_name=orgs.get(inst.organization_id, ""),
             progress_chain=progress_chain,
             current_node_name=current_node_name,
-            current_assignee_name=current_assignee_name,
+            current_handlers=current_handlers,
             priority=inst.priority,
             difficulty=inst.difficulty or "1",
             finished_count=finished_count,

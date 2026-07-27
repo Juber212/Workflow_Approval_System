@@ -31,7 +31,7 @@
               <div class="sig-file-row" @click="selectFile(f.file_id)">
                 <el-checkbox
                   v-model="f.checked"
-                  @change="onFileCheckChange(f)"
+                  @change="(checked: boolean) => onFileCheckChange(f, checked)"
                 />
                 <span class="sig-file-name" :title="f.name">{{ f.name }}</span>
               </div>
@@ -58,6 +58,50 @@
                     ✕
                   </el-button>
                 </div>
+                <!-- 日期控件（当前激活槽位时显示） -->
+                <div v-if="activeFileId === f.file_id" class="sig-date-ctrl">
+                  <el-checkbox
+                    v-model="currentShowDate"
+                    size="small"
+                    @change="(v: boolean) => { const s = f.slots[activeSlotIdx]; if (s) s.show_date = v }"
+                  >
+                    显示日期
+                  </el-checkbox>
+                  <span v-if="currentShowDate" class="sig-date-hint">（PDF 上可拖拽移动日期）</span>
+                  <div v-if="currentShowDate" class="sig-date-row">
+                    <el-date-picker
+                      v-model="currentSignDate"
+                      type="date"
+                      size="small"
+                      placeholder="选择日期"
+                      value-format="YYYY-MM-DD"
+                      style="width: 145px"
+                      @update:model-value="(v: string | null) => { const s = f.slots[activeSlotIdx]; if (s) s.sign_date = v }"
+                    />
+                    <el-select
+                      :model-value="currentDateFontSize"
+                      size="small"
+                      style="width: 70px"
+                      @change="(v: number) => { currentDateFontSize = v; const s = f.slots[activeSlotIdx]; if (s) s.date_font_size = v }"
+                    >
+                      <el-option :value="10" label="10" />
+                      <el-option :value="12" label="12" />
+                      <el-option :value="14" label="14" />
+                      <el-option :value="18" label="18" />
+                      <el-option :value="24" label="24" />
+                    </el-select>
+                  </div>
+                </div>
+                <el-button
+                  v-if="f.file_id === activeFileId && f.slots.length >= 2"
+                  text
+                  size="small"
+                  type="warning"
+                  class="sig-apply-all"
+                  @click.stop="applyToAllPages"
+                >
+                  应用到所有页面（{{ f.slots.length }} 页）
+                </el-button>
                 <el-button text size="small" type="primary" class="sig-add-slot" @click.stop="addSlot(f)">
                   + 加一处签名
                 </el-button>
@@ -97,7 +141,7 @@
             @mouseup="onWrapperMouseUp"
             @mouseleave="onWrapperMouseUp"
           >
-            <!-- 加载中 / 未选择文件 覆盖层 -->
+            <!-- 加载中 / 未选择文件 覆盖层（不透明，遮住旧 canvas 残留） -->
             <div v-if="!activeFileId || loadingPdf" class="sig-canvas-overlay">
               <template v-if="loadingPdf">加载中...</template>
               <template v-else-if="files.length === 0">暂无 PDF 文件</template>
@@ -106,22 +150,44 @@
 
             <!-- canvas 和 overlay 共享同一个定位容器，确保坐标原点一致 -->
             <div class="sig-canvas-stage" :style="{ position: 'relative', display: 'inline-block', lineHeight: 0 }">
-              <canvas ref="canvasRef" style="display:block;" />
-              <!-- 签名拖拽叠加层（支持移动 + 四角缩放） -->
-              <div
-                v-if="sigBlobUrl && activeFileId && !loadingPdf"
-                class="sig-overlay"
-                :style="overlayStyle"
-                @mousedown.stop="startDrag"
-              >
-                <img :src="sigBlobUrl" class="sig-image" draggable="false" />
-                <span class="sig-label">签名</span>
-                <!-- 缩放拖拽手柄（四角） -->
-                <span class="sig-resize-handle sig-resize--nw" @mousedown.stop="startResize('nw', $event)" />
-                <span class="sig-resize-handle sig-resize--ne" @mousedown.stop="startResize('ne', $event)" />
-                <span class="sig-resize-handle sig-resize--sw" @mousedown.stop="startResize('sw', $event)" />
-                <span class="sig-resize-handle sig-resize--se" @mousedown.stop="startResize('se', $event)" />
-              </div>
+              <canvas ref="canvasRef" v-show="activeFileId" style="display:block;" />
+              <!-- 当前页槽位签名叠加层（只渲染当前页码的槽位，不同页互不影响） -->
+              <template v-if="sigBlobUrl && activeFileId && !loadingPdf">
+                <div
+                  v-for="{ slot, originalIdx: si } in visibleSlots"
+                  :key="si"
+                  class="sig-overlay"
+                  :class="{ 'sig-overlay--active': si === activeSlotIdx, 'sig-overlay--inactive': si !== activeSlotIdx }"
+                  :style="{ ...slotOverlayStyle(si), outlineColor: slotColor(si) }"
+                  @mousedown.stop="si === activeSlotIdx ? startDrag($event) : selectSlot(activeFileId, si)"
+                >
+                  <img :src="sigBlobUrl" class="sig-image" draggable="false" />
+                  <span class="sig-label" :style="{ color: slotColor(si) }">
+                    {{ si === activeSlotIdx ? `签名 ${si + 1}（当前）` : `签名 ${si + 1}` }}
+                  </span>
+                  <!-- 缩放拖拽手柄（仅激活槽位显示） -->
+                  <template v-if="si === activeSlotIdx">
+                    <span class="sig-resize-handle sig-resize--nw" @mousedown.stop="startResize('nw', $event)" />
+                    <span class="sig-resize-handle sig-resize--ne" @mousedown.stop="startResize('ne', $event)" />
+                    <span class="sig-resize-handle sig-resize--sw" @mousedown.stop="startResize('sw', $event)" />
+                    <span class="sig-resize-handle sig-resize--se" @mousedown.stop="startResize('se', $event)" />
+                  </template>
+                </div>
+              </template>
+              <!-- 当前页槽位日期叠加层（只渲染当前页码） -->
+              <template v-if="sigBlobUrl && activeFileId && !loadingPdf">
+                <div
+                  v-for="{ slot, originalIdx: si } in visibleSlots"
+                  :key="'date-' + si"
+                  v-show="slot.show_date && slot.sign_date"
+                  class="sig-date-overlay"
+                  :class="{ 'sig-date-overlay--active': si === activeSlotIdx, 'sig-date-overlay--inactive': si !== activeSlotIdx }"
+                  :style="slotDateOverlayStyle(si)"
+                  @mousedown.stop="si === activeSlotIdx ? startDateDrag($event) : selectSlot(activeFileId, si)"
+                >
+                  <span class="sig-date-text">{{ formatSlotDate(slot) }}</span>
+                </div>
+              </template>
             </div>
           </div>
 
@@ -153,11 +219,15 @@
 - PDF 加载失败时输出 console.warn 便于调试
 */
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getToken } from '@/api/request'
 import axios from 'axios'
 import * as pdfjsLib from 'pdfjs-dist'
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { SignatureSlot } from '@/api/signature'
+
+// ── 槽位颜色调色板（按索引循环）──
+const SLOT_COLORS = ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399']
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
 
@@ -244,6 +314,17 @@ const sigStart = ref({ x: 0, y: 0 })
 const resizing = ref(false)
 const resizeDir = ref<'se' | 'sw' | 'ne' | 'nw'>('se')
 const resizeStart = ref({ x: 0, y: 0, w: 0, h: 0 })
+const resizeStartFontSize = ref(10)  // 缩放起始时的日期字号，用于等比缩放
+
+// 日期拖拽状态（独立于签名拖拽）
+const draggingDate = ref(false)
+const dateDragStart = ref({ x: 0, y: 0 })
+const dateStart = ref({ x: 0, y: 0 })
+const currentDateX = ref<number | null>(null)
+const currentDateY = ref<number | null>(null)
+const currentShowDate = ref(true)
+const currentSignDate = ref(new Date().toISOString().slice(0, 10))  // 默认今天
+const currentDateFontSize = ref(10)  // 日期字号，默认 10
 
 // 文件列表状态
 const files = ref<FileState[]>([])
@@ -251,6 +332,9 @@ const activeFileId = ref<number>(0)
 const activeSlotIdx = ref(0)
 
 let pdfDoc: pdfjsLib.PDFDocumentProxy | null = null
+
+/** 已自动按页数扩展槽位的文件 ID 集合（避免重复扩展覆盖用户手动调整） */
+const autoExpandedFiles = new Set<number>()
 
 // ========== 签名图片 Blob URL（解决 <img> 标签不带 Bearer Token 的问题）==========
 
@@ -295,14 +379,6 @@ onBeforeUnmount(revokeSigBlob)
 
 // ========== 计算属性 ==========
 
-/** 签名覆盖层样式：PDF 坐标 × 缩放倍率 = 显示坐标（随 PDF 缩放等比变化） */
-const overlayStyle = computed(() => ({
-  left: `${currentSigX.value * zoomLevel.value}px`,
-  top: `${currentSigY.value * zoomLevel.value}px`,
-  width: `${currentSigW.value * zoomLevel.value}px`,
-  height: `${currentSigH.value * zoomLevel.value}px`,
-}))
-
 const checkedCount = computed(() => files.value.filter(f => f.checked).length)
 
 const totalSlots = computed(() =>
@@ -314,6 +390,26 @@ const activeSlotLabel = computed(() => {
   if (!f) return ''
   const idx = activeSlotIdx.value
   return `${f.name} · 签名${idx + 1}`
+})
+
+/** 当前活跃文件的所有签名槽位 */
+const activeFileSlots = computed(() => {
+  const f = files.value.find(x => x.file_id === activeFileId.value)
+  return f ? f.slots : []
+})
+
+/** 当前页面可见的槽位（按 signature_page 过滤，不同页互不影响）
+ *
+ * -1 表示末页，依此类推。槽位携带原始索引 originalIdx 供 selectSlot 使用。 */
+const visibleSlots = computed(() => {
+  return activeFileSlots.value
+    .map((slot, originalIdx) => ({ slot, originalIdx }))
+    .filter(({ slot }) => {
+      const page = slot.signature_page < 0
+        ? totalPages.value + slot.signature_page + 1  // -1 → 最后一页
+        : slot.signature_page
+      return page === currentPage.value
+    })
 })
 
 // ========== 监听弹窗打开（替代 @opened，更可靠）==========
@@ -351,6 +447,7 @@ function initFiles() {
         name: pf.name,
         url: pf.url,
         checked: true,  // 默认全选
+        // 初始只建 1 个槽位，PDF 加载后 selectFile 会按总页数自动扩展
         slots: [{
           file_id: pf.file_id,
           signature_x: props.defaultX,
@@ -358,6 +455,11 @@ function initFiles() {
           signature_page: props.defaultPage,
           signature_width: props.defaultWidth ?? null,
           signature_height: props.defaultHeight ?? null,
+          show_date: true,
+          sign_date: new Date().toISOString().slice(0, 10),
+          date_x: null,
+          date_y: null,
+          date_font_size: 10,
         }],
       })
     }
@@ -365,7 +467,7 @@ function initFiles() {
     // 兼容旧版：纯 URL 列表 → 生成临时 id
     for (let i = 0; i < props.pdfUrls.length; i++) {
       list.push({
-        file_id: -(i + 1),  // 负 id 表示兼容模式的临时文件
+        file_id: -(i + 1),
         name: `文件 ${i + 1}`,
         url: props.pdfUrls[i],
         checked: true,
@@ -376,6 +478,11 @@ function initFiles() {
           signature_page: props.defaultPage,
           signature_width: null,
           signature_height: null,
+          show_date: true,
+          sign_date: new Date().toISOString().slice(0, 10),
+          date_x: null,
+          date_y: null,
+          date_font_size: 10,
         }],
       })
     }
@@ -405,6 +512,24 @@ async function selectFile(fileId: number) {
     }
     pdfDoc = await pdfjsLib.getDocument(params).promise
     totalPages.value = pdfDoc.numPages
+
+    // 首次加载该文件：自动按 PDF 总页数创建槽位（每页一个签名）
+    if (!autoExpandedFiles.has(f.file_id) && pdfDoc.numPages > 0) {
+      autoExpandedFiles.add(f.file_id)
+      f.slots = Array.from({ length: pdfDoc.numPages }, (_, i) => ({
+        file_id: f.file_id,
+        signature_x: props.defaultX,
+        signature_y: props.defaultY,
+        signature_page: i + 1,  // 第 1 页、第 2 页...
+        signature_width: props.defaultWidth ?? null,
+        signature_height: props.defaultHeight ?? null,
+        show_date: true,
+        sign_date: new Date().toISOString().slice(0, 10),
+        date_x: null,
+        date_y: null,
+        date_font_size: 10,
+      }))
+    }
 
     if (props.defaultPage < 0 && pdfDoc.numPages > 0) {
       currentPage.value = pdfDoc.numPages
@@ -437,6 +562,12 @@ function selectSlot(fileId: number, slotIdx: number) {
   currentSigY.value = slot.signature_y
   currentSigW.value = slot.signature_width ?? (props.defaultWidth ?? 100)
   currentSigH.value = slot.signature_height ?? (props.defaultHeight ?? 26)
+  // 同步日期状态
+  currentShowDate.value = slot.show_date ?? true
+  currentSignDate.value = slot.sign_date ?? new Date().toISOString().slice(0, 10)
+  currentDateX.value = slot.date_x ?? null
+  currentDateY.value = slot.date_y ?? null
+  currentDateFontSize.value = slot.date_font_size ?? 10
   // 切换到该槽位的页码
   let page = slot.signature_page
   if (page < 0 && totalPages.value > 0) page = totalPages.value
@@ -450,9 +581,14 @@ function addSlot(f: FileState) {
     file_id: f.file_id,
     signature_x: props.defaultX,
     signature_y: props.defaultY,
-    signature_page: props.defaultPage,
+    signature_page: currentPage.value,  // 在当前浏览页建槽位，不用 defaultPage
     signature_width: props.defaultWidth ?? null,
     signature_height: props.defaultHeight ?? null,
+    show_date: true,
+    sign_date: new Date().toISOString().slice(0, 10),
+    date_x: null,
+    date_y: null,
+    date_font_size: 10,
   })
 }
 
@@ -464,12 +600,16 @@ function removeSlot(f: FileState, idx: number) {
   }
 }
 
-function onFileCheckChange(f: FileState) {
-  if (!f.checked && activeFileId.value === f.file_id) {
-    // 如果取消选中的是当前活跃文件，切换到第一个选中的
-    const firstChecked = files.value.find(x => x.checked)
+/** 文件复选框切换：取消当前文件时自动切换到下一个选中的文件 */
+function onFileCheckChange(f: FileState, checked: boolean) {
+  if (!checked && activeFileId.value === f.file_id) {
+    // 取消选中当前活跃文件 → 切换到第一个选中的文件（排除自身）
+    const firstChecked = files.value.find(x => x.checked && x.file_id !== f.file_id)
     if (firstChecked) {
       selectFile(firstChecked.file_id)
+    } else {
+      // 没有选中任何文件，清空预览
+      activeFileId.value = 0
     }
   }
 }
@@ -482,6 +622,101 @@ function toggleAll(checked: boolean) {
     activeFileId.value = 0
   } else if (files.value.length > 0 && !activeFileId.value) {
     selectFile(files.value[0].file_id)
+  }
+}
+
+// ── 多槽位辅助函数 ──
+
+/** 获取槽位对应的颜色（按索引循环使用调色板） */
+function slotColor(slotIdx: number): string {
+  return SLOT_COLORS[slotIdx % SLOT_COLORS.length]
+}
+
+/** 生成指定槽位的签名叠加层 CSS 样式（CSS top 坐标 × 缩放）
+ *
+ * 激活槽位使用 currentSigX/Y 实时值（拖拽过程中持续更新），
+ * 非激活槽位使用槽位存储的静态值。 */
+function slotOverlayStyle(si: number): Record<string, string> {
+  const isActive = si === activeSlotIdx.value
+  // 激活槽位用实时拖拽坐标，否则用存储坐标
+  const x = isActive ? currentSigX.value : (activeFileSlots.value[si]?.signature_x ?? 0)
+  const y = isActive ? currentSigY.value : (activeFileSlots.value[si]?.signature_y ?? 0)
+  const w = isActive ? currentSigW.value : (activeFileSlots.value[si]?.signature_width ?? props.defaultWidth ?? 100)
+  const h = isActive ? currentSigH.value : (activeFileSlots.value[si]?.signature_height ?? props.defaultHeight ?? 26)
+  return {
+    left: `${x * zoomLevel.value}px`,
+    top: `${y * zoomLevel.value}px`,
+    width: `${w * zoomLevel.value}px`,
+    height: `${h * zoomLevel.value}px`,
+  }
+}
+
+/** 生成指定槽位的日期叠加层 CSS 样式
+ *
+ * 激活槽位使用 currentDateX/Y 实时值（拖拽过程中持续更新），
+ * 非激活槽位使用槽位存储的静态值。 */
+function slotDateOverlayStyle(si: number): Record<string, string> {
+  const isActive = si === activeSlotIdx.value
+  const slot = activeFileSlots.value[si]
+  // 激活槽位用实时拖拽坐标，否则用存储坐标
+  // 日期默认水平居中于签名：签名中心 = sig_x + sig_w/2
+  const sigX = isActive ? currentSigX.value : (slot?.signature_x ?? 0)
+  const sigW = isActive ? currentSigW.value : (slot?.signature_width ?? props.defaultWidth ?? 100)
+  const defaultDateX = sigX + sigW / 2
+  const dx = (isActive
+    ? (currentDateX.value ?? defaultDateX)
+    : (slot?.date_x ?? defaultDateX)
+  ) * zoomLevel.value
+  const dy = (isActive
+    ? (currentDateY.value ?? (currentSigY.value + 28))
+    : (slot?.date_y ?? (slot?.signature_y ?? 0) + 28)
+  ) * zoomLevel.value
+  const fs = (isActive ? currentDateFontSize.value : (slot?.date_font_size ?? 10)) * zoomLevel.value
+  return {
+    left: `${dx}px`,
+    top: `${dy}px`,
+    fontSize: `${fs}px`,
+    color: slotColor(si),
+    borderColor: slotColor(si),
+  }
+}
+
+/** 格式化槽位的日期文本（中文格式） */
+function formatSlotDate(slot: SignatureSlot): string {
+  if (!slot.sign_date) return ''
+  try {
+    const d = new Date(slot.sign_date)
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+  } catch { return '' }
+}
+
+/** 将当前文件的槽位配置批量应用到所有已选中的其他文件 */
+/** 将当前槽位的位置/尺寸/日期设置复制到同文件所有其他页面，每页保留各自页码 */
+function applyToAllPages() {
+  const f = files.value.find(x => x.file_id === activeFileId.value)
+  if (!f || f.slots.length <= 1) return
+  const source = f.slots[activeSlotIdx.value]
+  if (!source) return
+  // 复制除 file_id 和 signature_page 之外的全部属性
+  const propsToCopy = {
+    signature_x: source.signature_x,
+    signature_y: source.signature_y,
+    signature_width: source.signature_width,
+    signature_height: source.signature_height,
+    show_date: source.show_date,
+    sign_date: source.sign_date,
+    date_x: source.date_x,
+    date_y: source.date_y,
+    date_font_size: source.date_font_size,
+  }
+  let applied = 0
+  for (const slot of f.slots) {
+    if (slot.signature_page === source.signature_page) continue  // 跳过自身
+    Object.assign(slot, propsToCopy)
+    applied++
+  }
+  if (applied > 0) {
+    ElMessage.success(`已应用到全部 ${f.slots.length} 个页面`)
   }
 }
 
@@ -510,10 +745,27 @@ async function goPage(page: number) {
   currentPage.value = page
   await renderPage(page)
 
-  // 回写当前槽位的页码
+  // 翻页时自动选中当前页第一个槽位（不再强制改槽位页码）
   const f = files.value.find(x => x.file_id === activeFileId.value)
-  if (f && activeSlotIdx.value < f.slots.length) {
-    f.slots[activeSlotIdx.value].signature_page = page
+  if (f) {
+    const firstOnPage = f.slots.findIndex(s => {
+      const p = s.signature_page < 0 ? totalPages.value + s.signature_page + 1 : s.signature_page
+      return p === page
+    })
+    if (firstOnPage >= 0 && firstOnPage !== activeSlotIdx.value) {
+      // 直接同步激活状态，不调 selectSlot（避免循环 goPage）
+      activeSlotIdx.value = firstOnPage
+      const slot = f.slots[firstOnPage]
+      currentSigX.value = slot.signature_x
+      currentSigY.value = slot.signature_y
+      currentSigW.value = slot.signature_width ?? (props.defaultWidth ?? 100)
+      currentSigH.value = slot.signature_height ?? (props.defaultHeight ?? 26)
+      currentShowDate.value = slot.show_date ?? true
+      currentSignDate.value = slot.sign_date ?? new Date().toISOString().slice(0, 10)
+      currentDateX.value = slot.date_x ?? null
+      currentDateY.value = slot.date_y ?? null
+      currentDateFontSize.value = slot.date_font_size ?? 10
+    }
   }
 }
 
@@ -559,15 +811,53 @@ function endDrag() {
   }
 }
 
-/** 统一的 wrapper mousemove 处理（移动 + 缩放） */
+// ─── 日期拖拽 ───
+
+function startDateDrag(e: MouseEvent) {
+  draggingDate.value = true
+  const pos = toCanvasPos(e)
+  dateDragStart.value = { x: pos.x, y: pos.y }
+  // 默认位置：签名水平居中 + 正下方 28px
+  const defaultDateX = currentSigX.value + currentSigW.value / 2
+  const dx = currentDateX.value ?? defaultDateX
+  const dy = currentDateY.value ?? (currentSigY.value + 28)
+  dateStart.value = { x: dx, y: dy }
+}
+
+function onDateDrag(e: MouseEvent) {
+  if (!draggingDate.value) return
+  const pos = toCanvasPos(e)
+  const dx = pos.x - dateDragStart.value.x
+  const dy = pos.y - dateDragStart.value.y
+  // null 表示使用默认位置（签名居中 + 下方），首次拖拽时初始化为默认位置
+  if (currentDateX.value === null) currentDateX.value = currentSigX.value + currentSigW.value / 2
+  if (currentDateY.value === null) currentDateY.value = currentSigY.value + 28
+  currentDateX.value = Math.max(0, dateStart.value.x + dx)
+  currentDateY.value = Math.max(0, dateStart.value.y + dy)
+}
+
+function endDateDrag() {
+  if (!draggingDate.value) return
+  draggingDate.value = false
+  // 回写到当前槽位
+  const f = files.value.find(x => x.file_id === activeFileId.value)
+  if (f && activeSlotIdx.value < f.slots.length) {
+    f.slots[activeSlotIdx.value].date_x = currentDateX.value
+    f.slots[activeSlotIdx.value].date_y = currentDateY.value
+  }
+}
+
+/** 统一的 wrapper mousemove 处理（移动 + 缩放 + 日期拖拽） */
 function onWrapperMouseMove(e: MouseEvent) {
   if (dragging.value) onDrag(e)
+  else if (draggingDate.value) onDateDrag(e)
   else if (resizing.value) onResize(e)
 }
 
 /** 统一的 wrapper mouseup/leave 处理 */
 function onWrapperMouseUp() {
   if (dragging.value) endDrag()
+  else if (draggingDate.value) endDateDrag()
   else if (resizing.value) endResize()
 }
 
@@ -581,6 +871,7 @@ function startResize(dir: 'se' | 'sw' | 'ne' | 'nw', e: MouseEvent) {
   resizeDir.value = dir
   const pos = toCanvasPos(e)
   resizeStart.value = { x: pos.x, y: pos.y, w: currentSigW.value, h: currentSigH.value }
+  resizeStartFontSize.value = currentDateFontSize.value  // 记录缩放起始字号
 }
 
 /** 缩放中 */
@@ -616,9 +907,14 @@ function onResize(e: MouseEvent) {
   // 最小尺寸限制
   currentSigW.value = Math.max(20, newW)
   currentSigH.value = Math.max(8, newH)
+  // 日期字号等比缩放（签名宽度比例 = 日期字号比例）
+  if (startW > 0) {
+    const newFontSize = resizeStartFontSize.value * (currentSigW.value / startW)
+    currentDateFontSize.value = Math.round(Math.max(6, Math.min(36, newFontSize)))
+  }
 }
 
-/** 缩放结束，回写当前槽位 */
+/** 缩放结束，回写当前槽位（含等比缩放后的日期字号） */
 function endResize() {
   if (!resizing.value) return
   resizing.value = false
@@ -626,6 +922,7 @@ function endResize() {
   if (f && activeSlotIdx.value < f.slots.length) {
     f.slots[activeSlotIdx.value].signature_width = Math.round(currentSigW.value)
     f.slots[activeSlotIdx.value].signature_height = Math.round(currentSigH.value)
+    f.slots[activeSlotIdx.value].date_font_size = currentDateFontSize.value
   }
 }
 
@@ -654,6 +951,7 @@ function handleClose() {
   loadingPdf.value = false
   initializing.value = false
   zoomLevel.value = 1.0  // 重置缩放
+  autoExpandedFiles.clear()
 }
 </script>
 
@@ -790,6 +1088,12 @@ function handleClose() {
     padding: 2px 6px;
   }
 
+  .sig-apply-all {
+    margin-left: 20px;
+    font-size: 12px;
+    padding: 2px 6px;
+  }
+
   // ─── 右侧 PDF 预览 ───
   .sig-main {
     flex: 1;
@@ -856,7 +1160,7 @@ function handleClose() {
     justify-content: center;
     color: var(--el-text-color-placeholder);
     font-size: 14px;
-    background: rgba(245, 245, 245, 0.85);
+    background: #f5f5f5;  // 完全不透明，遮住 canvas 残留
     z-index: 10;
   }
 
@@ -879,6 +1183,19 @@ function handleClose() {
       box-shadow: 0 0 8px rgba(64, 158, 255, 0.3);
     }
 
+    // 非激活槽位：半透明 + 细实线边框 + 指针光标（点击切换激活）
+    &--inactive {
+      opacity: 0.45;
+      outline-style: solid;
+      outline-width: 1px;
+      cursor: pointer;
+
+      &:hover {
+        opacity: 0.7;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+      }
+    }
+
     .sig-image {
       display: block;
       width: 100%;
@@ -898,6 +1215,18 @@ function handleClose() {
       border-radius: 2px;
       line-height: 1.4;
       pointer-events: none;       // 不阻挡拖拽
+      opacity: 0;                 // 默认隐藏，不遮挡签名
+      transition: opacity 0.15s;
+    }
+
+    // 悬停时显示标签
+    &:hover .sig-label {
+      opacity: 1;
+    }
+
+    // 激活槽位始终显示标签
+    &--active .sig-label {
+      opacity: 1;
     }
 
     // ── 四角缩放手柄 ──
@@ -944,6 +1273,61 @@ function handleClose() {
     color: var(--el-color-danger);
     font-size: 13px;
     margin-right: 12px;
+  }
+
+  // ── 日期控件 ──
+  .sig-date-ctrl {
+    margin-left: 20px;
+    margin-bottom: 4px;
+    padding: 2px 6px;
+  }
+
+  .sig-date-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .sig-date-hint {
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+    margin-left: 8px;
+  }
+
+  // ── 日期叠加层 ──
+  .sig-date-overlay {
+    position: absolute;
+    cursor: grab;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 2px;
+    white-space: nowrap;
+    user-select: none;
+    z-index: 5;
+    transform: translateX(-50%);  // 日期文字水平居中于定位点
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.12);
+    }
+
+    // 非激活日期叠加层
+    &--inactive {
+      opacity: 0.45;
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.03);
+
+      &:hover {
+        opacity: 0.7;
+        background: rgba(0, 0, 0, 0.08);
+      }
+    }
+  }
+
+  .sig-date-text {
+    font-size: inherit;
+    color: #333;
+    pointer-events: none;
+    line-height: 1.4;
   }
 }
 </style>

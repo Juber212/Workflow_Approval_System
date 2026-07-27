@@ -24,6 +24,7 @@ from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, Approv
 from app.schemas.common import PaginatedData
 from app.schemas.check import CheckListItem, CheckDetail
 from app.services.notification_service import create_notification, clear_related
+from app.services.pdf_signature import get_role_signature_defaults
 
 
 async def list_checks(
@@ -225,6 +226,8 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         signature_page=node.signature_page,
         # 当前校验人的签名图片 URL
         current_signature_url=f"/api/v1/auth/users/{c.checker_id}/signature-image" if checker_user and checker_user.signature_image else None,
+        # 角色维度签名默认配置
+        role_signature=await get_role_signature_defaults(db, "checker"),
         decided_at=c.decided_at,
         created_at=c.created_at,
     )
@@ -275,6 +278,11 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                 signature_page=sig.get("signature_page", -1),
                 signature_width=sig.get("signature_width"),
                 signature_height=sig.get("signature_height"),
+                sign_date=sig.get("sign_date"),
+                show_date=sig.get("show_date", True),
+                date_x=sig.get("date_x"),
+                date_y=sig.get("date_y"),
+                date_font_size=sig.get("date_font_size", 14),
                 applied=False,  # 等全部校验通过后批量写入
                 sort_order=idx,
             )

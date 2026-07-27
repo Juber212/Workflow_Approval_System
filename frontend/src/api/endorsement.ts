@@ -41,6 +41,7 @@ export interface EndorsementDetail {
   signature_y: number
   signature_page: number
   current_signature_url: string | null
+  role_signature: { x: number; y: number } | null  // 角色维度签名默认坐标
   current_node_index: number
   total_nodes: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string }[]

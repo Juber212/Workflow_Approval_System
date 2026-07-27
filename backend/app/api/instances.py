@@ -74,6 +74,9 @@ async def get_instances(
     status: str | None = Query(None, description="状态筛选，多选用逗号分隔（running,completed,terminated）"),
     priority: str | None = Query(None, description="优先级筛选（urgent/high/normal/low）"),
     keyword: str | None = Query(None, description="关键词模糊搜索项目名称"),
+    date_from: str | None = Query(None, description="创建时间起始（YYYY-MM-DD）"),
+    date_to: str | None = Query(None, description="创建时间截止（YYYY-MM-DD）"),
+    initiator_id: int | None = Query(None, description="发起人 ID 筛选"),
     sort_by: str | None = Query(None, description="排序方式：priority 按优先级排序"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
@@ -90,12 +93,19 @@ async def get_instances(
     if status:
         status_list = [s.strip() for s in status.split(",") if s.strip()]
 
+    # 组织隔离：非管理员默认只看本所数据
+    if organization_id is None and not current_user.is_admin():
+        organization_id = current_user.organization_id
+
     result = await list_instances(
         db,
         organization_id=organization_id,
         status=status_list,
         priority=priority,
         keyword=keyword,
+        date_from=date_from,
+        date_to=date_to,
+        initiator_id=initiator_id,
         sort_by=sort_by,
         page=page,
         page_size=page_size,
@@ -111,17 +121,18 @@ async def my_initiated_instances(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     type: str | None = Query(None, description="实例类型：project / proposal"),
+    keyword: str | None = Query(None, description="实例名称搜索"),
 ):
-    """我发起的流程 —— 所长查看自己发起的所有实例（PRD §7.5）"""
-    from app.models import FlowInstance, FlowTemplate
+    """我发起的流程 —— 所长查看自己发起的所有实例"""
+    from app.models import FlowInstance
     from sqlalchemy import select, func
 
     conditions = [FlowInstance.initiator_id == current_user.id]
-    # 按类型过滤
+    # 按类型过滤（直接用 template_type 快照，不依赖模板是否还存在）
     if type:
-        conditions.append(FlowInstance.template_id.in_(
-            select(FlowTemplate.id).where(FlowTemplate.type == type)
-        ))
+        conditions.append(FlowInstance.template_type == type)
+    if keyword:
+        conditions.append(FlowInstance.name.like(f"%{keyword}%"))
 
     count_stmt = select(func.count()).select_from(FlowInstance).where(*conditions)
     total = (await db.execute(count_stmt)).scalar() or 0
@@ -143,9 +154,41 @@ async def my_initiated_instances(
             "priority": i.priority, "initiated_at": i.initiated_at.isoformat() if i.initiated_at else None,
             "completed_at": i.completed_at.isoformat() if i.completed_at else None,
             "created_at": i.created_at.isoformat() if i.created_at else None,
+            "current_handlers": "",  # 下面批量填充
         }
         for i in instances
     ]
+
+    # 批量填充当前处理人
+    if items:
+        from app.services.instance._helpers import _batch_get_active_node_info, format_current_handlers, enrich_handler_info_with_names
+        from app.models import User as UserModel
+        inst_ids = [i["id"] for i in items]
+        active_node_map = await _batch_get_active_node_info(db, inst_ids)
+        # 批量查 checker/approver 首人姓名
+        all_cids: set[int] = set()
+        all_aids: set[int] = set()
+        for info in active_node_map.values():
+            cids = info.get("checker_ids") or []
+            if cids:
+                all_cids.add(cids[0])
+            aids = info.get("approver_ids") or []
+            if aids:
+                all_aids.add(aids[0])
+        name_map: dict[int, str] = {}
+        if all_cids | all_aids:
+            users_r = await db.execute(
+                select(UserModel.id, UserModel.real_name).where(UserModel.id.in_(list(all_cids | all_aids)))
+            )
+            name_map = {uid: name for uid, name in users_r.all()}
+        for item in items:
+            info = active_node_map.get(item["id"])
+            if info:
+                enrich_handler_info_with_names(info, name_map)
+                item["current_handlers"] = format_current_handlers(info)
+            else:
+                item["current_handlers"] = "—"
+
     return ApiResponse.ok({"items": items, "total": total, "page": page, "page_size": page_size})
 
 

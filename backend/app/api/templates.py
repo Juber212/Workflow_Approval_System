@@ -53,7 +53,11 @@ async def get_templates(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """模板列表"""
+    """模板列表（非管理员默认只看本所模板）"""
+    # 组织隔离：非管理员默认只看本所数据
+    if organization_id is None and not current_user.is_admin():
+        organization_id = current_user.organization_id
+
     result = await list_templates(
         db, page=page, page_size=page_size,
         organization_id=organization_id, keyword=keyword,
@@ -82,6 +86,19 @@ async def get_template(
     db: AsyncSession = Depends(get_db),
 ):
     """模板详情 —— 含节点/连线"""
+    from app.models import FlowTemplate
+    from sqlalchemy import select
+    tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == template_id))).scalar_one_or_none()
+    if tpl is None:
+        from app.core.exceptions import AppException
+        from app.core.error_codes import ErrorCode
+        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+    # 组织隔离：非管理员不可查看其他组织的模板
+    if not current_user.is_admin() and tpl.organization_id != current_user.organization_id:
+        from app.core.exceptions import AppException
+        from app.core.error_codes import ErrorCode
+        raise AppException(ErrorCode.FORBIDDEN, "无权查看其他组织的模板")
+
     detail = await get_template_detail(db, template_id)
     return ApiResponse.ok(detail.model_dump())
 

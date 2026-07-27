@@ -27,7 +27,7 @@ class BottleneckItem(BaseModel):
     organization_name: str = ""
     progress_chain: list[str] = []
     current_node_name: str = ""
-    current_assignee_name: str = ""
+    current_handlers: str = ""  # 当前处理人（根据节点状态动态：负责人/校验人/审批人/批准人）
     priority: str = "normal"
     difficulty: str = "1"
     finished_count: int = 0
