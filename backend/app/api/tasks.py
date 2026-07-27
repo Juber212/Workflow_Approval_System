@@ -12,6 +12,7 @@ from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
 from app.schemas.task import TaskSaveDraft, TaskSubmit
 from app.services import task_service, file_service
+from app.services.notification_service import send_refresh_signal
 from app.services.pdf_queue import enqueue_batch_conversion
 from app.services.pdf_converter import convert_to_pdf
 from app.services.document_service import (
@@ -83,6 +84,7 @@ async def submit_task(
     """提交任务 —— PDF 转换 + 签批 + 生成校验/审批记录"""
     result = await task_service.submit_task(db, task_id, current_user.id, data)
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(message=result["message"])
 
 

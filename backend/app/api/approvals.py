@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.approval import ApprovalAction
 from app.services import approval_service
+from app.services.notification_service import send_refresh_signal
 from app.api.deps import get_current_active_user, CurrentUser
 
 router = APIRouter(prefix="/api/v1", tags=["审批"])
@@ -61,6 +62,7 @@ async def approve(
         signature_page=data.signature_page,
     )
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message=result.get("message", "审批通过"))
 
 
@@ -77,4 +79,5 @@ async def reject_approval(
         data.opinion or "", data.target_node_id,
     )
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message=result.get("message", "审批已退回"))

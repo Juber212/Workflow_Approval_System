@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.schemas.common import ApiResponse
 from app.schemas.check import CheckAction
 from app.services import check_service
+from app.services.notification_service import send_refresh_signal
 from app.api.deps import get_current_active_user, CurrentUser
 
 router = APIRouter(prefix="/api/v1", tags=["校验"])
@@ -53,6 +54,7 @@ async def pass_check(
     """校验通过 —— 全部通过后触发审批生成"""
     result = await check_service.pass_check(db, check_id, current_user.id, data.opinion, data.signatures)
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message=result.get("message", "校验通过"))
 
 
@@ -66,4 +68,5 @@ async def return_check(
     """校验退回 —— 退回负责人，删除当前轮文件"""
     result = await check_service.return_check(db, check_id, current_user.id, data.opinion or "")
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message=result.get("message", "校验已退回"))

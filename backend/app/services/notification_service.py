@@ -119,14 +119,14 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> None:
 
 
 async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
-    """获取待办/校验/审批计数汇总 —— 一次请求替代原来的 7 次独立查询
+    """获取待办/校验/审批/批准计数汇总 —— 一次请求获取所有红点数据
 
-    使用 JOIN + GROUP BY 单次查询获取按类型分组的计数，
-    避免 7 次独立分页查询造成的 429 限流问题。
+    使用 JOIN + GROUP BY 按实例类型分组计数，
+    返回完整的 project/proposal 分类 breakdown，供前端侧边栏角标和个人中心 Tab 角标使用。
     """
-    from app.models import Task, CheckRecord, Approval, FlowInstance
+    from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance
 
-    # 1. 任务计数按实例类型分组 —— 一条 JOIN 查询
+    # 1. 任务计数按实例类型分组
     task_counts = (await db.execute(
         select(FlowInstance.template_type, func.count(Task.id))
         .join(Task, Task.instance_id == FlowInstance.id)
@@ -141,7 +141,7 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
     project_tasks = task_map.get("project", 0)
     proposal_tasks = task_map.get("proposal", 0)
 
-    # 2. 校验计数（pending 状态，不区分类型）
+    # 2. 校验计数（pending 状态，只有项目有校验）
     check_count = (await db.execute(
         select(func.count(CheckRecord.id)).where(
             CheckRecord.checker_id == user_id,
@@ -149,7 +149,7 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
         )
     )).scalar() or 0
 
-    # 3. 审批计数按实例类型分组 —— 一条 JOIN 查询
+    # 3. 审批计数按实例类型分组
     approval_counts = (await db.execute(
         select(FlowInstance.template_type, func.count(Approval.id))
         .join(Approval, Approval.instance_id == FlowInstance.id)
@@ -164,20 +164,50 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
     project_approvals = approval_map.get("project", 0)
     proposal_approvals = approval_map.get("proposal", 0)
 
+    # 4. 批准计数按实例类型分组（endorsement，难度4级专有）
+    endorsement_counts = (await db.execute(
+        select(FlowInstance.template_type, func.count(Endorsement.id))
+        .join(Endorsement, Endorsement.instance_id == FlowInstance.id)
+        .where(
+            Endorsement.endorser_id == user_id,
+            Endorsement.status == "pending",
+            FlowInstance.template_type.in_(["project", "proposal"]),
+        )
+        .group_by(FlowInstance.template_type)
+    )).all()
+    endorsement_map: dict[str, int] = {row[0]: row[1] for row in endorsement_counts}
+    project_endorsements = endorsement_map.get("project", 0)
+    proposal_endorsements = endorsement_map.get("proposal", 0)
+
     task_total = project_tasks + proposal_tasks
     approval_total = project_approvals + proposal_approvals
+    endorsement_total = project_endorsements + proposal_endorsements
 
     return {
+        # 汇总（侧边栏角标用）
         "task_count": task_total,
         "check_count": check_count,
         "approval_count": approval_total,
-        "project_pending": project_tasks + check_count + project_approvals,
-        "proposal_pending": proposal_tasks + proposal_approvals,
+        "endorsement_count": endorsement_total,
+        "project_pending": project_tasks + check_count + project_approvals + project_endorsements,
+        "proposal_pending": proposal_tasks + proposal_approvals + proposal_endorsements,
+        # 分类 breakdown（个人中心 Tab 角标用）
+        "project_task_count": project_tasks,
+        "project_check_count": check_count,
+        "project_approval_count": project_approvals,
+        "project_endorsement_count": project_endorsements,
+        "proposal_task_count": proposal_tasks,
+        "proposal_approval_count": proposal_approvals,
+        "proposal_endorsement_count": proposal_endorsements,
     }
 
 
 async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> None:
-    """操作完成后删除相关通知，并通过 WebSocket 通知前端刷新未读数（不阻塞主流程）"""
+    """操作完成后删除相关通知（纯 DB 操作，不发送 WS）
+
+    WS 推送由 API 层在 db.commit() 后调用 send_refresh_signal() 完成，
+    确保前端查询 summary 时数据已提交。
+    """
     try:
         from sqlalchemy import delete
         await db.execute(
@@ -187,10 +217,13 @@ async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> 
             )
         )
         await db.flush()
-        # 通知前端刷新铃铛未读数（fire-and-forget，失败不影响主流程）
-        try:
-            await manager.send_to_user(user_id, {"type": "refresh_count"})
-        except Exception:
-            pass
     except Exception:
         logger.debug(f"清除通知失败: user_id={user_id}, types={types}", exc_info=True)
+
+
+async def send_refresh_signal(user_id: int) -> None:
+    """向指定用户推送 refresh_count（在 DB commit 后调用，保证前端查询到最新数据）"""
+    try:
+        await manager.send_to_user(user_id, {"type": "refresh_count"})
+    except Exception:
+        pass

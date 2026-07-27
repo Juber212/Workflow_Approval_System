@@ -9,6 +9,7 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import FlowTemplate
 from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org
+from app.services.notification_service import send_refresh_signal
 from app.schemas.common import ApiResponse
 from app.schemas.instance import (
     CreateInstanceRequest,
@@ -220,7 +221,7 @@ async def terminate_flow_instance(
     """
     result = await terminate_instance(db, instance_id, body.reason, current_user)
     await db.commit()
-
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message="项目已终止")
 
 
@@ -239,7 +240,7 @@ async def change_node_personnel(
     """
     result = await change_personnel(db, instance_id, node_id, body, current_user)
     await db.commit()
-
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message="人员更换成功")
 
 

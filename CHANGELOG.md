@@ -32,6 +32,34 @@
 
 ---
 
+## 2026-07-27 — 红点实时刷新
+
+### 新增功能
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 1 | 侧边栏「个人中心」角标实时更新（WebSocket 推送 + 30s 轮询兜底） | `notification.ts`, `notification.ts`(store), `AppLayout.vue` |
+| 2 | 个人中心 Tab 页签角标实时更新（待办/校验/审批/批准） | `profile/index.vue` |
+| 3 | 项目/方案 radio-button 红点实时更新 | `notification.ts`, `notification.ts`(store) |
+| 4 | summary API 扩展返回批准计数 + 完整 project/proposal 分类 breakdown | `notification_service.py` |
+| 5 | notifyStore 新增 endorsementCount 字段 | `notification.ts`(store) |
+
+### 机制
+
+- **主力通道**：复用现有 WebSocket `notification`/`refresh_count` 消息 → 自动刷新 notifyStore + 派发自定义事件
+- **兜底通道**：个人中心页面内 30s 轻量轮询 `GET /notifications/summary`
+- **零后端 service 改动**：现有 WebSocket 推送已覆盖所有计数变更场景
+
+### 修复
+
+| # | 问题 | 涉及文件 |
+|---|------|----------|
+| 6 | 审批/批准通过后红点不刷新 —— WebSocket refresh_count 在事务提交前发送，前端查询时数据未生效 | `notification_service.py`, `approvals.py`, `checks.py`, `endorsements.py`, `tasks.py`, `instances.py` |
+
+**修复方案**：拆分 `clear_related`（纯删通知，不发 WS），新增 `send_refresh_signal()` 在各 API 端点 `db.commit()` 之后调用，保证前端 summary 查询时数据已提交。
+
+---
+
 ## 2026-07-23 — 难度等级 + 批准人（Endorser）
 
 ### 新增功能

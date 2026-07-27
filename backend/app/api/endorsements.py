@@ -8,6 +8,7 @@ from app.schemas.endorsement import EndorseRequest, EndorseRejectRequest
 from app.services.endorsement_service import (
     list_endorsements, get_endorsement_detail, endorse, endorse_reject,
 )
+from app.services.notification_service import send_refresh_signal
 
 router = APIRouter(prefix="/api/v1", tags=["批准"])
 
@@ -62,6 +63,7 @@ async def endorse_approve(
         signature_page=body.signature_page,
     )
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(data=result, message=result.get("message", "批准通过"))
 
 
@@ -75,4 +77,5 @@ async def endorse_reject_route(
     """批准驳回 —— 节点回到运行状态，负责人重新处理"""
     result = await endorse_reject(db, endorsement_id, current_user.id, body.opinion)
     await db.commit()
+    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(data=result, message=result.get("message", "已驳回"))
