@@ -554,8 +554,8 @@ def _insert_signatures(
         sig_w = pos.get("width") or max_width
         sig_h = pos.get("height") or max_height
 
-        # 确定目标页码（0-indexed）
-        target_page = total_pages - 1 if sig_page < 0 else sig_page
+        # 确定目标页码（前端 1-based → pypdf 0-based）
+        target_page = total_pages - 1 if sig_page < 0 else sig_page - 1
         if target_page < 0 or target_page >= total_pages:
             target_page = total_pages - 1
 
@@ -623,7 +623,7 @@ def _insert_signatures(
                 if pos.get("date_x") is not None:
                     date_tx = pos["date_x"] - date_stamp_w / 2  # 居中
                 else:
-                    date_tx = sig_x + actual_w / 2 - date_stamp_w / 2  # 签名居中
+                    date_tx = sig_x + sig_w / 2 - date_stamp_w / 2  # 签名槽位居中（匹配前端预览）
                 date_y = pos.get("date_y") if pos.get("date_y") is not None else sig_y + 28
                 date_pdf_y = page_h - date_y - (dh * date_scale)  # CSS top → PDF 底部坐标
                 date_trans = Transformation().scale(sx=date_scale, sy=date_scale).translate(

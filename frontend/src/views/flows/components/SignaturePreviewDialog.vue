@@ -162,9 +162,6 @@
                   @mousedown.stop="si === activeSlotIdx ? startDrag($event) : selectSlot(activeFileId, si)"
                 >
                   <img :src="sigBlobUrl" class="sig-image" draggable="false" />
-                  <span class="sig-label" :style="{ color: slotColor(si) }">
-                    {{ si === activeSlotIdx ? `签名 ${si + 1}（当前）` : `签名 ${si + 1}` }}
-                  </span>
                   <!-- 缩放拖拽手柄（仅激活槽位显示） -->
                   <template v-if="si === activeSlotIdx">
                     <span class="sig-resize-handle sig-resize--nw" @mousedown.stop="startResize('nw', $event)" />
@@ -727,10 +724,15 @@ async function renderPage(pageNum: number) {
   loadingPdf.value = true
   try {
     const page = await pdfDoc.getPage(pageNum)
-    const viewport = page.getViewport({ scale: zoomLevel.value })
+    // 乘 devicePixelRatio 适配高分屏（Retina/Mac 等），canvas CSS 尺寸不变，像素密度翻倍
+    const dpr = window.devicePixelRatio || 1
+    const viewport = page.getViewport({ scale: zoomLevel.value * dpr })
     const canvas = canvasRef.value
     canvas.width = viewport.width
     canvas.height = viewport.height
+    // CSS 显示尺寸保持原 zoom 级别，浏览器自动缩放高清 canvas
+    canvas.style.width = `${viewport.width / dpr}px`
+    canvas.style.height = `${viewport.height / dpr}px`
     const ctx = canvas.getContext('2d')!
     await page.render({ canvasContext: ctx, viewport }).promise
   } catch (err) {
@@ -771,14 +773,15 @@ async function goPage(page: number) {
 
 // ========== 坐标转换 ==========
 
-/** 将鼠标事件 clientX/Y 转为 PDF 坐标（除以 zoomLevel 归一化，与后端坐标一致） */
+/** 将鼠标事件 clientX/Y 转为 PDF 坐标（CSS 像素 → PDF 坐标，与 zoomLevel 成反比） */
 function toCanvasPos(e: MouseEvent): { x: number; y: number } {
   const canvas = canvasRef.value
   if (!canvas) return { x: e.clientX, y: e.clientY }
   const rect = canvas.getBoundingClientRect()
+  // 不依赖 canvas.width/rect.width 比率（避免 DPR 干扰），直接用 CSS 像素除缩放
   return {
-    x: (e.clientX - rect.left) * (canvas.width / rect.width) / zoomLevel.value,
-    y: (e.clientY - rect.top) * (canvas.height / rect.height) / zoomLevel.value,
+    x: (e.clientX - rect.left) / zoomLevel.value,
+    y: (e.clientY - rect.top) / zoomLevel.value,
   }
 }
 
@@ -1199,34 +1202,9 @@ function handleClose() {
     .sig-image {
       display: block;
       width: 100%;
-      height: 100%;               // 填满 overlay，不再预留标签高度
+      height: 100%;
       object-fit: contain;
       opacity: 0.85;
-    }
-
-    .sig-label {
-      position: absolute;
-      bottom: 1px;
-      right: 3px;
-      font-size: 9px;
-      color: var(--el-color-primary);
-      background: rgba(255, 255, 255, 0.75);
-      padding: 0 3px;
-      border-radius: 2px;
-      line-height: 1.4;
-      pointer-events: none;       // 不阻挡拖拽
-      opacity: 0;                 // 默认隐藏，不遮挡签名
-      transition: opacity 0.15s;
-    }
-
-    // 悬停时显示标签
-    &:hover .sig-label {
-      opacity: 1;
-    }
-
-    // 激活槽位始终显示标签
-    &--active .sig-label {
-      opacity: 1;
     }
 
     // ── 四角缩放手柄 ──
