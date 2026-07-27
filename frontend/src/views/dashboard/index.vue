@@ -25,29 +25,31 @@
       >方案</span>
     </div>
 
-    <!-- ====== 统计卡片 ====== -->
+    <!-- ====== 统计卡片 —— 点击跳转对应筛选页 ====== -->
     <div class="stats-grid">
-      <div class="stat-card stat-card--primary" :style="cardNavStyle(catTab === 'project' ? '/flows' : '/proposals')">
+      <!-- 进行中 → 流程管理页预选运行中 -->
+      <div class="stat-card stat-card--primary stat-card--clickable"
+           @click="$router.push(catTab === 'project' ? '/flows?status=running' : '/proposals?status=running')">
         <div class="stat-card__num stat-card__num--primary">{{ curStats.running_instances }}</div>
         <div class="stat-card__label">进行中{{ catLabel }}</div>
       </div>
-      <div class="stat-card stat-card--success">
+      <!-- 已归档 → 流程管理页预选已完成 -->
+      <div class="stat-card stat-card--success stat-card--clickable"
+           @click="$router.push(catTab === 'project' ? '/flows?status=completed' : '/proposals?status=completed')">
         <div class="stat-card__num stat-card__num--success">{{ curStats.archived_total }}</div>
         <div class="stat-card__label">已归档{{ catLabel }}</div>
       </div>
-      <div class="stat-card stat-card--info">
+      <!-- 本月归档 → 同已归档（用高级搜索日期筛选区分） -->
+      <div class="stat-card stat-card--info stat-card--clickable"
+           @click="$router.push(catTab === 'project' ? '/flows?status=completed' : '/proposals?status=completed')">
         <div class="stat-card__num stat-card__num--info">{{ curStats.archived_this_month }}</div>
         <div class="stat-card__label">本月归档</div>
       </div>
-      <div
-        class="stat-card stat-card--danger"
-        @click="catTab === 'project' ? $router.push('/profile') : undefined"
-        :style="catTab === 'project' ? 'cursor:pointer' : ''"
-      >
-        <div class="stat-card__num stat-card__num--danger">
-          {{ catTab === 'project' ? curStats.overdue_warnings : (curStats.total ?? curStats.overdue_warnings ?? 0) }}
-        </div>
-        <div class="stat-card__label">{{ catTab === 'project' ? '超期预警' : '方案总数' }}</div>
+      <!-- 超期预警 → 独立超期预警页面 -->
+      <div class="stat-card stat-card--danger stat-card--clickable"
+           @click="$router.push('/overdue')">
+        <div class="stat-card__num stat-card__num--danger">{{ curStats.overdue_warnings }}</div>
+        <div class="stat-card__label">超期预警</div>
       </div>
     </div>
 
@@ -173,10 +175,6 @@ async function fetchData() {
 const catLabel = computed(() => catTab.value === 'project' ? '项目' : '方案')
 const curStats = computed(() => catTab.value === 'project' ? data.stats : data.proposal_stats)
 
-function cardNavStyle(to: string) {
-  return catTab.value === 'project' ? 'cursor:pointer' : ''
-}
-
 // ─── 我的待办 ───
 /** 从后端 my_task_counts 读取当前用户个人待办数 */
 const myCounts = computed(() => data.my_task_counts)
@@ -245,6 +243,9 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
   border-radius: 10px; padding: 24px 20px; text-align: center; cursor: default;
   border-bottom: 3px solid transparent;
   transition: box-shadow .2s, transform .2s;
+
+  // 可点击卡片
+  &--clickable { cursor: pointer; }
   &:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); transform: translateY(-1px); }
 
   &__num { font-size: 34px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }

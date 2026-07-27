@@ -26,6 +26,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页' },
       },
       {
+        path: 'overdue',
+        name: 'OverdueWarning',
+        component: () => import('@/views/overdue/OverdueWarning.vue'),
+        meta: { title: '超期预警' },
+      },
+      {
         path: 'flows',
         name: 'Flows',
         component: () => import('@/views/flows/index.vue'),

@@ -54,6 +54,16 @@ async def mark_read(
     return {"message": "已标记为已读"}
 
 
+@router.get("/notifications/overdue", summary="系统超期项汇总")
+async def overdue_summary(
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询系统全部超期项（任务/校验/审批/批准），全部用户可见"""
+    result = await ns.get_overdue_items(db)
+    return ApiResponse.ok(result)
+
+
 @router.put("/notifications/read-all", summary="全部已读")
 async def mark_all_read(
     current_user: CurrentUser = Depends(get_current_active_user),

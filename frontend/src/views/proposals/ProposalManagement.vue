@@ -108,8 +108,8 @@
 
 <script setup lang="ts">
 /** 方案管理全局入口 —— 组织卡片 + 全部方案（方案库浏览，发起入口在组织内部页面） */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { getProposals, getProposalOrganizations, type ProposalListItem, type ProposalOrgCardItem } from '@/api/proposal'
@@ -123,6 +123,7 @@ import ProposalOrgCardList from './ProposalOrgCardList.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.isAdmin)
 
@@ -135,7 +136,9 @@ const proposals = ref<ProposalListItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const statusFilter = ref('all')
+/** 方案状态筛选 —— 与 URL query.status 双向同步，支持外部链接预选 */
+const validProposalStatuses = ['all', 'running', 'completed', 'terminated']
+const statusFilter = ref((validProposalStatuses.includes(route.query.status as string) ? route.query.status : 'all') as string)
 const keyword = ref('')
 /** 高级搜索 */
 const showAdvancedSearch = ref(false)
@@ -243,6 +246,21 @@ function handleStatusFilter(status: string) {
   page.value = 1
   fetchList()
 }
+
+// ── URL query ↔ 状态筛选 双向同步 ──
+watch(statusFilter, (val) => {
+  if (route.query.status !== val) {
+    router.replace({ query: { ...route.query, status: val === 'all' ? undefined : val } })
+  }
+})
+watch(() => route.query.status, (val) => {
+  const target = validProposalStatuses.includes(val as string) ? val : 'all'
+  if (statusFilter.value !== target) {
+    statusFilter.value = target as string
+    page.value = 1
+    fetchList()
+  }
+})
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleSearch() {

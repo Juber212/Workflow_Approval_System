@@ -227,3 +227,132 @@ async def send_refresh_signal(user_id: int) -> None:
         await manager.send_to_user(user_id, {"type": "refresh_count"})
     except Exception:
         pass
+
+
+async def get_overdue_items(db: AsyncSession) -> dict:
+    """查询系统全部超期项，按类型分组（任务/校验/审批/批准）
+
+    全部用户可见，不区分组织。
+    返回各类别超期项列表，含实例名、节点名、负责人、截止时间、优先级。
+    """
+    from datetime import datetime
+    from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance, InstanceNode, User
+    from sqlalchemy import and_
+
+    now = datetime.now()
+    result: dict[str, list[dict]] = {
+        "tasks": [],
+        "checks": [],
+        "approvals": [],
+        "endorsements": [],
+    }
+
+    # ── 1. 超期待办任务 ──
+    overdue_tasks = (await db.execute(
+        select(Task, InstanceNode, FlowInstance, User)
+        .join(InstanceNode, Task.node_id == InstanceNode.id)
+        .join(FlowInstance, Task.instance_id == FlowInstance.id)
+        .join(User, Task.assignee_id == User.id)
+        .where(
+            Task.status.notin_(["completed", "terminated"]),
+            InstanceNode.deadline.isnot(None),
+            InstanceNode.deadline < now,
+        )
+        .order_by(InstanceNode.deadline.asc())
+    )).all()
+    for t, node, inst, user in overdue_tasks:
+        result["tasks"].append({
+            "id": t.id,
+            "type": "task",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": inst.org_name or "",
+        })
+
+    # ── 2. 超期校验 ──
+    overdue_checks = (await db.execute(
+        select(CheckRecord, InstanceNode, FlowInstance, User)
+        .join(InstanceNode, and_(CheckRecord.node_id == InstanceNode.id))
+        .join(FlowInstance, CheckRecord.instance_id == FlowInstance.id)
+        .join(User, CheckRecord.checker_id == User.id)
+        .where(
+            CheckRecord.status == "pending",
+            InstanceNode.deadline.isnot(None),
+            InstanceNode.deadline < now,
+        )
+        .order_by(InstanceNode.deadline.asc())
+    )).all()
+    for c, node, inst, user in overdue_checks:
+        result["checks"].append({
+            "id": c.id,
+            "type": "check",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": inst.org_name or "",
+        })
+
+    # ── 3. 超期审批 ──
+    overdue_approvals = (await db.execute(
+        select(Approval, InstanceNode, FlowInstance, User)
+        .join(InstanceNode, and_(Approval.node_id == InstanceNode.id))
+        .join(FlowInstance, Approval.instance_id == FlowInstance.id)
+        .join(User, Approval.approver_id == User.id)
+        .where(
+            Approval.status == "pending",
+            InstanceNode.deadline.isnot(None),
+            InstanceNode.deadline < now,
+        )
+        .order_by(InstanceNode.deadline.asc())
+    )).all()
+    for a, node, inst, user in overdue_approvals:
+        result["approvals"].append({
+            "id": a.id,
+            "type": "approval",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": inst.org_name or "",
+        })
+
+    # ── 4. 超期批准 ──
+    overdue_endorsements = (await db.execute(
+        select(Endorsement, InstanceNode, FlowInstance, User)
+        .join(InstanceNode, and_(Endorsement.node_id == InstanceNode.id))
+        .join(FlowInstance, Endorsement.instance_id == FlowInstance.id)
+        .join(User, Endorsement.endorser_id == User.id)
+        .where(
+            Endorsement.status == "pending",
+            InstanceNode.deadline.isnot(None),
+            InstanceNode.deadline < now,
+        )
+        .order_by(InstanceNode.deadline.asc())
+    )).all()
+    for e, node, inst, user in overdue_endorsements:
+        result["endorsements"].append({
+            "id": e.id,
+            "type": "endorsement",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": inst.org_name or "",
+        })
+
+    return result

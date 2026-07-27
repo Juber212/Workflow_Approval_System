@@ -164,8 +164,8 @@
  * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -179,6 +179,7 @@ import OrgCardList from './components/OrgCardList.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.isAdmin)
 
@@ -191,7 +192,9 @@ const instances = ref<InstanceListItem[]>([])
 const instanceTotal = ref(0)
 const instancePage = ref(1)
 const instancePageSize = ref(20)
-const instanceStatusFilter = ref('all')
+/** 实例状态筛选 —— 与 URL query.status 双向同步，支持外部链接预选 */
+const validStatuses = ['all', 'running', 'completed', 'terminated']
+const instanceStatusFilter = ref((validStatuses.includes(route.query.status as string) ? route.query.status : 'all') as string)
 const instanceKeyword = ref('')
 /** 高级搜索 */
 const showAdvancedSearch = ref(false)
@@ -284,6 +287,23 @@ function handleInstanceFilter(status: string) {
   instancePage.value = 1
   fetchInstances()
 }
+
+// ── URL query ↔ 状态筛选 双向同步 ──
+// 筛选变更 → 写入 URL
+watch(instanceStatusFilter, (val) => {
+  if (route.query.status !== val) {
+    router.replace({ query: { ...route.query, status: val === 'all' ? undefined : val } })
+  }
+})
+// 浏览器前进/后退 → 读取 URL
+watch(() => route.query.status, (val) => {
+  const target = validStatuses.includes(val as string) ? val : 'all'
+  if (instanceStatusFilter.value !== target) {
+    instanceStatusFilter.value = target as string
+    instancePage.value = 1
+    fetchInstances()
+  }
+})
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleInstanceSearch() {
