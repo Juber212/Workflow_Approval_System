@@ -869,12 +869,10 @@ function handleClose() {
   .sig-overlay {
     position: absolute;
     cursor: grab;
-    border: 2px dashed var(--el-color-primary);
+    outline: 2px dashed var(--el-color-primary);  // outline 不占盒模型，定位更精准
     border-radius: 4px;
-    padding: 2px;
     background: rgba(64, 158, 255, 0.08);
     transition: box-shadow 0.15s;
-    box-sizing: border-box;
     overflow: hidden;
 
     &:hover {
