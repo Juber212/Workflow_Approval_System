@@ -211,3 +211,68 @@
 | 6 | Round 2 自动化测试：通知(9)/组织(7)/用户(8)/PDF签名(4)/方案(6) + 集成(5) = 39 新测试 | `tests/unit/` + `tests/integration/` 6 文件 |
 | 7 | MockResult 新增 `unique()` 方法 | `tests/conftest.py` |
 | 8 | 测试总数：78 → 117，全部通过 | — |
+
+---
+
+## 2026-07-28 — 首页柱状图重写 + 安全稳定性修复
+
+### 新增功能
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 1 | 首页「各所项目概览」从水平分组柱状图改为 4 栏竖柱卡片网格，每卡片独立 Y 轴刻度、数字嵌于柱顶、可点击跳转所主页 | `BarChart.vue`(重写), `dashboard_service.py`, `dashboard.py`(schema) |
+| 2 | 概览统计新增 `terminated_count`（已终止） | `dashboard.py`(schema), `dashboard_service.py` |
+
+### 修复（系统审计后线上部署前）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 3 | **delete_file 先删物理文件后删 DB** → 改为先 DB 后物理文件（事务回滚安全） | `file_service.py` |
+| 4 | **submit_task 缺 FOR UPDATE 行锁** → 添加 `.with_for_update()` 防并发重复提交 | `task_service.py` |
+| 5 | **terminate_instance 缺 FOR UPDATE 行锁** → 同上 | `instance/terminate.py` |
+| 6 | **save_design_data 缺 FOR UPDATE 行锁** → 同上 | `designer_service.py` |
+| 7 | **submit_task 通知异常未捕获** → `asyncio.gather` 包裹 try/except + logger.warning | `task_service.py` |
+
+---
+
+## 2026-07-28 — 自动化测试体系建设
+
+### Round 3：全功能 Mock 测试（117 → 168）
+
+| # | 内容 | 文件 |
+|---|------|------|
+| 1 | 文件上传/删除 8 条（权限+边界+MIME+大小+DB优先删除） | `tests/unit/test_file_service.py`(新) |
+| 2 | Endorsement 批准 8 条（批准+驳回+权限+重复操作） | `tests/unit/test_endorsement_service.py`(新) |
+| 3 | FlowEngine 6 条（激活+传播+skip节点+fork-join等待+结束节点） | `tests/unit/test_flow_engine.py`(新) |
+| 4 | ConfigService 8 条（缓存+默认值+类型转换） | `tests/unit/test_config_service.py`(新) |
+| 5 | Designer 7 条（保存+节点增删改+连线增删） | `tests/unit/test_designer_service.py`(新) |
+| 6 | 认证集成 4 条 + Endorsement 集成 6 条 | `tests/integration/test_auth_api.py`(新), `tests/integration/test_endorsement_api.py`(新) |
+| 7 | Factory 修复：`make_start_node`/`make_end_node` 改用 `defaults.update(overrides)` 避免重复参数 | `tests/factories.py` |
+| 8 | 测试总数：117 → 168，全部通过 | — |
+
+### Round 4：MySQL 真实数据库测试（9 条）
+
+| # | 内容 | 文件 |
+|---|------|------|
+| 9 | 全流程 4 条：创建实例+激活 / 提交→校验→审批→节点完成 / 终止流程 / 同名实例不冲突 | `tests/mysql/test_full_flow.py`(新) |
+| 10 | 边界场景 5 条：FK 约束校验 / 组织名唯一 / 无负责人节点 / 校验退回重置 / 双审批人全部通过 | `tests/mysql/test_edge_cases.py`(新) |
+| 11 | MySQL 测试基础设施：每测试独立引擎建表删表，SAVEPOINT 隔离，避免 Windows aiomysql 连接池残留 | `tests/mysql/conftest.py`(新) |
+
+### Round 5：MySQL 真实 Service 调用测试（10 条）
+
+| # | 内容 | 文件 |
+|---|------|------|
+| 12 | submit_task 4 条：有校验人创建 CheckRecord / 非负责人 403 / 重复提交 403 / require_file 无文件 400 | `tests/mysql/test_service_flows.py`(新) |
+| 13 | pass_check 3 条：全部通过创建 Approval / 非本人 403 / 重复操作 403 | 同上 |
+| 14 | approve 2 条：审批通过节点完成 / 非本人 403 | 同上 |
+| 15 | endorse 1 条：difficulty=4 批准通过 → 节点完成 | 同上 |
+| 16 | 外部依赖 mock 工厂（通知/PDF/签名/传播），数据库全走真实 MySQL | 同上 |
+
+### 测试统计
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| Mock 单元测试 | 158 | 内存运行，毫秒级 |
+| Mock 集成测试 | 10 | TestClient + mock_db |
+| MySQL 真实测试 | 19 | 独立引擎，真实 DB 操作 |
+| **合计** | **187** | **0 业务逻辑 bug** |
