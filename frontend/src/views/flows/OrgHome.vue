@@ -133,7 +133,7 @@
           <el-table border
             :data="instances" stripe v-loading="instanceLoading"
             :row-class-name="instanceRowClass"
-            @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)"
+            @row-click="(row: any) => router.push({ name: 'InstanceDetail', params: { id: row.id } })"
             style="cursor:pointer"
           >
             <!-- ===== 弹性列（按内容自适配） ===== -->
@@ -197,7 +197,7 @@
             <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
             <el-table-column label="操作" :width="isAdmin ? 160 : 140" fixed="right">
               <template #default="{ row }">
-                <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
+                <el-button text type="primary" size="small" @click.stop="router.push({ name: 'InstanceDetail', params: { id: row.id } })">查看详情</el-button>
                 <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -232,9 +232,9 @@
         :can-manage="isOrgManager"
         @search="handleTplSearch"
         @create="handleCreate"
-        @detail="(id: number) => router.push(`/flows/detail/${id}`)"
+        @detail="(id: number) => router.push({ name: 'TemplateDetail', params: { id } })"
         @edit="handleEdit"
-        @design="(id: number) => router.push(`/flows/designer/${id}`)"
+        @design="(id: number) => router.push({ name: 'FlowDesigner', params: { id } })"
         @delete="handleDelete"
         @page-change="handleTplPageChange"
       />
@@ -379,7 +379,7 @@ function handleConfirmLaunch() {
     sales_manager: pickerForm.sales_manager.trim(),
   })
   if (pickerForm.proposal_id) params.set('proposal_id', String(pickerForm.proposal_id))
-  router.push(`/flows/designer/${selectedTplId.value}?${params.toString()}`)
+  router.push({ name: 'FlowDesigner', params: { id: selectedTplId.value }, query: Object.fromEntries(params) })
 }
 
 // ========== 组织信息 ==========
@@ -528,7 +528,7 @@ function handleInstanceFilter(status: string) {
 async function handlePermanentDelete(row: InstanceListItem) {
   try {
     await ElMessageBox.confirm(`确认永久删除实例「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
-  } catch { return }
+  } catch { /* 用户取消或关闭弹窗 */ return }
   try {
     await permanentDeleteInstance(row.id)
     ElMessage.success('项目已永久删除')
@@ -612,7 +612,7 @@ async function handleSave() {
       formVisible.value = false
       const params = new URLSearchParams({ new: '1', name: form.name, org_id: String(orgId.value) })
       if (form.description) params.set('desc', form.description)
-      router.push(`/flows/designer/0?${params.toString()}`)
+      router.push({ name: 'FlowDesigner', params: { id: '0' }, query: Object.fromEntries(params) })
     }
   } finally { saving.value = false }
 }

@@ -224,7 +224,7 @@ function handleStatusFilter(status: string) { statusFilter.value = status; page.
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function handleSearch() { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(() => { page.value = 1; fetchList() }, 300) }
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
-function goDetail(id: number) { router.push(`/proposals/instances/${id}`) }
+function goDetail(id: number) { router.push({ name: 'ProposalDetail', params: { id } }) }
 
 async function handleCreate() {
   const valid = await formRef.value?.validate().catch(() => false)
@@ -241,7 +241,7 @@ async function handleCreate() {
     })
     ElMessage.success('方案已发起')
     showCreateDialog.value = false
-    router.push(`/proposals/instances/${result.id}`)
+    router.push({ name: 'ProposalDetail', params: { id: result.id } })
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.message || '发起失败')
   } finally { creating.value = false }

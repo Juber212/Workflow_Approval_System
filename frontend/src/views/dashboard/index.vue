@@ -29,25 +29,25 @@
     <div class="stats-grid">
       <!-- 进行中 → 流程管理页预选运行中 -->
       <div class="stat-card stat-card--primary stat-card--clickable"
-           @click="$router.push(catTab === 'project' ? '/flows?status=running' : '/proposals?status=running')">
+           @click="$router.push(catTab === 'project' ? { name: 'Flows', query: { status: 'running' } } : { name: 'Proposals', query: { status: 'running' } })">
         <div class="stat-card__num stat-card__num--primary">{{ curStats.running_instances }}</div>
         <div class="stat-card__label">进行中{{ catLabel }}</div>
       </div>
       <!-- 已归档 → 流程管理页预选已完成 -->
       <div class="stat-card stat-card--success stat-card--clickable"
-           @click="$router.push(catTab === 'project' ? '/flows?status=completed' : '/proposals?status=completed')">
+           @click="$router.push(catTab === 'project' ? { name: 'Flows', query: { status: 'completed' } } : { name: 'Proposals', query: { status: 'completed' } })">
         <div class="stat-card__num stat-card__num--success">{{ curStats.archived_total }}</div>
         <div class="stat-card__label">已归档{{ catLabel }}</div>
       </div>
       <!-- 本月归档 → 同已归档（用高级搜索日期筛选区分） -->
       <div class="stat-card stat-card--info stat-card--clickable"
-           @click="$router.push(catTab === 'project' ? '/flows?status=completed' : '/proposals?status=completed')">
+           @click="$router.push(catTab === 'project' ? { name: 'Flows', query: { status: 'completed' } } : { name: 'Proposals', query: { status: 'completed' } })">
         <div class="stat-card__num stat-card__num--info">{{ curStats.archived_this_month }}</div>
         <div class="stat-card__label">本月归档</div>
       </div>
       <!-- 超期预警 → 独立超期预警页面 -->
       <div class="stat-card stat-card--danger stat-card--clickable"
-           @click="$router.push('/overdue')">
+           @click="$router.push({ name: 'OverdueWarning' })">
         <div class="stat-card__num stat-card__num--danger">{{ curStats.overdue_warnings }}</div>
         <div class="stat-card__label">超期预警</div>
       </div>
@@ -104,7 +104,7 @@
             </el-table-column>
             <el-table-column label="操作" min-width="60" fixed="right" align="left" header-align="left">
               <template #default="{ row }">
-                <el-button class="btn-cell" text type="primary" size="small" @click="$router.push(catTab === 'project' ? `/flows/instances/${row.instance_id}` : `/proposals/instances/${row.instance_id}`)">详情</el-button>
+                <el-button class="btn-cell" text type="primary" size="small" @click="$router.push(catTab === 'project' ? { name: 'InstanceDetail', params: { id: row.instance_id } } : { name: 'ProposalDetail', params: { id: row.instance_id } })">详情</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -117,7 +117,7 @@
     <div class="card" style="margin-bottom:20px">
       <div class="card__header">
         <span class="card__title">我的待办</span>
-        <el-button text type="primary" size="small" @click="$router.push('/profile')">查看更多 →</el-button>
+        <el-button text type="primary" size="small" @click="$router.push({ name: 'Profile' })">查看更多 →</el-button>
       </div>
       <div class="card__body" style="padding:0">
         <el-table
@@ -179,6 +179,7 @@ import { getDashboard, type DashboardData, type MyPendingItem } from '@/api/dash
 import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
+import { priLabel } from '@/utils/labels'
 
 const router = useRouter()
 const loading = ref(false)
@@ -206,7 +207,7 @@ onMounted(() => fetchData())
 async function fetchData() {
   loading.value = true
   try { const d = await getDashboard(); Object.assign(data, d) }
-  catch { /* ok */ }
+  catch { ElMessage.error('加载首页数据失败，请检查网络后刷新页面') }
   finally { loading.value = false }
 }
 
@@ -218,12 +219,6 @@ const curOrgOverview = computed(() => catTab.value === 'project' ? data.org_over
 
 // ─── 我的待办列表（跟随 tab 切换项目/方案） ───
 const curPending = computed(() => catTab.value === 'project' ? data.my_pending : data.proposal_my_pending)
-
-/** 优先级标签映射 */
-function priLabel(p: string): string {
-  const map: Record<string, string> = { urgent: '紧急', high: '高', normal: '普通', low: '低' }
-  return map[p] || p
-}
 
 /** 格式化截止时间 */
 function formatDeadline(d: string | null): string {
@@ -239,20 +234,21 @@ function isOverdue(d: string | null): boolean {
 
 /** 点击待办行 → 跳转对应处理页 */
 function handleMyTaskClick(row: { type: string; id: number }) {
-  const prefix: Record<string, string> = { task: '/profile/task', check: '/profile/check', approval: '/profile/approval' }
-  router.push(`${prefix[row.type]}/${row.id}`)
+  const routeMap: Record<string, string> = { task: 'TaskDetail', check: 'CheckDetail', approval: 'ApprovalDetail', endorse: 'EndorseDetail' }
+  const routeName = routeMap[row.type]
+  if (routeName) router.push({ name: routeName, params: { id: row.id } })
 }
 
 // ─── 饼图 → 跳转所内主页（跟随 tab） ───
 function handlePieClick(orgId: string) {
-  const prefix = catTab.value === 'proposal' ? '/proposals/organization' : '/flows/organization'
-  router.push(`${prefix}/${orgId}`)
+  const routeName = catTab.value === 'proposal' ? 'OrgProposalHome' : 'OrgHome'
+  router.push({ name: routeName, params: { orgId } })
 }
 
 // ─── 柱状图 → 跳转所内主页（跟随 tab） ───
 function handleBarClick(orgId: number) {
-  const prefix = catTab.value === 'proposal' ? '/proposals/organization' : '/flows/organization'
-  router.push(`${prefix}/${orgId}`)
+  const routeName = catTab.value === 'proposal' ? 'OrgProposalHome' : 'OrgHome'
+  router.push({ name: routeName, params: { orgId } })
 }
 
 // ─── 卡点追踪（跟随 tab 切换数据源） ───

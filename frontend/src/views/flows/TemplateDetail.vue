@@ -10,7 +10,7 @@
         <template #header>
           <div class="tpl-card__header">
             <span class="tpl-card__title">基础信息</span>
-            <el-button v-if="isOrgManager" type="primary" size="default" @click="$router.push(`/flows/designer/${detail.id}`)">
+            <el-button v-if="isOrgManager" type="primary" size="default" @click="$router.push({ name: 'FlowDesigner', params: { id: detail.id } })">
               编辑流程
             </el-button>
           </div>

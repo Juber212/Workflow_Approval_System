@@ -63,9 +63,18 @@ const tabPlaceholder: Record<string, string> = {
   config: '系统配置',
 }
 
+/** Tab → 命名路由映射 */
+const tabRouteMap: Record<string, string> = {
+  users: 'AdminUsers',
+  organizations: 'AdminOrgs',
+  roles: 'AdminRoles',
+  config: 'AdminConfig',
+  'document-templates': 'AdminDocTemplates',
+}
+
 /** Tab 切换 → 路由跳转 */
 function handleTabChange(tab: string) {
-  router.push(`/admin/${tab}`)
+  router.push({ name: tabRouteMap[tab] || 'AdminUsers' })
 }
 </script>
 

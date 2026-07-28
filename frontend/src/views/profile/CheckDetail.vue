@@ -187,7 +187,7 @@ async function handlePass() {
           confirmButtonText: '前往上传',
           type: 'warning',
         })
-        router.push('/profile?tab=signature')
+        router.push({ name: 'Profile', query: { tab: 'signature' } })
         return
       } catch { return }
     }
@@ -201,7 +201,7 @@ async function doPass() {
   try {
     await passCheck(detail.value.id, opinion.value || null, sigSlots.value)
     ElMessage.success('校验通过')
-    router.push('/profile')
+    router.push({ name: 'Profile' })
   } finally { passing.value = false }
 }
 
@@ -219,7 +219,7 @@ async function handleReturn() {
   try {
     await returnCheck(detail.value.id, opinion.value)
     ElMessage.success('已退回')
-    router.push('/profile')
+    router.push({ name: 'Profile' })
   } finally { returning.value = false }
 }
 

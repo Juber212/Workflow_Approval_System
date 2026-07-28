@@ -68,7 +68,7 @@
             <el-option label="处理中" value="processing" />
           </el-select>
         </div>
-        <el-table border :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push({ name: 'TaskDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
           <el-table-column prop="initiator_name" label="发起人" min-width="72" />
@@ -90,7 +90,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/task/${row.id}`)">处理</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'TaskDetail', params: { id: row.id } })">处理</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -103,7 +103,7 @@
         <div class="list-toolbar">
           <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchChecks" />
         </div>
-        <el-table border :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push(`/profile/check/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push({ name: 'CheckDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="submitter_name" label="提交人" min-width="72" />
@@ -118,7 +118,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/check/${row.id}`)">校验</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'CheckDetail', params: { id: row.id } })">校验</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -131,7 +131,7 @@
         <div class="list-toolbar">
           <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchApprovals" />
         </div>
-        <el-table border :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push({ name: 'ApprovalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100">
             <template #default="{ row }">
@@ -149,7 +149,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/approval/${row.id}`)">审批</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'ApprovalDetail', params: { id: row.id } })">审批</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -162,7 +162,7 @@
         <div class="list-toolbar">
           <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchEndorsements" />
         </div>
-        <el-table border :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push({ name: 'EndorseDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
@@ -176,7 +176,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/endorse/${row.id}`)">批准</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'EndorseDetail', params: { id: row.id } })">批准</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -189,7 +189,7 @@
         <div class="list-toolbar">
           <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchInitiated" />
         </div>
-        <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push({ name: 'InstanceDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="name" label="项目" min-width="140" />
           <el-table-column label="优先级" min-width="64">
             <template #default="{ row }"><span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
@@ -207,7 +207,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'InstanceDetail', params: { id: row.id } })">查看详情</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -241,7 +241,7 @@
 
       <!-- 方案设计（设计人的待办任务） -->
       <template v-if="propActiveTab === 'design'">
-        <el-table border :data="propTasks" stripe v-loading="propTaskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propTasks" stripe v-loading="propTaskLoading" @row-click="(row: any) => router.push({ name: 'TaskDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="initiator_name" label="发起人" min-width="72" />
           <el-table-column label="截止时间" min-width="140">
@@ -257,7 +257,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/task/${row.id}`)">设计</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'TaskDetail', params: { id: row.id } })">设计</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -267,7 +267,7 @@
 
       <!-- 方案审批 -->
       <template v-if="propActiveTab === 'approve'">
-        <el-table border :data="propApprovals" stripe v-loading="propApprovalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propApprovals" stripe v-loading="propApprovalLoading" @row-click="(row: any) => router.push({ name: 'ApprovalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
           <el-table-column label="状态" min-width="64">
@@ -277,7 +277,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/approval/${row.id}`)">审批</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'ApprovalDetail', params: { id: row.id } })">审批</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -287,7 +287,7 @@
 
       <!-- 方案批准列表 -->
       <template v-if="propActiveTab === 'propEndorsements'">
-        <el-table border :data="propEndorsements" stripe v-loading="propEndorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propEndorsements" stripe v-loading="propEndorsementLoading" @row-click="(row: any) => router.push({ name: 'EndorseDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
           <el-table-column label="状态" min-width="64">
@@ -297,7 +297,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/profile/endorse/${row.id}`)">批准</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'EndorseDetail', params: { id: row.id } })">批准</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -310,7 +310,7 @@
         <div class="list-toolbar">
           <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="fetchPropInitiated" />
         </div>
-        <el-table border :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push({ name: 'ProposalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="140" />
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
@@ -320,7 +320,7 @@
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="router.push(`/proposals/instances/${row.id}`)">查看详情</el-button>
+              <el-button text type="primary" size="small" @click.stop="router.push({ name: 'ProposalDetail', params: { id: row.id } })">查看详情</el-button>
             </template>
           </el-table-column>
         </el-table>

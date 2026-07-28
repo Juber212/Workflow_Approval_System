@@ -200,7 +200,7 @@ async function fetchOrgs() {
 }
 
 function handleOrgSelect(orgId: number) {
-  router.push(`/proposals/organization/${orgId}`)
+  router.push({ name: 'OrgProposalHome', params: { orgId } })
 }
 
 async function fetchStatusCounts() {
@@ -281,7 +281,7 @@ async function searchInitiators(query: string) {
 }
 
 function handleRowClick(row: ProposalListItem) { goDetail(row.id) }
-function goDetail(id: number) { router.push(`/proposals/instances/${id}`) }
+function goDetail(id: number) { router.push({ name: 'ProposalDetail', params: { id } }) }
 
 /** 管理员永久删除已终止方案 */
 async function handlePermanentDelete(row: ProposalListItem) {
@@ -291,7 +291,7 @@ async function handlePermanentDelete(row: ProposalListItem) {
       '永久删除',
       { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' },
     )
-  } catch { return }
+  } catch { /* 用户取消或关闭弹窗 */ return }
   try {
     await permanentDeleteInstance(row.id)
     ElMessage.success('方案已永久删除')

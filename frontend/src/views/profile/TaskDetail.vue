@@ -345,7 +345,7 @@ async function handleUpload({ file }: { file: File }, folderName?: string) {
 
 async function handleDeleteFile(fileId: number) {
   if (!detail.value) return
-  try { await ElMessageBox.confirm('确认删除此文件？', '确认', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确认删除此文件？', '确认', { type: 'warning' }) } catch { /* 用户取消或关闭弹窗 */ return }
   await deleteTaskFile(detail.value.id, fileId)
   ElMessage.success('已删除')
   detail.value = await getTaskDetail(detail.value.id)
@@ -427,7 +427,7 @@ async function handleSubmit() {
           confirmButtonText: '前往上传',
           type: 'warning',
         })
-        router.push('/profile?tab=signature')
+        router.push({ name: 'Profile', query: { tab: 'signature' } })
         return
       } catch { return }
     }
@@ -442,7 +442,7 @@ async function doSubmit() {
   try {
     await submitTask(detail.value.id, { assignee_note: assigneeNote.value, signatures: sigSlots.value })
     ElMessage.success('任务已提交，等待校验')
-    router.push('/profile')
+    router.push({ name: 'Profile' })
   } finally { submitting.value = false }
 }
 

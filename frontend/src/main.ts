@@ -30,10 +30,6 @@ app.config.errorHandler = (err, _instance, info) => {
 }
 
 // ==================== 网络状态检测 ====================
-const showOfflineBanner = () => {
-  document.body.style.setProperty('--offline-banner', '"当前网络已断开"')
-}
-
 window.addEventListener('offline', () => {
   console.warn('[网络] 连接断开')
   document.body.classList.add('is-offline')

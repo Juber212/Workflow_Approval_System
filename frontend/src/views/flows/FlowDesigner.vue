@@ -506,11 +506,11 @@ function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
 
 /** 返回 —— 编辑模式回到上一页，发起模式直接回项目管理 */
 function handleBack() {
-  if (isLaunchMode.value) router.push('/flows')
+  if (isLaunchMode.value) router.push({ name: 'Flows' })
   else router.back()
 }
 
-function handleCancelLaunch() { router.push('/flows') }
+function handleCancelLaunch() { router.push({ name: 'Flows' }) }
 
 // ==================== 预设相关 ====================
 
@@ -577,7 +577,8 @@ async function handleDeletePreset(preset: PresetItem) {
   try {
     await ElMessageBox.confirm(`确定删除预设「${preset.name}」？`, '删除确认', { type: 'warning' })
   } catch {
-    return // 用户取消
+    /* 用户取消或关闭弹窗 */
+    return
   }
   try {
     await deletePreset(preset.id)
@@ -672,7 +673,7 @@ async function handleSave() {
       const tpl = await createTemplate({ name, description: desc, organization_id: orgId })
       templateId = tpl.id
       // 更新 URL 为真实模板 ID，后续保存即为更新模式
-      router.replace({ path: `/flows/designer/${templateId}`, query: { mode: route.query.mode as string } })
+      router.replace({ name: 'FlowDesigner', params: { id: templateId }, query: { mode: route.query.mode as string } })
       // 新建后刷新文件模板列表（按钮变为可用）
       await loadDocTemplates()
     }
@@ -769,7 +770,7 @@ async function handleLaunch() {
     })
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false
-    router.push(`/flows/instances/${result.id}`)
+    router.push({ name: 'InstanceDetail', params: { id: result.id } })
   } catch (err: any) {
     if (err?.response?.data?.message) ElMessage.error(err.response.data.message)
     else ElMessage.error('发起项目失败')

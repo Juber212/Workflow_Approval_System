@@ -75,7 +75,7 @@ async function handleChangePassword() {
     pwdForm.new_password = ''
     pwdForm.confirm_password = ''
     await userStore.logout()
-    router.push('/login')
+    router.push({ name: 'Login' })
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.message || '修改失败')
   } finally {

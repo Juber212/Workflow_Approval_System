@@ -182,7 +182,7 @@ async function handleLogout() {
   showUserPopover.value = false
   await userStore.logout()
   notifyStore.clearAll()
-  router.push('/login')
+  router.push({ name: 'Login' })
 }
 </script>
 

@@ -232,7 +232,7 @@ async function fetchOrgs() {
 
 /** 点击组织卡片 → 跳转所内主页 */
 function handleOrgSelect(orgId: number) {
-  router.push(`/flows/organization/${orgId}`)
+  router.push({ name: 'OrgHome', params: { orgId } })
 }
 
 /** 获取各状态的实例总数 */
@@ -324,14 +324,14 @@ async function searchInitiators(query: string) {
   }, 300)
 }
 
-function goInstanceDetail(id: number) { router.push(`/flows/instances/${id}`) }
+function goInstanceDetail(id: number) { router.push({ name: 'InstanceDetail', params: { id } }) }
 function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id) }
 
 /** 管理员永久删除已终止实例 */
 async function handlePermanentDelete(row: InstanceListItem) {
   try {
     await ElMessageBox.confirm(`确认永久删除项目「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
-  } catch { return }
+  } catch { /* 用户取消关闭，无需处理 */ return }
   try {
     await permanentDeleteInstance(row.id)
     ElMessage.success('项目已永久删除')

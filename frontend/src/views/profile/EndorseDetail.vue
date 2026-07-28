@@ -211,7 +211,7 @@ async function handleApprove() {
           confirmButtonText: '前往上传',
           type: 'warning',
         })
-        router.push('/profile?tab=signature')
+        router.push({ name: 'Profile', query: { tab: 'signature' } })
         return
       } catch { return }
     }
@@ -226,7 +226,7 @@ async function doEndorse() {
   try {
     await endorseApprove(detail.value.id, opinion.value || null, sigSlots.value || undefined)
     ElMessage.success('批准通过')
-    router.push('/profile')
+    router.push({ name: 'Profile' })
   } finally { endorsing.value = false }
 }
 
@@ -246,7 +246,7 @@ async function handleReject() {
   try {
     await endorseReject(detail.value.id, opinion.value)
     ElMessage.success('已驳回')
-    router.push('/profile')
+    router.push({ name: 'Profile' })
   } finally { rejecting.value = false }
 }
 </script>

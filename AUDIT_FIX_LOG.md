@@ -236,3 +236,93 @@
 - **改前**: `apply_signatures_to_files()` 在事务内调用，commit 失败回滚时 PDF 已修改
 - **改后**: 在 4 处调用点添加 ⚠️ 警告注释，标注风险与缓解措施（`Signature.applied` 标志由 DB 事务保护），并标记 TODO: 引入 arq post-commit hook 彻底解耦
 - **验证**: pytest 190/190 ✅
+
+---
+
+### API+Engine+Core 层（第二组：H2/H3/H4/H5/M4/M5/L5/M11）
+
+#### H2 — 限流常量注释对齐实际值
+- **文件**: `rate_limit.py`
+- **改前**: 注释说"120次/分钟"但代码为 300
+- **改后**: 注释更新为实际值并标注变更日期（2026-07-24 提升）
+
+#### H3 — 预留错误码标注
+- **文件**: `error_codes.py`
+- **改前**: 10 个错误码定义但未使用（36%），如精确认证/权限码
+- **改后**: 添加"预留"注释，便于后续精确错误提示
+
+#### H4 — Engine→Service 耦合说明
+- **文件**: `flow_engine.py`
+- **改前**: engine 直接 import services，隐式双向耦合
+- **改后**: 添加架构权衡说明注释
+
+#### H5 — 双重 commit 说明
+- **文件**: `database.py`
+- **改前**: get_db 自动提交 + 端点手动提交，模式未文档化
+- **改后**: 添加 NOTE 注释说明理想模式与现状
+
+#### M4 — 组织隔离去重
+- **文件**: `deps.py`（新增 `resolve_org_scope`）, `templates/instances/proposals`
+- **改前**: 3 处端点各自内联组织隔离
+- **改后**: 统一调用 `resolve_org_scope(current_user, organization_id)`
+
+#### M5 — 模板归属检查去重
+- **文件**: `deps.py`（新增 `check_template_ownership`）, `designer.py`
+- **改前**: `_check_template_ownership` 私有仅 designer 可用
+- **改后**: 提升为 deps 公共 helper
+
+#### L5 — seed.py 去重
+- **文件**: `seed.py`
+- **改前**: 独立定义 hash_password + import bcrypt
+- **改后**: `from app.core.security import hash_password`
+
+#### M11 — JWT 精确异常
+- **文件**: `rate_limit.py`
+- **改前**: `except Exception` 裸捕获
+- **改后**: `except (AttributeError, ValueError, KeyError)` 精确定义
+
+#### 验证: pytest 190/190 ✅
+
+---
+
+### 前端（第三组：H6/H7/H8/L6/L7/L8/L9/M8）
+
+#### H6 — Dashboard 静默失败
+- **文件**: `dashboard/index.vue`
+- **改前**: `catch { /* ok */ }` 首页异常白屏
+- **改后**: `catch { ElMessage.error('加载首页数据失败...') }`
+
+#### H7 — priLabel 去重
+- **文件**: `dashboard/index.vue`
+- **改前**: 本地定义与 `utils/labels` 重复
+- **改后**: 从 `@/utils/labels` 导入
+
+#### H8 — 硬编码路径→命名路由
+- **文件**: 20 个 .vue 文件
+- **改前**: `router.push('/flows/instances/' + id)` 等硬编码
+- **改后**: `router.push({ name: 'InstanceDetail', params: { id } })` 命名路由
+
+#### L6 — PublishDialog.vue 死组件
+- **改后**: 删除（全项目无 import）
+
+#### L7 — VersionHistory.vue 死组件
+- **改后**: 删除（全项目无 import）
+
+#### L8 — showOfflineBanner 死函数
+- **文件**: `main.ts`
+- **改后**: 删除
+
+#### L9 — difficultyClass 未使用
+- **文件**: `utils/labels.ts`
+- **改后**: 删除
+
+#### M8 — ElMessageBox 误吞异常
+- **文件**: 5 个页面
+- **改后**: `catch { /* 用户取消或关闭弹窗 */ return }` 添加注释
+
+#### M7/M9/M10 — 标记 TODO
+- M7: 详情返回列表数据过期问题
+- M9: 筛选+搜索+分页 5 页重复 → 待抽 composable
+- M10: 状态标签 CSS 6 文件重复 → 待统
+
+#### 验证: vue-tsc 0 errors ✅

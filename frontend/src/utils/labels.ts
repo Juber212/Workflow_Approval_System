@@ -79,8 +79,3 @@ export function endorsementStatusLabel(s: string): string {
   const m: Record<string, string> = { pending: '待批准', approved: '批准通过', rejected: '批准驳回', terminated: '已终止' }
   return m[s] || s
 }
-
-/** 难度等级 CSS 类名 */
-export function difficultyClass(d: string): string {
-  return `diff--${d || '1'}`
-}

@@ -69,7 +69,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push(`/profile/check/${row.id}`)">查看</el-button>
+            <el-button text type="primary" size="small" @click="router.push({ name: 'CheckDetail', params: { id: row.id } })">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -96,7 +96,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push(`/profile/approval/${row.id}`)">查看</el-button>
+            <el-button text type="primary" size="small" @click="router.push({ name: 'ApprovalDetail', params: { id: row.id } })">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -123,7 +123,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push(`/profile/endorse/${row.id}`)">查看</el-button>
+            <el-button text type="primary" size="small" @click="router.push({ name: 'EndorseDetail', params: { id: row.id } })">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -179,7 +179,7 @@ const isEmpty = computed(() => {
 
 /** 跳转到任务详情 */
 function goTask(taskId: number) {
-  router.push(`/profile/task/${taskId}`)
+  router.push({ name: 'TaskDetail', params: { id: taskId } })
 }
 
 onMounted(async () => {
