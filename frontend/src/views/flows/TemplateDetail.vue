@@ -31,9 +31,9 @@
         <template #header>
           <span class="tpl-card__title">节点配置（{{ detail.nodes.length }} 个）</span>
         </template>
-        <el-table :data="detail.nodes" stripe size="default" :row-class-name="nodeRowClass">
+        <el-table border :data="detail.nodes" stripe size="default" :row-class-name="nodeRowClass">
           <el-table-column prop="name" label="名称" min-width="100" />
-          <el-table-column label="类型" width="80" align="center">
+          <el-table-column label="类型" width="80">
             <template #default="{ row }">
               <span class="node-type-dot" :class="nodeTypeClass(row)" />
               {{ nodeTypeLabel(row) }}
@@ -63,7 +63,7 @@
               <span v-else class="text--muted">{{ row.is_start || row.is_end ? '-' : '未设置' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="时限" width="90" align="center">
+          <el-table-column label="时限" width="90">
             <template #default="{ row }">
               <template v-if="!row.is_start && !row.is_end">
                 {{ row.time_limit_days ? row.time_limit_days + ' 工作日' : '不限' }}
@@ -71,7 +71,7 @@
               <span v-else class="text--muted">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="需文件" width="80" align="center">
+          <el-table-column label="需文件" width="80">
             <template #default="{ row }">
               <template v-if="!row.is_start && !row.is_end">
                 <span :class="row.require_file ? 'text--yes' : 'text--muted'">{{ row.require_file ? '是' : '否' }}</span>

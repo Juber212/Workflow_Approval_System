@@ -53,9 +53,10 @@ class OrgOverview(BaseModel):
     """各所流程概览（供柱状图 + 饼图）"""
     org_id: int
     org_name: str
-    total_count: int = 0       # 全部项目数（所有状态）
-    running_count: int = 0     # 运行中项目数
-    completed_count: int = 0   # 已完成项目数
+    total_count: int = 0         # 全部项目数（所有状态）
+    running_count: int = 0       # 运行中项目数
+    completed_count: int = 0     # 已完成项目数
+    terminated_count: int = 0    # 已终止项目数
 
 
 class MyTaskCounts(BaseModel):
@@ -65,12 +66,28 @@ class MyTaskCounts(BaseModel):
     approval: int = 0      # 待审批（approvals approver_id=本人，status=pending）
 
 
+class MyPendingItem(BaseModel):
+    """我的待办列表项 —— 合并 Task/CheckRecord/Approval 三表，按优先级+截止时间排序"""
+    type: str               # "task" | "check" | "approval"
+    type_label: str         # "待办" | "校验" | "审批"（前端可直接展示）
+    id: int                 # 记录 ID，用于构造跳转链接 /profile/{type}/{id}
+    instance_id: int        # 所属实例 ID
+    instance_name: str      # 实例名称（项目/方案名）
+    node_name: str          # 当前节点名称
+    priority: str           # urgent / high / normal / low
+    deadline: str | None = None  # ISO 格式截止时间，null 表示无截止
+
+
 class DashboardData(BaseModel):
     """Dashboard 完整响应数据"""
     stats: DashboardStats = DashboardStats()
     proposal_stats: DashboardStats = DashboardStats()  # 方案统计（同结构，含义不同）
     task_distribution: list[TaskDistItem] = []
     bottleneck: list[BottleneckItem] = []
+    proposal_bottleneck: list[BottleneckItem] = []  # 方案卡点追踪（简化列）
     overdue_list: list[OverdueItem] = []
-    org_overview: list[OrgOverview] = []
-    my_task_counts: MyTaskCounts = MyTaskCounts()  # 当前用户个人待办
+    org_overview: list[OrgOverview] = []        # 各所项目概览
+    proposal_org_overview: list[OrgOverview] = []  # 各所方案概览（前端 tab 切换用）
+    my_task_counts: MyTaskCounts = MyTaskCounts()  # 当前用户个人待办计数（侧边栏角标用）
+    my_pending: list[MyPendingItem] = []           # 当前用户待办列表（项目视图）
+    proposal_my_pending: list[MyPendingItem] = []   # 当前用户待办列表（方案视图）

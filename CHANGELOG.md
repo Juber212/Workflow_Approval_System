@@ -184,3 +184,30 @@
 | 中危 | 4 |
 | 低危 | 3 |
 | **合计** | **19** |
+
+---
+
+## 2026-07-28 — 首页待办列表 + 表格操作列对齐 + 筛选区重构
+
+### 新增功能
+
+| # | 功能 | 涉及文件 |
+|---|------|----------|
+| 1 | 首页「我的待办」从快捷条改为表格列表（统一 Task/Check/Approval 三表、按优先级+截止排序） | `dashboard_service.py`, `dashboard.py`(schema), `dashboard.ts`, `dashboard/index.vue` |
+| 2 | 待办列表跟随项目/方案 Tab 自动切换数据源 | `dashboard/index.vue` |
+
+### 修复
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 3 | 全局表格操作列按钮未左对齐 → `common.scss` 加全局规则 | `common.scss`, `dashboard/index.vue` |
+| 4 | 表格上方筛选按钮+搜索共享同一 card 容器 → 拆掉外层 card，各自独立排列 | `FlowManagement.vue`, `ProposalManagement.vue`, `OrgHome.vue` |
+| 5 | 高级搜索面板过高 → padding/margin 缩减 | 同上 3 文件 |
+
+### 测试增强
+
+| # | 内容 | 文件 |
+|---|------|------|
+| 6 | Round 2 自动化测试：通知(9)/组织(7)/用户(8)/PDF签名(4)/方案(6) + 集成(5) = 39 新测试 | `tests/unit/` + `tests/integration/` 6 文件 |
+| 7 | MockResult 新增 `unique()` 方法 | `tests/conftest.py` |
+| 8 | 测试总数：78 → 117，全部通过 | — |

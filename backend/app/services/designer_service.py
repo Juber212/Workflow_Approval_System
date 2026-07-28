@@ -29,8 +29,10 @@ async def save_design_data(
 ) -> dict:
     """批量保存设计器数据 —— 新增/更新/删除节点和连线，同一事务"""
     logger.debug(f"[designer] 开始 template_id={template_id} nodes={len(nodes_data)} edges={len(edges_data)}")
-    # 校验模板存在且为 draft
-    tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == template_id))).scalar_one_or_none()
+    # 校验模板存在且为 draft（加行锁防并发覆盖）
+    tpl = (await db.execute(
+        select(FlowTemplate).where(FlowTemplate.id == template_id).with_for_update()
+    )).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
     # 所有模板均可编辑设计（无状态限制）

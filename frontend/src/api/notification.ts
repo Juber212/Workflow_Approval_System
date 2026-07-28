@@ -2,6 +2,7 @@
 
 import { ref, onMounted, onUnmounted } from 'vue'
 import request, { API_BASE, getToken } from './request'
+import { useNotificationStore } from '@/stores/notification'
 
 /** 通知对象（与后端 NotificationOut 对应） */
 export interface NotificationItem {
@@ -32,13 +33,23 @@ export async function fetchNotifications(page = 1, pageSize = 20): Promise<{
   return data
 }
 
-/** 待办汇总计数响应 */
+/** 待办汇总计数响应 —— 含完整 project/proposal 分类 breakdown */
 export interface SummaryCounts {
+  // 汇总（侧边栏角标用）
   task_count: number
   check_count: number
   approval_count: number
+  endorsement_count: number
   project_pending: number
   proposal_pending: number
+  // 分类 breakdown（个人中心 Tab 角标用）
+  project_task_count: number
+  project_check_count: number
+  project_approval_count: number
+  project_endorsement_count: number
+  proposal_task_count: number
+  proposal_approval_count: number
+  proposal_endorsement_count: number
 }
 
 /** 获取待办/校验/审批汇总计数 —— 一次请求替代 7 次独立分页查询 */
@@ -102,6 +113,18 @@ export function useNotificationSocket() {
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
+  /** 刷新侧边栏红点 + 个人中心角标（notifyStore）并派发事件供 profile 页面更新 Tab 角标 */
+  function refreshStoreCounts() {
+    const notifyStore = useNotificationStore()
+    fetchSummaryCounts().then(summary => {
+      // 更新侧边栏角标
+      notifyStore.setCounts(summary.task_count, summary.check_count, summary.approval_count, summary.endorsement_count)
+      notifyStore.setTypedCounts(summary.project_pending, summary.proposal_pending)
+      // 派发事件供个人中心页面刷新 Tab 角标
+      window.dispatchEvent(new CustomEvent('counts-refreshed', { detail: summary }))
+    }).catch(() => {})
+  }
+
   function connect() {
     const token = getToken()
     if (!token) return
@@ -129,11 +152,13 @@ export function useNotificationSocket() {
         const msg = JSON.parse(event.data)
         if (msg.type === 'notification' && msg.data) {
           latestNotice.value = msg.data
-          // 推送新通知时刷新未读数
+          // 推送新通知时刷新未读数 + 侧边栏红点 + 个人中心角标
           fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
+          refreshStoreCounts()
         } else if (msg.type === 'refresh_count') {
-          // 后端 clear_related 后通知前端刷新铃铛未读数（静默，不弹出气泡）
+          // 后端 clear_related 后静默刷新铃铛未读数 + 侧边栏红点 + 个人中心角标
           fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
+          refreshStoreCounts()
         } else if (msg.type === 'conversion_all_done') {
           // PDF 转换全部完成（50+ 优化）：触发自定义事件，供 TaskDetail 监听
           window.dispatchEvent(new CustomEvent('conversion-all-done', {

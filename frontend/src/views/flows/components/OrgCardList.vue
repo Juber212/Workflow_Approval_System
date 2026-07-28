@@ -13,7 +13,7 @@
         <span v-if="org.is_current_user_org" class="org-card__badge">当前所属</span>
       </div>
 
-      <!-- 中间：大号数字 -->
+      <!-- 中间：大号数字（运行中项目数，>5 预警红色） -->
       <div class="org-card__metric">
         <span class="org-card__num" :class="{ 'is-warn': org.running_instance_count > 5 }">
           {{ org.running_instance_count }}
@@ -21,9 +21,16 @@
         <span class="org-card__unit">个运行中项目</span>
       </div>
 
-      <!-- 底部：更新时间 + 模板数 -->
+      <!-- 底部：各状态细分 -->
       <div class="org-card__meta">
-        最近更新：{{ org.latest_update_time ? fmtTime(org.latest_update_time) : '—' }} · 模板 {{ org.template_count }} 个
+        <span class="meta-item meta-item--running">运行中 {{ org.running_instance_count }}</span>
+        <span class="meta-divider">·</span>
+        <span class="meta-item meta-item--completed">已完成 {{ org.completed_instance_count }}</span>
+        <span class="meta-divider">·</span>
+        <span class="meta-item">已终止 {{ org.terminated_instance_count }}</span>
+      </div>
+      <div class="org-card__time" v-if="org.latest_update_time">
+        最近更新：{{ fmtTime(org.latest_update_time) }}
       </div>
     </div>
   </div>
@@ -58,7 +65,7 @@ function fmtTime(val: string): string {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;  // 和方案卡片保持一致
 
   &:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -113,10 +120,27 @@ function fmtTime(val: string): string {
   }
 
   &__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     color: var(--el-text-color-secondary);
     border-top: 1px solid var(--el-border-color-lighter);
-    padding-top: 12px;
+    padding-top: 10px;
   }
+
+  &__time {
+    font-size: 11px;
+    color: var(--el-text-color-placeholder);
+  }
+}
+
+.meta-item {
+  &--running { color: var(--el-color-primary); }
+  &--completed { color: var(--el-color-success); }
+}
+
+.meta-divider {
+  color: var(--el-border-color);
 }
 </style>

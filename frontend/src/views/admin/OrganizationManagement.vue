@@ -18,7 +18,7 @@
 
     <!-- 组织列表 -->
     <div class="table-section">
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table border :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="组织名称" min-width="150" />
         <el-table-column prop="description" label="描述" min-width="200">
@@ -31,7 +31,7 @@
             {{ row.manager_name || '未设置' }}
           </template>
         </el-table-column>
-        <el-table-column prop="user_count" label="用户数" width="80" align="center" />
+        <el-table-column prop="user_count" label="用户数" width="80" />
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">

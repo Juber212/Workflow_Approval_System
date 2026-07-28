@@ -1,5 +1,6 @@
 """任务服务 —— 待办列表、任务详情、提交、草稿保存"""
 import asyncio
+import logging
 import os
 from datetime import datetime
 
@@ -29,6 +30,8 @@ from app.models import (
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
 from app.schemas.common import PaginatedData
 from app.schemas.task import TaskListItem, TaskDetail, TaskSubmit
+
+logger = logging.getLogger(__name__)
 
 
 async def list_tasks(
@@ -349,7 +352,9 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
 
     从 api/tasks.py 迁入，保持原有逻辑不变。
     """
-    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    task = (await db.execute(
+        select(Task).where(Task.id == task_id).with_for_update()
+    )).scalar_one_or_none()
     if task is None:
         raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
     if task.assignee_id != current_user_id:
@@ -474,7 +479,10 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
         for a_id, ap in created_approvals
     ]
     if notif_tasks:
-        await asyncio.gather(*notif_tasks)
+        try:
+            await asyncio.gather(*notif_tasks)
+        except Exception:
+            logger.warning("[submit_task] 通知创建失败，不影响提交", exc_info=True)
 
     # ---- 通知清除：提交后删除该负责人的相关待办通知 (#11) ----
     await clear_related(

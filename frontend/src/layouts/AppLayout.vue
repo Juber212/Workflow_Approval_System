@@ -49,7 +49,7 @@
         <el-divider />
         <div class="signature-section">
           <h4 class="signature-section__title">个人签名</h4>
-          <p class="signature-section__desc">上传透明底 PNG 签名图片（推荐 200×60px，≤500KB），审批通过时自动插入 PDF。</p>
+          <p class="signature-section__desc">上传 PNG 签名图片（推荐 200×60px，≤500KB），审批通过时自动插入 PDF。</p>
           <div class="signature-preview" v-if="userInfoDetail?.has_signature">
             <img :src="signatureBlobUrl" alt="签名预览" class="signature-img" />
             <span class="signature-status">已上传</span>
@@ -114,7 +114,7 @@ async function refreshNotifyCounts() {
   if (isAdmin.value) return
   try {
     const summary = await fetchSummaryCounts()
-    notifyStore.setCounts(summary.task_count, summary.check_count, summary.approval_count)
+    notifyStore.setCounts(summary.task_count, summary.check_count, summary.approval_count, summary.endorsement_count)
     notifyStore.setTypedCounts(summary.project_pending, summary.proposal_pending)
   } catch (e) { console.error('通知计数刷新失败:', e) }
 }

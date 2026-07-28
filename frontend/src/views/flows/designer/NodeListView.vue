@@ -84,7 +84,7 @@
       </el-table-column>
 
       <!-- 时限 -->
-      <el-table-column label="时限" width="70" align="center">
+      <el-table-column label="时限" width="70">
         <template #default="{ row }">
           <template v-if="row.is_start || row.is_end">
             <span class="text-muted">—</span>
@@ -99,7 +99,7 @@
       </el-table-column>
 
       <!-- 状态 -->
-      <el-table-column label="状态" width="80" align="center">
+      <el-table-column label="状态" width="80">
         <template #default="{ row }">
           <template v-if="row.is_start || row.is_end">
             <el-tag size="small" type="info">系统</el-tag>

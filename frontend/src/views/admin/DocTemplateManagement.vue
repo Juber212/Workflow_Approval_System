@@ -29,7 +29,7 @@
     </div>
 
     <!-- 表格 -->
-    <el-table :data="list" stripe class="doc-table" style="margin-top:16px">
+    <el-table border :data="list" stripe class="doc-table" style="margin-top:16px">
       <el-table-column prop="organization_name" label="所属组织" min-width="120" />
       <el-table-column prop="name" label="模板名称" min-width="160" />
       <el-table-column prop="original_name" label="原始文件名" min-width="180" />
@@ -46,7 +46,7 @@
       <el-table-column label="上传时间" width="160">
         <template #default="{ row }">{{ row.created_at?.slice(0, 16) || '-' }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="80" align="center">
+      <el-table-column label="操作" width="80">
         <template #default="{ row }">
           <el-popconfirm title="确定删除？" @confirm="handleDelete(row)">
             <template #reference>

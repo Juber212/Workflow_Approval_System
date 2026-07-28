@@ -18,12 +18,13 @@ from app.core.database import Base
 # ============================================================
 
 class MockResult:
-    """模拟 SQLAlchemy Result 对象，支持 .scalar() / .scalar_one() / .scalar_one_or_none() / .scalars().all()"""
+    """模拟 SQLAlchemy Result 对象，支持 .scalar() / .scalar_one() / .scalar_one_or_none() / .scalars().all() / .all() / .first()"""
 
-    def __init__(self, scalar_value=None, scalars_all=None, scalar_one=None):
+    def __init__(self, scalar_value=None, scalars_all=None, scalar_one=None, rows_all=None):
         self._scalar_value = scalar_value
         self._scalars_all = scalars_all or []
         self._scalar_one = scalar_one
+        self._rows_all = rows_all or []  # 用于 .all() 直接调用
 
     def scalar(self):
         return self._scalar_value
@@ -42,6 +43,21 @@ class MockResult:
 
     def scalars(self):
         return _MockScalars(self._scalars_all)
+
+    def unique(self):
+        """支持 joinedload 后的 .unique() 调用 —— 返回自身"""
+        return self
+
+    def all(self):
+        """直接调用 .all() 返回原始行列表"""
+        return self._rows_all
+
+    def first(self):
+        return self._rows_all[0] if self._rows_all else None
+
+    def __iter__(self):
+        """支持 for row in result 迭代模式"""
+        return iter(self._rows_all)
 
 
 class _MockScalars:
@@ -79,7 +95,7 @@ def mock_db():
     db.flush = AsyncMock()
     db.commit = AsyncMock()
     db.rollback = AsyncMock()
-    db.delete = MagicMock()
+    db.delete = AsyncMock()
     db.refresh = AsyncMock()
     return db
 

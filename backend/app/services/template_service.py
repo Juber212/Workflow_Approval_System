@@ -40,14 +40,22 @@ async def get_organization_summaries(
     tpl_rows = (await db.execute(tpl_count_stmt)).all()
     tpl_map = {oid: cnt for oid, cnt in tpl_rows}
 
-    # 批量运行中实例数
-    inst_count_stmt = (
-        select(FlowInstance.organization_id, func.count(FlowInstance.id))
-        .where(FlowInstance.organization_id.in_(org_ids), FlowInstance.status == InstanceStatus.RUNNING)
-        .group_by(FlowInstance.organization_id)
+    # 批量各状态实例数（按组织 + 状态分组后聚合）
+    inst_status_stmt = (
+        select(FlowInstance.organization_id, FlowInstance.status, func.count(FlowInstance.id))
+        .where(FlowInstance.organization_id.in_(org_ids), FlowInstance.status.in_([
+            InstanceStatus.RUNNING, InstanceStatus.COMPLETED, InstanceStatus.TERMINATED
+        ]))
+        .group_by(FlowInstance.organization_id, FlowInstance.status)
     )
-    inst_rows = (await db.execute(inst_count_stmt)).all()
-    inst_map = {oid: cnt for oid, cnt in inst_rows}
+    inst_status_rows = (await db.execute(inst_status_stmt)).all()
+    # 构建 {org_id: {status: count}} 映射
+    inst_status_map: dict[int, dict] = {}
+    for oid, st, cnt in inst_status_rows:
+        inst_status_map.setdefault(oid, {})[st] = cnt
+    # 按组织提取各状态计数
+    def _status_cnt(org_id: int, status: str) -> int:
+        return inst_status_map.get(org_id, {}).get(status, 0)
 
     # 批量最近更新时间（排除方案模板）
     tpl_time_stmt = (
@@ -85,13 +93,15 @@ async def get_organization_summaries(
         elif inst_time:
             latest = inst_time
 
-        running_cnt = inst_map.get(o.id, 0)
+        running_cnt = _status_cnt(o.id, InstanceStatus.RUNNING)
         total_instance_count += running_cnt
 
         result_list.append(OrgTemplateSummary(
             id=o.id, name=o.name,
             template_count=tpl_map.get(o.id, 0),
             running_instance_count=running_cnt,
+            completed_instance_count=_status_cnt(o.id, InstanceStatus.COMPLETED),
+            terminated_instance_count=_status_cnt(o.id, InstanceStatus.TERMINATED),
             latest_update_time=latest.isoformat() if latest else None,
             is_current_user_org=(o.id == user_org_id),
         ))

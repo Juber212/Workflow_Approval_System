@@ -15,33 +15,34 @@
       <h3 class="section-label">全部方案</h3>
     </div>
 
-    <!-- 筛选卡片 -->
-    <div class="card">
-      <div class="instance-toolbar">
-        <div class="filter-tabs">
-          <button
-            v-for="f in statusFilters" :key="f.value"
-            class="filter-tab" :class="{ 'is-active': statusFilter === f.value }"
-            @click="handleStatusFilter(f.value)"
-          >
-            <span class="filter-label">{{ f.label }}</span>
-            <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
-          </button>
-        </div>
-        <div class="instance-toolbar__right">
-          <el-input
-            v-model="keyword" placeholder="搜索方案名称" clearable
-            :prefix-icon="Search" size="default" style="width: 200px"
-            @input="handleSearch"
-          />
-          <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
-            <el-icon><ArrowDown v-if="!showAdvancedSearch" /><ArrowUp v-else /></el-icon>
-            高级搜索
-          </el-button>
-        </div>
+    <!-- 表格工具栏：筛选按钮 + 搜索各独立容器 -->
+    <div class="table-toolbar">
+      <!-- 状态筛选按钮独立容器 -->
+      <div class="filter-tabs">
+        <button
+          v-for="f in statusFilters" :key="f.value"
+          class="filter-tab" :class="{ 'is-active': statusFilter === f.value }"
+          @click="handleStatusFilter(f.value)"
+        >
+          <span class="filter-label">{{ f.label }}</span>
+          <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
+        </button>
       </div>
-      <!-- 高级搜索面板 -->
-      <div class="card__advanced-search" v-show="showAdvancedSearch">
+      <!-- 搜索+高级搜索独立容器 -->
+      <div class="toolbar-actions">
+        <el-input
+          v-model="keyword" placeholder="搜索方案名称" clearable
+          :prefix-icon="Search" size="default" style="width: 200px"
+          @input="handleSearch"
+        />
+        <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
+          <el-icon><ArrowDown v-if="!showAdvancedSearch" /><ArrowUp v-else /></el-icon>
+          高级搜索
+        </el-button>
+      </div>
+    </div>
+    <!-- 高级搜索面板 -->
+    <div class="card__advanced-search" v-show="showAdvancedSearch">
         <el-date-picker
           v-model="dateRange" type="daterange" range-separator="至"
           start-placeholder="发起起始" end-placeholder="发起截止"
@@ -56,13 +57,12 @@
           :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleSearch">
           <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
         </el-select>
-      </div>
     </div>
 
     <!-- 方案列表 -->
     <div class="card">
       <div class="card__body" style="padding:0">
-        <el-table :data="proposals" stripe v-loading="loading" @row-click="handleRowClick" style="cursor:pointer">
+        <el-table border :data="proposals" stripe v-loading="loading" @row-click="handleRowClick" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="160">
             <template #default="{ row }"><span class="inst-name">{{ row.name }}</span></template>
           </el-table-column>
@@ -72,7 +72,7 @@
           <el-table-column prop="created_at" label="发起时间" min-width="140">
             <template #default="{ row }"><span class="num">{{ formatTime(row.created_at) }}</span></template>
           </el-table-column>
-          <el-table-column label="状态" min-width="80" align="center">
+          <el-table-column label="状态" min-width="80">
             <template #default="{ row }">
               <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
             </template>
@@ -311,7 +311,9 @@ async function handlePermanentDelete(row: ProposalListItem) {
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
 
-.instance-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; flex-wrap: wrap; gap: 12px; &__right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; } }
+/* 表格工具栏：筛选按钮 + 搜索操作各独立容器，同行排列（无外层卡片） */
+.table-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; }
+.toolbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .filter-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .filter-tab { height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff; border-radius: 6px; font-size: 13px; color: var(--el-text-color-regular); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; transition: all 0.2s; &:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); } &.is-active { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; } }
@@ -319,10 +321,12 @@ async function handlePermanentDelete(row: ProposalListItem) {
 .filter-count { opacity: 0.7; }
 
 .inst-name { font-weight: 500; color: var(--el-text-color-primary); }
-/* 高级搜索面板（卡片内，筛选栏下方） */
+/* 高级搜索面板（独立于表格工具栏，折叠展开） */
 .card__advanced-search {
   display: flex; align-items: center; gap: 10px;
-  padding: 0 20px 14px; flex-wrap: wrap;
+  padding: 8px 16px; margin-bottom: 8px;
+  background: #fff; border: 1px solid var(--el-border-color-light); border-radius: 8px;
+  flex-wrap: wrap;
 }
 
 .list-pagination { display: flex; justify-content: center; margin-top: 16px; }

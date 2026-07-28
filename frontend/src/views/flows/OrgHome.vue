@@ -18,14 +18,14 @@
     <!-- 选择模板并填写业务信息（发起项目） -->
     <el-dialog v-model="showTemplatePicker" title="发起项目" width="560px" @close="resetPickerForm">
       <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px" />
-      <el-table
+      <el-table border
         :data="templateList" v-loading="pickerLoading"
         @row-click="handleSelectTemplate" style="cursor:pointer" max-height="280"
         :row-class-name="({ row }: any) => row.id === selectedTplId ? 'is-selected-row' : ''"
       >
         <el-table-column prop="name" label="模板名称" min-width="160" />
-        <el-table-column prop="node_count" label="节点数" width="80" align="center" />
-        <el-table-column prop="instance_count" label="运行项目" width="80" align="center" />
+        <el-table-column prop="node_count" label="节点数" width="80" />
+        <el-table-column prop="instance_count" label="运行项目" width="80" />
       </el-table>
 
       <!-- 业务信息表单（选择模板后出现） -->
@@ -77,8 +77,9 @@
 
     <!-- ========== 项目 Tab ========== -->
     <template v-if="activeTab === 'instance'">
-      <!-- 筛选卡片 -->
-      <div class="card">
+      <!-- 表格工具栏：筛选按钮 + 搜索各独立容器 -->
+      <div class="table-toolbar">
+        <!-- 状态筛选按钮独立容器 -->
         <div class="filter-tabs">
           <button
             v-for="f in instanceFilters"
@@ -90,13 +91,16 @@
             <span class="filter-label">{{ f.label }}</span>
             <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
           </button>
+        </div>
+        <!-- 搜索+高级搜索独立容器 -->
+        <div class="toolbar-actions">
           <el-input
             v-model="instanceKeyword"
             placeholder="搜索项目名称"
             clearable
             :prefix-icon="Search"
             size="default"
-            style="width: 200px; margin-left: auto"
+            style="width: 200px"
             @input="handleInstanceSearch"
           />
           <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
@@ -104,29 +108,29 @@
             高级搜索
           </el-button>
         </div>
-        <!-- 高级搜索面板 -->
-        <div class="card__advanced-search" v-show="showAdvancedSearch">
-          <el-date-picker
-            v-model="instanceDateRange" type="daterange" range-separator="至"
-            start-placeholder="发起起始" end-placeholder="发起截止"
-            format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="default"
-            style="width: 260px" @change="handleInstanceSearch"
-          />
-          <el-select v-model="instancePriority" placeholder="优先级" clearable size="default" style="width: 120px" @change="handleInstanceSearch">
-            <el-option label="紧急" value="urgent" /><el-option label="高" value="high" />
-            <el-option label="普通" value="normal" /><el-option label="低" value="low" />
-          </el-select>
-          <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
-            :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
-            <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
-          </el-select>
-        </div>
+      </div>
+      <!-- 高级搜索面板 -->
+      <div class="card__advanced-search" v-show="showAdvancedSearch">
+        <el-date-picker
+          v-model="instanceDateRange" type="daterange" range-separator="至"
+          start-placeholder="发起起始" end-placeholder="发起截止"
+          format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="default"
+          style="width: 260px" @change="handleInstanceSearch"
+        />
+        <el-select v-model="instancePriority" placeholder="优先级" clearable size="default" style="width: 120px" @change="handleInstanceSearch">
+          <el-option label="紧急" value="urgent" /><el-option label="高" value="high" />
+          <el-option label="普通" value="normal" /><el-option label="低" value="low" />
+        </el-select>
+        <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
+          :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
+          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+        </el-select>
       </div>
 
       <!-- 实例表格 -->
       <div class="card">
         <div class="card__body" style="padding:0">
-          <el-table
+          <el-table border
             :data="instances" stripe v-loading="instanceLoading"
             :row-class-name="instanceRowClass"
             @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)"
@@ -146,7 +150,7 @@
               </template>
             </el-table-column>
             <!-- 3. 进度（进度条） -->
-            <el-table-column label="进度" min-width="120" align="center">
+            <el-table-column label="进度" min-width="120">
               <template #default="{ row }">
                 <div class="bt-progress">
                   <el-progress
@@ -168,30 +172,30 @@
               </template>
             </el-table-column>
             <!-- 5. 状态 -->
-            <el-table-column label="状态" width="80" align="center" sortable="false">
+            <el-table-column label="状态" width="90" sortable="false">
               <template #default="{ row }">
                 <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
               </template>
             </el-table-column>
             <!-- 6. 优先级 -->
-            <el-table-column label="优先级" width="72" align="center">
+            <el-table-column label="优先级" width="72">
               <template #default="{ row }">
                 <span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
               </template>
             </el-table-column>
             <!-- 7. 难度 -->
-            <el-table-column label="难度" width="64" align="center">
+            <el-table-column label="难度" width="64">
               <template #default="{ row }">
                 <span class="diff-badge" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span>
               </template>
             </el-table-column>
             <!-- 8. 发起时间 -->
-            <el-table-column prop="initiated_at" label="发起时间" width="150" align="center">
+            <el-table-column prop="initiated_at" label="发起时间" width="150">
               <template #default="{ row }">{{ formatTime(row.initiated_at) }}</template>
             </el-table-column>
             <!-- 9. 操作 -->
             <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
-            <el-table-column label="操作" :width="isAdmin ? 160 : 140" align="center" fixed="right">
+            <el-table-column label="操作" :width="isAdmin ? 160 : 140" fixed="right">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click.stop="router.push(`/flows/instances/${row.id}`)">查看详情</el-button>
                 <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
@@ -665,10 +669,16 @@ async function handleDelete(id: number) {
   &.diff--4 { color: #fff; background: var(--el-color-danger); }
 }
 
+/* 表格工具栏：筛选按钮 + 搜索操作各独立容器，同行排列（无外层卡片） */
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; flex-wrap: wrap; gap: 12px;
+}
+.toolbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
 /* 筛选标签行（卡片内） */
 .filter-tabs {
-  display: flex; align-items: center; gap: 8px;
-  padding: 14px 20px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .filter-tab {
   height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff;
@@ -680,10 +690,12 @@ async function handleDelete(id: number) {
 .filter-label { display: inline-block; min-width: 3em; }
 .filter-count { opacity: 0.7; }
 
-/* 高级搜索面板（卡片内，筛选栏下方） */
+/* 高级搜索面板（独立于表格工具栏，折叠展开） */
 .card__advanced-search {
   display: flex; align-items: center; gap: 10px;
-  padding: 0 20px 14px; flex-wrap: wrap;
+  padding: 8px 16px; margin-bottom: 8px;
+  background: #fff; border: 1px solid var(--el-border-color-light); border-radius: 8px;
+  flex-wrap: wrap;
 }
 
 .list-pagination {

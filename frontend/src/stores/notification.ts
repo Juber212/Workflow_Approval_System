@@ -15,23 +15,26 @@ export const useNotificationStore = defineStore('notification', () => {
   const checkCount = ref(0)
   /** 我的审批数量（项目 + 方案合计） */
   const approvalCount = ref(0)
+  /** 我的批准数量（项目 + 方案合计） */
+  const endorsementCount = ref(0)
 
-  /** 项目待处理总数（任务+校验+审批） */
+  /** 项目待处理总数（任务+校验+审批+批准） */
   const projectPending = ref(0)
-  /** 方案待处理总数（任务+审批，方案无校验） */
+  /** 方案待处理总数（任务+审批+批准，方案无校验） */
   const proposalPending = ref(0)
 
   /** 是否有未处理事项（汇总 > 0 即有小圆点） */
-  const hasPending = computed(() => taskCount.value + checkCount.value + approvalCount.value > 0)
+  const hasPending = computed(() => taskCount.value + checkCount.value + approvalCount.value + endorsementCount.value > 0)
 
   /** 待处理总数（红色徽章显示的数字） */
-  const totalPending = computed(() => taskCount.value + checkCount.value + approvalCount.value)
+  const totalPending = computed(() => taskCount.value + checkCount.value + approvalCount.value + endorsementCount.value)
 
-  /** 批量设置三个数量 */
-  function setCounts(tasks: number, checks: number, approvals: number) {
+  /** 批量设置汇总数量 */
+  function setCounts(tasks: number, checks: number, approvals: number, endorsements: number = 0) {
     taskCount.value = tasks
     checkCount.value = checks
     approvalCount.value = approvals
+    endorsementCount.value = endorsements
   }
 
   /** 设置分类型待处理数（供项目/方案 radio-button 徽章使用） */
@@ -45,9 +48,10 @@ export const useNotificationStore = defineStore('notification', () => {
     taskCount.value = 0
     checkCount.value = 0
     approvalCount.value = 0
+    endorsementCount.value = 0
     projectPending.value = 0
     proposalPending.value = 0
   }
 
-  return { taskCount, checkCount, approvalCount, projectPending, proposalPending, hasPending, totalPending, setCounts, setTypedCounts, clearAll }
+  return { taskCount, checkCount, approvalCount, endorsementCount, projectPending, proposalPending, hasPending, totalPending, setCounts, setTypedCounts, clearAll }
 })

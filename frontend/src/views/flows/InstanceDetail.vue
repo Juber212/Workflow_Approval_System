@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 /** 实例详情页 —— 项目/方案共用，根据 template_type 切换面包屑和文案 */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief } from '@/api/instance'
@@ -205,6 +205,12 @@ const displayNodes = computed(() => {
 onMounted(() => {
   fetchDetail()
 })
+
+/** 路由变更时重新拉取数据（同一组件复用于项目详情/方案详情，onMounted 不会重新触发） */
+watch(
+  () => route.fullPath,
+  () => { fetchDetail() },
+)
 
 // ========== 数据加载 ==========
 async function fetchDetail() {

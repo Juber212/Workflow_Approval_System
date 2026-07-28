@@ -26,7 +26,7 @@
 
     <!-- 用户列表 -->
     <div class="table-section">
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table border :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" width="120" />
         <el-table-column prop="real_name" label="姓名" width="100" />

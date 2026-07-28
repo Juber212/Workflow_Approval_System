@@ -38,7 +38,7 @@ async def terminate_instance(
     5. 记录操作日志
     """
     # ========== 1. 查询实例 ==========
-    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id).with_for_update()
     result = await db.execute(stmt)
     instance = result.scalar_one_or_none()
 

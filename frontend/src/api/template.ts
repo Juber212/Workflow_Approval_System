@@ -9,6 +9,8 @@ export interface OrgCardItem {
   name: string
   template_count: number
   running_instance_count: number
+  completed_instance_count: number   // 已完成项目数
+  terminated_instance_count: number  // 已终止项目数
   latest_update_time: string | null
   is_current_user_org: boolean
 }

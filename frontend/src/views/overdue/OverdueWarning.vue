@@ -24,7 +24,7 @@
     <!-- 超期待办 -->
     <section class="overdue-section" v-if="summary?.tasks.length">
       <h3 class="overdue-section__title">超期待办任务</h3>
-      <el-table :data="summary.tasks" stripe style="width:100%">
+      <el-table border :data="summary.tasks" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="负责人" min-width="80" />
@@ -35,7 +35,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
-        <el-table-column label="优先级" min-width="64" align="center">
+        <el-table-column label="优先级" min-width="64">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>
@@ -51,7 +51,7 @@
     <!-- 超期校验 -->
     <section class="overdue-section" v-if="summary?.checks.length">
       <h3 class="overdue-section__title">超期校验</h3>
-      <el-table :data="summary.checks" stripe style="width:100%">
+      <el-table border :data="summary.checks" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="校验人" min-width="80" />
@@ -62,7 +62,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
-        <el-table-column label="优先级" min-width="64" align="center">
+        <el-table-column label="优先级" min-width="64">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>
@@ -78,7 +78,7 @@
     <!-- 超期审批 -->
     <section class="overdue-section" v-if="summary?.approvals.length">
       <h3 class="overdue-section__title">超期审批</h3>
-      <el-table :data="summary.approvals" stripe style="width:100%">
+      <el-table border :data="summary.approvals" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="审批人" min-width="80" />
@@ -89,7 +89,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
-        <el-table-column label="优先级" min-width="64" align="center">
+        <el-table-column label="优先级" min-width="64">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>
@@ -105,7 +105,7 @@
     <!-- 超期批准 -->
     <section class="overdue-section" v-if="summary?.endorsements.length">
       <h3 class="overdue-section__title">超期批准</h3>
-      <el-table :data="summary.endorsements" stripe style="width:100%">
+      <el-table border :data="summary.endorsements" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="批准人" min-width="80" />
@@ -116,7 +116,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
-        <el-table-column label="优先级" min-width="64" align="center">
+        <el-table-column label="优先级" min-width="64">
           <template #default="{ row }">
             <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
           </template>

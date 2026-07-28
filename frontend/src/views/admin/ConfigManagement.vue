@@ -12,7 +12,7 @@
         </div>
       </template>
 
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table border :data="list" v-loading="loading" stripe>
         <el-table-column prop="config_key" label="配置键" width="220" />
         <el-table-column label="配置值" min-width="250">
           <template #default="{ row }">

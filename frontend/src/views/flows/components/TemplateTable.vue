@@ -13,11 +13,11 @@
     </div>
 
     <!-- 表格 -->
-    <el-table :data="items" v-loading="loading" stripe>
+    <el-table border :data="items" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="模板名称" min-width="150" />
       <el-table-column prop="organization_name" label="所属组织" width="120" />
-      <el-table-column prop="node_count" label="节点数" width="80" align="center" />
+      <el-table-column prop="node_count" label="节点数" width="80" />
       <el-table-column label="创建人" width="100">
         <template #default="{ row }">{{ row.created_by_name || '-' }}</template>
       </el-table-column>

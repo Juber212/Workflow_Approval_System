@@ -157,10 +157,13 @@ async def delete_file(db: AsyncSession, task_id: int, file_id: int, current_user
     if file_rec is None:
         raise AppException(ErrorCode.NOT_FOUND, "文件不存在")
 
-    # 物理删除
-    abs_path = resolve_file_path(file_rec.file_path)
-    if os.path.exists(abs_path):
-        os.remove(abs_path)
-
+    # 先删除 DB 记录，再删物理文件（避免事务回滚后物理文件丢失）
     await db.delete(file_rec)
     await db.flush()
+
+    abs_path = resolve_file_path(file_rec.file_path)
+    try:
+        if os.path.exists(abs_path):
+            os.remove(abs_path)
+    except OSError:
+        pass  # 文件不存在或无权删除，不阻断流程

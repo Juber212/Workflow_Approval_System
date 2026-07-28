@@ -78,5 +78,7 @@ class OrgTemplateSummary(BaseModel):
     name: str
     template_count: int = 0
     running_instance_count: int = 0
+    completed_instance_count: int = 0   # 已完成项目数
+    terminated_instance_count: int = 0  # 已终止项目数
     latest_update_time: str | None = None
     is_current_user_org: bool = False

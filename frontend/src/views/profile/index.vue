@@ -68,7 +68,7 @@
             <el-option label="处理中" value="processing" />
           </el-select>
         </div>
-        <el-table :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
           <el-table-column prop="initiator_name" label="发起人" min-width="72" />
@@ -78,12 +78,12 @@
               <el-tag v-if="row.is_overdue" type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="优先级" min-width="64" align="center">
+          <el-table-column label="优先级" min-width="64">
             <template #default="{ row }">
               <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="taskStatusClass(row.status)">{{ taskStatusLabel(row.status) }}</span>
             </template>
@@ -103,15 +103,15 @@
         <div class="list-toolbar">
           <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchChecks" />
         </div>
-        <el-table :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push(`/profile/check/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push(`/profile/check/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="submitter_name" label="提交人" min-width="72" />
           <el-table-column prop="created_at" label="提交时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
-          <el-table-column label="轮次" min-width="48" align="center">
+          <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="checkStatusClass(row.status)">{{ checkStatusLabel(row.status) }}</span>
             </template>
@@ -131,7 +131,7 @@
         <div class="list-toolbar">
           <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchApprovals" />
         </div>
-        <el-table :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100">
             <template #default="{ row }">
@@ -139,10 +139,10 @@
             </template>
           </el-table-column>
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
-          <el-table-column label="轮次" min-width="48" align="center">
+          <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="approvalStatusClass(row.status)">{{ approvalStatusLabel(row.status) }}</span>
             </template>
@@ -162,14 +162,14 @@
         <div class="list-toolbar">
           <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchEndorsements" />
         </div>
-        <el-table :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
-          <el-table-column label="轮次" min-width="48" align="center">
+          <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="endorsementStatusClass(row.status)">{{ endorsementStatusLabel(row.status) }}</span>
             </template>
@@ -189,9 +189,9 @@
         <div class="list-toolbar">
           <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchInitiated" />
         </div>
-        <el-table :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push(`/flows/instances/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="name" label="项目" min-width="140" />
-          <el-table-column label="优先级" min-width="64" align="center">
+          <el-table-column label="优先级" min-width="64">
             <template #default="{ row }"><span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
           </el-table-column>
           <el-table-column prop="current_handlers" label="当前处理人" min-width="90" show-overflow-tooltip>
@@ -202,7 +202,7 @@
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }"><span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span></template>
           </el-table-column>
           <el-table-column label="操作" min-width="60">
@@ -241,7 +241,7 @@
 
       <!-- 方案设计（设计人的待办任务） -->
       <template v-if="propActiveTab === 'design'">
-        <el-table :data="propTasks" stripe v-loading="propTaskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propTasks" stripe v-loading="propTaskLoading" @row-click="(row: any) => router.push(`/profile/task/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="initiator_name" label="发起人" min-width="72" />
           <el-table-column label="截止时间" min-width="140">
@@ -250,7 +250,7 @@
               <el-tag v-if="row.is_overdue" type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="taskStatusClass(row.status)">{{ taskStatusLabel(row.status) }}</span>
             </template>
@@ -267,10 +267,10 @@
 
       <!-- 方案审批 -->
       <template v-if="propActiveTab === 'approve'">
-        <el-table :data="propApprovals" stripe v-loading="propApprovalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propApprovals" stripe v-loading="propApprovalLoading" @row-click="(row: any) => router.push(`/profile/approval/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="approvalStatusClass(row.status)">{{ approvalStatusLabel(row.status) }}</span>
             </template>
@@ -287,10 +287,10 @@
 
       <!-- 方案批准列表 -->
       <template v-if="propActiveTab === 'propEndorsements'">
-        <el-table :data="propEndorsements" stripe v-loading="propEndorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propEndorsements" stripe v-loading="propEndorsementLoading" @row-click="(row: any) => router.push(`/profile/endorse/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="instance_name" label="方案名称" min-width="160" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
               <span class="status-tag" :class="endorsementStatusClass(row.status)">{{ endorsementStatusLabel(row.status) }}</span>
             </template>
@@ -310,12 +310,12 @@
         <div class="list-toolbar">
           <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="fetchPropInitiated" />
         </div>
-        <el-table :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
+        <el-table border :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push(`/proposals/instances/${row.id}`)" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="140" />
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64" align="center">
+          <el-table-column label="状态" min-width="64">
             <template #default="{ row }"><span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span></template>
           </el-table-column>
           <el-table-column label="操作" min-width="60">
@@ -333,7 +333,7 @@
 
 <script setup lang="ts">
 /** 个人中心 —— 项目/方案 顶层切换 + Tab 分区 */
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
@@ -342,6 +342,7 @@ import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
 import { getEndorsements, type EndorsementListItem } from '@/api/endorsement'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
+import { fetchSummaryCounts, type SummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
 import { priLabel, roleLabel, instStatusClass, instStatusLabel, taskStatusClass, taskStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel, endorsementStatusClass, endorsementStatusLabel } from '@/utils/labels'
@@ -528,11 +529,63 @@ async function fetchPropInitiated() {
 }
 
 // ========== 生命周期 ==========
+
+/** 从 summary 数据刷新所有 Tab 角标（不拉取列表内容，只更新红点数字） */
+function applySummaryToTabBadges(summary: SummaryCounts) {
+  if (viewType.value === 'project') {
+    taskCount.value = summary.project_task_count
+    checkCount.value = summary.project_check_count
+    approvalCount.value = summary.project_approval_count
+    endorsementCount.value = summary.project_endorsement_count
+  } else {
+    propTaskCount.value = summary.proposal_task_count
+    propApprovalCount.value = summary.proposal_approval_count
+    propEndorsementCount.value = summary.proposal_endorsement_count
+  }
+}
+
+/** 静默刷新全部 Tab 角标（不显示 loading） */
+let pollTimer: ReturnType<typeof setInterval> | null = null
+let countsRefreshedHandler: ((e: Event) => void) | null = null
+
+function startAutoRefresh() {
+  // WebSocket 实时推送 → 即时刷新角标
+  countsRefreshedHandler = (e: Event) => {
+    const summary = (e as CustomEvent).detail as SummaryCounts
+    if (summary) applySummaryToTabBadges(summary)
+  }
+  window.addEventListener('counts-refreshed', countsRefreshedHandler)
+
+  // 30s 轮询兜底（WebSocket 断开等极端情况）
+  pollTimer = setInterval(async () => {
+    try {
+      const summary = await fetchSummaryCounts()
+      applySummaryToTabBadges(summary)
+    } catch { /* 静默失败 */ }
+  }, 30000)
+}
+
+function stopAutoRefresh() {
+  if (countsRefreshedHandler) {
+    window.removeEventListener('counts-refreshed', countsRefreshedHandler)
+    countsRefreshedHandler = null
+  }
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
 onMounted(() => {
   setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '个人中心' }])
   fetchTasks()
   fetchChecks()
   fetchApprovals()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 
 /** 项目 Tab 切换时按需加载 */

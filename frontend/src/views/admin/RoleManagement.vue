@@ -6,7 +6,7 @@
         <el-tag type="info" size="small" style="margin-left: 12px">V1 不可新增/删除</el-tag>
       </template>
 
-      <el-table :data="list" v-loading="loading" stripe>
+      <el-table border :data="list" v-loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="角色名称" width="120" />
         <el-table-column prop="code" label="角色标识" width="160">
@@ -19,7 +19,7 @@
             {{ row.description || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="user_count" label="用户数" width="80" align="center" />
+        <el-table-column prop="user_count" label="用户数" width="80" />
       </el-table>
     </el-card>
   </div>
