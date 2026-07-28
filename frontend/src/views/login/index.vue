@@ -147,6 +147,9 @@ const validateForceStrength = (_rule: any, value: string, callback: (err?: Error
   if (value.length < 8) { callback(new Error('密码长度不能少于8位')); return }
   if (!/[a-zA-Z]/.test(value)) { callback(new Error('密码必须包含字母')); return }
   if (!/\d/.test(value)) { callback(new Error('密码必须包含数字')); return }
+  if (form.username && value.toLowerCase() === form.username.toLowerCase()) {
+    callback(new Error('密码不能与用户名相同')); return
+  }
   callback()
 }
 

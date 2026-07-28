@@ -48,11 +48,15 @@ const validateConfirmPassword = (_rule: any, value: string, callback: (err?: Err
   callback(value !== pwdForm.new_password ? new Error('两次输入的密码不一致') : undefined)
 }
 
-/** 校验新密码强度：≥8位 + 必须包含字母和数字 */
+/** 校验新密码强度：≥8位 + 必须包含字母和数字 + 不能与用户名相同 */
 const validatePasswordStrength = (_rule: any, value: string, callback: (err?: Error) => void) => {
   if (value.length < 8) { callback(new Error('密码长度不能少于8位')); return }
   if (!/[a-zA-Z]/.test(value)) { callback(new Error('密码必须包含字母')); return }
   if (!/\d/.test(value)) { callback(new Error('密码必须包含数字')); return }
+  const username = userStore.userInfo?.username
+  if (username && value.toLowerCase() === username.toLowerCase()) {
+    callback(new Error('密码不能与用户名相同')); return
+  }
   callback()
 }
 
