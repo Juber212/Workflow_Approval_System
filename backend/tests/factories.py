@@ -91,23 +91,25 @@ def make_node(**overrides) -> InstanceNode:
 
 
 def make_start_node(**overrides) -> InstanceNode:
-    """创建一个开始节点"""
-    return make_node(
+    """创建一个开始节点（所有默认值可被 overrides 覆盖）"""
+    defaults = dict(
         id=10, name="发起", is_start=True, is_end=False,
         status=InstanceNodeStatus.FINISHED, sort_order=1,
         assignee_id=None, checkers=[], approvers=[],
-        **overrides,
     )
+    defaults.update(overrides)
+    return make_node(**defaults)
 
 
 def make_end_node(**overrides) -> InstanceNode:
-    """创建一个结束节点"""
-    return make_node(
+    """创建一个结束节点（所有默认值可被 overrides 覆盖）"""
+    defaults = dict(
         id=20, name="终审", is_start=False, is_end=True,
         status=InstanceNodeStatus.WAITING, sort_order=3,
         assignee_id=None, checkers=[], approvers=[{"user_id": 1, "name": "发起人"}],
-        **overrides,
     )
+    defaults.update(overrides)
+    return make_node(**defaults)
 
 
 # ============================================================
