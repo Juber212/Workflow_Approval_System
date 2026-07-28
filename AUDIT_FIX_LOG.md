@@ -400,3 +400,15 @@
   - `frontend/src/views/admin/UserManagement.vue` — 适配新参数
   - `frontend/src/views/login/index.vue` — 首次登录弹出强制改密码对话框（不可关闭，不可跳过）
 - **验证**: vue-tsc 0 errors ✅
+
+### F4 — 登录错误提示修复
+- **文件**: `frontend/src/api/request.ts`
+- **严重程度**: 🟠 HIGH
+- **改前**: 
+  - 登录接口 401 响应被拦截器直接跳转刷新页面，错误消息消失
+  - 通用错误回退消息包含 HTTP 状态码 `请求失败 (${status})`
+- **改后**: 
+  - 登录接口 401 不跳转，取后端中文消息 `data?.message` 创建 Error 上传给业务层
+  - 通用回退消息改为纯中文 `请求失败，请稍后重试`
+- **影响**: 登录密码错误时显示英文 `Request failed with status code 401` 且无中文提示
+- **验证**: vue-tsc 0 errors ✅

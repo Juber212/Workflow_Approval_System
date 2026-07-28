@@ -40,17 +40,19 @@ request.interceptors.response.use(
     // HTTP 4xx/5xx 错误响应
     if (error.response) {
       const { status, data } = error.response
-      // 401 未认证 → 跳转登录（登录接口自身的 401 不跳转，让业务层处理错误消息）
+      // 401 未认证 → 跳转登录（登录接口自身的 401 不跳转，取后端中文消息）
       if (status === 401) {
         const isLoginRequest = error.config?.url?.includes('/auth/login')
         if (!isLoginRequest) {
           localStorage.removeItem('token')
           window.location.href = '/login'
         }
-        return Promise.reject(error)
+        // 用后端返回的中文消息，避免 Axios 英文 error message
+        const msg = data?.message || '认证失败'
+        return Promise.reject(new Error(msg))
       }
-      // 提取后端返回的业务错误消息
-      const msg = data?.message || `请求失败 (${status})`
+      // 提取后端返回的中文错误消息
+      const msg = data?.message || '请求失败，请稍后重试'
       ElMessage.error(msg)
       return Promise.reject(new Error(msg))
     }
