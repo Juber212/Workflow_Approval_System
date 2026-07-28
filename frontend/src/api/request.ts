@@ -40,10 +40,13 @@ request.interceptors.response.use(
     // HTTP 4xx/5xx 错误响应
     if (error.response) {
       const { status, data } = error.response
-      // 401 未认证 → 静默跳转登录（不显示错误消息避免闪烁）
+      // 401 未认证 → 跳转登录（登录接口自身的 401 不跳转，让业务层处理错误消息）
       if (status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/login'
+        const isLoginRequest = error.config?.url?.includes('/auth/login')
+        if (!isLoginRequest) {
+          localStorage.removeItem('token')
+          window.location.href = '/login'
+        }
         return Promise.reject(error)
       }
       // 提取后端返回的业务错误消息
