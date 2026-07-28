@@ -286,7 +286,8 @@ class TestFullFlow:
                     new_callable=lambda: __import__("unittest.mock").mock.AsyncMock())
         mocker.patch("app.services.instance.terminate.clear_related",
                     new_callable=lambda: __import__("unittest.mock").mock.AsyncMock())
-        mocker.patch("app.services.instance.terminate.os.path.exists", return_value=False)
+        mocker.patch("app.services.instance.terminate.batch_delete_files_with_physical",
+                    new_callable=lambda: __import__("unittest.mock").mock.AsyncMock())
 
         await _seed_basic_data(db)
         await _seed_template(db)

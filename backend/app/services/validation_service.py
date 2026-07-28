@@ -1,6 +1,5 @@
 """模板发布校验服务 —— 7 项校验 + BFS 连通性"""
 from collections import deque
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

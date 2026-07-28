@@ -29,7 +29,25 @@
         </div>
       </div>
 
-      <!-- ===== 第2步：上传文件区 ===== -->
+      <!-- ===== 第2步：选择文件夹（仅文件夹配置的节点显示） ===== -->
+      <div v-if="currentNodeFolders.length > 0" class="supplement__step">
+        <div class="supplement__label">选择文件夹</div>
+        <el-select
+          v-model="selectedFolder"
+          placeholder="请选择文件所属文件夹"
+          style="width: 100%"
+          :disabled="submitting"
+        >
+          <el-option
+            v-for="f in currentNodeFolders"
+            :key="f.name"
+            :label="f.name"
+            :value="f.name"
+          />
+        </el-select>
+      </div>
+
+      <!-- ===== 第3步：上传文件区 ===== -->
       <div class="supplement__step" :class="{ 'is-disabled': !canUpload }">
         <div class="supplement__label">上传文件</div>
         <!-- 拖拽/点击上传 -->
@@ -97,6 +115,7 @@ const visible = computed({
 const uploadRef = ref<UploadInstance>()
 const fileList = ref<UploadFile[]>([])
 const submitting = ref(false)
+const selectedFolder = ref<string | null>(null)  // 选中的文件夹名称
 
 /** 可补交节点列表：finished + 非开始/结束 */
 const eligibleNodes = computed(() =>
@@ -111,6 +130,20 @@ const selectedNodeId = ref<number | null>(
   props.preselectedNodeId || (eligibleNodes.value.length > 0 ? null : null)
 )
 
+/** 当前选中的节点对象 */
+const currentNode = computed(() => {
+  const nid = props.preselectedNodeId || selectedNodeId.value
+  if (!nid) return null
+  return props.nodes.find(n => n.id === nid) || null
+})
+
+/** 当前节点配置的文件夹列表（仅文件夹模式节点有值） */
+const currentNodeFolders = computed(() => {
+  const folders = currentNode.value?.file_folders
+  if (!folders || folders.length === 0) return []
+  return folders
+})
+
 // 当 preselectedNodeId 变化时同步（父组件重新打开弹窗时）
 watch(
   () => props.preselectedNodeId,
@@ -119,14 +152,23 @@ watch(
   }
 )
 
+// 切换节点时重置文件夹选择
+watch(selectedNodeId, () => {
+  selectedFolder.value = null
+})
+
 /** 是否可上传：必须已选中节点 */
 const canUpload = computed(() =>
   !!props.preselectedNodeId || selectedNodeId.value !== null
 )
 
-/** 是否可提交：已选中节点 + 有文件 + 未提交中 */
+/** 当前节点有文件夹配置时，必须选文件夹才能提交 */
+const folderRequired = computed(() => currentNodeFolders.value.length > 0)
+
+/** 是否可提交：已选中节点 + 有文件 + 有文件夹（如需要）+ 未提交中 */
 const canSubmit = computed(() =>
   canUpload.value && fileList.value.length > 0 && !submitting.value
+  && (!folderRequired.value || selectedFolder.value !== null)
 )
 
 // ========== 文件预校验 ==========
@@ -148,7 +190,7 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    await supplementFiles(props.instanceId, nodeId, files)
+    await supplementFiles(props.instanceId, nodeId, files, selectedFolder.value || undefined)
     ElMessage.success('文件补交成功')
     visible.value = false
     emit('success')
@@ -163,6 +205,7 @@ async function handleSubmit() {
 // ========== 关闭时重置状态 ==========
 function handleClose() {
   fileList.value = []
+  selectedFolder.value = null
   if (!props.preselectedNodeId) {
     selectedNodeId.value = null
   }

@@ -12,7 +12,8 @@ from app.core.config import settings
 from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.services.notification_service import create_notification, clear_related
-from app.services.pdf_signature import get_role_signature_defaults
+from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
+from app.services.instance._helpers import compute_progress
 from app.core.error_codes import ErrorCode
 from app.models import (
     Task,
@@ -24,7 +25,6 @@ from app.models import (
     File,
     CheckRecord,
     Approval,
-    Signature,
     OperationLog,
 )
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
@@ -176,17 +176,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     initiator = users_map.get(inst.initiator_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
-    all_nodes_result = await db.execute(
-        select(InstanceNode)
-        .where(InstanceNode.instance_id == t.instance_id)
-        .order_by(InstanceNode.sort_order)
-    )
-    all_nodes = all_nodes_result.scalars().all()
-    total_nodes = len(all_nodes)
-    current_node_index = sum(
-        1 for n in all_nodes
-        if (n.status or "").lower() == "finished"
-    )
+    total_nodes, current_node_index, all_nodes = await compute_progress(db, t.instance_id)
 
     # 文件
     files_result = await db.execute(
@@ -379,31 +369,24 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     # ========== 负责人签批：即时写入 PDF ==========
     _sig_ids: list[int] = []
     if data.signatures and node.require_assignee_signature:
-        for idx, sig in enumerate(data.signatures):
-            sig_record = Signature(
-                file_id=sig["file_id"],
-                signer_id=current_user_id,
-                role_type="assignee",
-                source_id=task_id,
-                node_id=task.node_id,
-                signature_x=sig.get("signature_x", node.signature_x),
-                signature_y=sig.get("signature_y", node.signature_y),
-                signature_page=sig.get("signature_page", node.signature_page),
-                signature_width=sig.get("signature_width"),
-                signature_height=sig.get("signature_height"),
-                sign_date=sig.get("sign_date"),
-                show_date=sig.get("show_date", True),
-                date_x=sig.get("date_x"),
-                date_y=sig.get("date_y"),
-                date_font_size=sig.get("date_font_size", 14),
-                applied=False,
-                sort_order=idx,
-            )
-            db.add(sig_record)
-            await db.flush()
-            _sig_ids.append(sig_record.id)
+        # 设置 signer_id 后再调用统一 helper
+        for sig in data.signatures:
+            sig["signer_id"] = current_user_id
+        _sig_ids = await create_signature_records(
+            db,
+            role_type="assignee",
+            source_id=task_id,
+            node_id=task.node_id,
+            signatures=data.signatures,
+            default_signature_x=node.signature_x,
+            default_signature_y=node.signature_y,
+            default_signature_page=node.signature_page,
+        )
 
         if _sig_ids:
+            # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
+            # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
+            # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
             from app.services.pdf_signature import apply_signatures_to_files
             await apply_signatures_to_files(db, _sig_ids)
 

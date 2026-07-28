@@ -1,4 +1,5 @@
 """文件服务 —— 上传、删除、PDF 转换"""
+import logging
 import os
 
 from fastapi import UploadFile
@@ -11,6 +12,8 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import File, Task, InstanceNode, FlowInstance
 from app.models.enums import TaskStatus, UploadType
+
+logger = logging.getLogger(__name__)
 
 
 def _unique_stored_name(directory: str, original_name: str) -> str:
@@ -165,5 +168,29 @@ async def delete_file(db: AsyncSession, task_id: int, file_id: int, current_user
     try:
         if os.path.exists(abs_path):
             os.remove(abs_path)
-    except OSError:
+    except OSError as e:
+        logger.warning(f"文件操作失败: {e}", exc_info=True)
         pass  # 文件不存在或无权删除，不阻断流程
+
+
+async def batch_delete_files_with_physical(db: AsyncSession, files: list) -> list[str]:
+    """批量删除文件：先 flush DB 记录，再删物理文件（防止事务回滚导致磁盘文件丢失但 DB 记录还在）
+
+    返回删除失败的物理文件路径列表（供调用方决策是否重试或告警）
+    """
+    failed_paths: list[str] = []
+    # 1. 批量删除 DB 记录
+    for f in files:
+        await db.delete(f)
+    await db.flush()  # 先确保持久化，再删物理文件
+
+    # 2. 事务已持久化，安全删除物理文件
+    for f in files:
+        abs_path = resolve_file_path(f.file_path)
+        try:
+            if os.path.exists(abs_path):
+                os.remove(abs_path)
+        except OSError as e:
+            logger.warning(f"物理文件删除失败: {abs_path}, err={e}", exc_info=True)
+            failed_paths.append(abs_path)
+    return failed_paths

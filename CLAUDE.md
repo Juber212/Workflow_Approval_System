@@ -73,7 +73,7 @@ Organization → User → Flow Template → Flow Version → Flow Instance（含
 ## 流程生命周期
 
 ```
-Created → Running → Completed（同时 archive_status=archived）
+Created → Running → Completed
     ↓         ↓           ↓
     └─────────┴───────────┘
            Terminated（发起人终止，文件删除，不可恢复）
@@ -111,18 +111,48 @@ storage/archive/{实例名称}/
 5. 发布校验：至少3个节点 + 中间节点完整配置 + 全部连通
 6. 跨所协作：负责人和审批人可跨组织，但模板编辑权限属于所属所
 7. 所有操作记录日志，不可删除
-8. 第一版不做条件分支（支持 fork/join 并行分叉汇合）、不做消息通知
+8. 第一版不做条件分支（支持 fork/join 并行分叉汇合）
 9. 仅发起人可终止自己发起的流程（任意未 terminated 状态均可终止，包括 Created/Running/Completed（含已归档））
 10. 用户上传签名图片后才能审批时自动签名，未上传则跳过签名
 11. 发起人可随时更换运行中实例未完成节点的负责人/校验人/审批人（紧急换人），待处理的校验/审批记录自动更新，已完成的保留不动
 12. 发起流程实例时可选择优先级（urgent/high/normal/low），默认 normal。发起后发起人可随时修改优先级（兜底机制）
+13. 实例有难度等级（1-4 级）。难度 4 级时需配置批准人（Endorser），在所有审批人通过后操作
+14. 通知系统：WebSocket 推送 + 个人中心 30s 轮询兜底。侧边栏角标、个人中心 Tab 页签、首页红点均实时刷新
+15. 节点可配置文件提交分类（文件夹模式）：多个命名文件夹，各自可设必填/可选 + 精确数量限制
+16. 补交文件：已完成实例的已完成节点可追加文件，节点有文件夹配置时必选目标文件夹
+17. 文件模板（.docx/.xlsx）：管理员上传，下载时自动替换 15 个占位符（如 {{项目名称}}、{{发起日期}} 等）
+18. 方案（Proposal）：与项目并列的流程类型，相同节点模型
 
 ## 当前进度
 
-- ✅ Blueprint (00_Project_Blueprint.md) — 含技术栈、FlowEngine设计、LogicFlow选型、分区表
-- ✅ PRD (01_PRD.md) — 含轮次日志、连通性校验算法
-- ✅ Database Design (02_Database_Design.md) — 17 表 + 完整SQL含分区
-- ✅ API Design (03_API_Design.md) — 45 端点 + 批量保存 + 并发安全 + 错误码
-- ⬜ Frontend (Vue3 + LogicFlow + Element Plus)
-- ⬜ Backend (FastAPI + SQLAlchemy + JWT)
-- ⬜ Flow Engine (FlowEngine 类 → API 层调用)
+- ✅ Blueprint (00_Project_Blueprint.md) — 技术栈、FlowEngine设计、LogicFlow选型、分区表
+- ✅ PRD (01_PRD.md) — 轮次日志、连通性校验算法
+- ✅ Database Design (02_Database_Design.md) — 17 表 + 完整SQL含分区（实际已扩展至 20+ 表）
+- ✅ API Design (03_API_Design.md) — 45+ 端点 + 批量保存 + 并发安全 + 错误码
+- ✅ Frontend (Vue3 + LogicFlow + Element Plus) — 全部页面完成
+- ✅ Backend (FastAPI + SQLAlchemy + JWT) — 全部模块完成
+- ✅ Flow Engine (FlowEngine 类 → API 层调用) — BFS 激活/传播/fork-join 汇合
+- ✅ 自动化测试 187 条（158 mock 单元 + 10 mock 集成 + 19 MySQL 真实服务调用），零业务逻辑 bug
+- ✅ 首页柱状图重写、签批预览、通知系统（WebSocket + 30s 轮询兜底）
+
+**状态：可部署上线**
+
+## 测试体系
+
+| 类型 | 数量 | 位置 | 说明 |
+|------|:--:|------|------|
+| Mock 单元测试 | 158 | `tests/unit/` | 内存运行，毫秒级 |
+| Mock 集成测试 | 10 | `tests/integration/` | TestClient + mock_db |
+| MySQL 真实测试 | 19 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
+| **合计** | **187** | | **0 业务逻辑 bug** |
+
+运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
+
+## 设计约定
+
+1. 签名坐标在系统配置中统一管理（角色维度默认位置），不在设计器节点配置中设置
+2. 文件模板占位符共 15 个，日期格式统一为「YYYY年MM月DD日」
+3. 表格分页统一右下角（`justify-content: flex-end`）
+4. 表格操作列按钮左对齐（`justify-content: flex-start`，保留正常内边距）
+
+每次沟通结尾都加一句"喵"

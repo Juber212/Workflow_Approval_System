@@ -13,7 +13,7 @@ from app.core.security import verify_password, create_access_token, hash_passwor
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
-from app.schemas.auth import LoginRequest, LoginResponse, UserInfoResponse, ChangePasswordRequest
+from app.schemas.auth import LoginRequest, LoginResponse, UserInfoResponse, ChangePasswordRequest, UpdateProfileRequest
 from app.models import User, Role, UserRole
 from app.api.deps import get_current_active_user, CurrentUser
 
@@ -130,6 +130,31 @@ async def change_password(
     await db.commit()
 
     return ApiResponse.ok(message="密码修改成功")
+
+
+@router.put("/profile")
+async def update_profile(
+    req: UpdateProfileRequest,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """用户更新个人资料 —— 邮箱/手机号"""
+    stmt = select(User).where(User.id == current_user.id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
+
+    # 只更新明确传了值的字段
+    if req.email is not None:
+        user.email = req.email.strip() or None
+    if req.phone is not None:
+        user.phone = req.phone.strip() or None
+
+    await db.commit()
+
+    return ApiResponse.ok(message="个人信息已更新")
 
 
 def _auto_remove_white_bg(img: "Image.Image", threshold: int = 240, feather: int = 20) -> "Image.Image":

@@ -208,7 +208,15 @@ def enrich_handler_info_with_names(node_info: dict, user_name_map: dict[int, str
     return node_info
 
 
-# ==================== 实例详情 ====================
-
-
+async def compute_progress(db: AsyncSession, instance_id: int) -> tuple[int, int, list]:
+    """计算实例进度 —— 返回 (总节点数, 已完成节点数, 全部节点列表)，供 ProgressBar 和详情响应使用"""
+    all_nodes_result = await db.execute(
+        select(InstanceNode)
+        .where(InstanceNode.instance_id == instance_id)
+        .order_by(InstanceNode.sort_order)
+    )
+    all_nodes = all_nodes_result.scalars().all()
+    total = len(all_nodes)
+    current = sum(1 for n in all_nodes if (n.status or "").lower() == "finished")
+    return total, current, all_nodes
 

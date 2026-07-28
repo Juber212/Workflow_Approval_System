@@ -35,3 +35,9 @@ class ChangePasswordRequest(BaseModel):
     """用户修改自己的密码"""
     old_password: str = Field(..., min_length=1, description="原密码")
     new_password: str = Field(..., min_length=6, max_length=32, description="新密码（6-32位）")
+
+
+class UpdateProfileRequest(BaseModel):
+    """用户更新个人资料（邮箱/手机号）"""
+    email: str | None = Field(None, max_length=120, description="邮箱地址")
+    phone: str | None = Field(None, max_length=20, description="手机号")

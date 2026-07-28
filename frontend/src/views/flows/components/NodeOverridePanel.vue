@@ -116,38 +116,6 @@
             </div>
           </div>
 
-          <!-- 签名位置（至少一个开关开启时显示） -->
-          <template v-if="
-            (getOverride(node.id, 'require_assignee_signature') ?? node.require_assignee_signature ?? true) ||
-            (getOverride(node.id, 'require_checker_signature') ?? node.require_checker_signature ?? true) ||
-            (getOverride(node.id, 'require_approver_signature') ?? node.require_approver_signature ?? true)
-          ">
-            <div class="override-row">
-              <label class="override-label">签名X坐标</label>
-              <el-input-number
-                :model-value="getOverride(node.id, 'signature_x') ?? node.signature_x ?? 400"
-                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_x', v)"
-                :min="0" :max="800" style="width: 200px"
-              />
-            </div>
-            <div class="override-row">
-              <label class="override-label">签名Y坐标</label>
-              <el-input-number
-                :model-value="getOverride(node.id, 'signature_y') ?? node.signature_y ?? 100"
-                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_y', v)"
-                :min="0" :max="800" style="width: 200px"
-              />
-            </div>
-            <div class="override-row">
-              <label class="override-label">签名页码</label>
-              <el-input-number
-                :model-value="getOverride(node.id, 'signature_page') ?? node.signature_page ?? -1"
-                @update:model-value="(v: number | undefined) => setOverride(node.id, 'signature_page', v)"
-                :min="-1" :max="100" style="width: 200px"
-              />
-            </div>
-          </template>
-
           <!-- 重置按钮 -->
           <div class="override-row">
             <el-button text type="warning" size="small" @click="resetNode(node.id)">

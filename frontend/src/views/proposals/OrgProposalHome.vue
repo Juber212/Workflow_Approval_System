@@ -262,6 +262,6 @@ function resetForm() {
 .filter-label { display: inline-block; min-width: 3em; }
 .filter-count { opacity: 0.7; }
 .inst-name { font-weight: 500; color: var(--el-text-color-primary); }
-.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
+.list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
 </style>

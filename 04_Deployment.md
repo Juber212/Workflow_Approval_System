@@ -174,15 +174,14 @@ INSERT INTO roles (name, code, description) VALUES
   ('普通用户', 'user', '流程执行者与审批参与者');
 
 -- 预置系统配置（可选，不配则使用代码默认值）
-INSERT INTO system_configs (config_key, config_value, config_type, description) VALUES
-  ('max_file_size_mb', '50', 'int', '文件上传大小限制（MB）'),
-  ('access_token_expire_minutes', '480', 'int', 'Token 过期时间（分钟）'),
-  ('pdf_signature_x', '400', 'float', '签名默认 X 坐标'),
-  ('pdf_signature_y', '100', 'float', '签名默认 Y 坐标'),
-  ('pdf_signature_offset', '150', 'int', '多签名 X 偏移量'),
-  ('pdf_signature_page', '-1', 'int', '签名默认页码（-1=最后一页）'),
-  ('pdf_signature_max_width', '100', 'int', '签名最大宽度'),
-  ('pdf_signature_max_height', '26', 'int', '签名最大高度');
+INSERT INTO system_configs (config_key, config_value, description) VALUES
+  ('max_file_size_mb', '50', '文件上传大小限制（MB）'),
+  ('access_token_expire_minutes', '480', 'Token 过期时间（分钟）'),
+  ('pdf_signature_x', '400', '签名默认 X 坐标'),
+  ('pdf_signature_y', '100', '签名默认 Y 坐标'),
+  ('pdf_signature_offset', '150', '多签名 X 偏移量'),
+  ('pdf_signature_max_width', '100', '签名最大宽度'),
+  ('pdf_signature_max_height', '26', '签名最大高度');
 ```
 
 ---

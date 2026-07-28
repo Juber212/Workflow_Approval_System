@@ -31,7 +31,7 @@
     </div>
 
     <!-- ==================== 个人信息弹窗 ==================== -->
-    <el-dialog v-model="showUserInfoDialog" title="个人信息" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="showUserInfoDialog" title="个人信息" width="560px" :close-on-click-modal="false" @close="cancelEditProfile">
       <div class="user-info-panel" v-if="userStore.userInfo">
         <el-descriptions :column="2" border size="default">
           <el-descriptions-item label="用户名">{{ userStore.userInfo.username }}</el-descriptions-item>
@@ -42,9 +42,27 @@
               {{ roleTagLabel(r) }}
             </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item label="邮箱">{{ userStore.userInfo.email || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="手机号">{{ userStore.userInfo.phone || '-' }}</el-descriptions-item>
+          <!-- 邮箱：只读 / 编辑 -->
+          <el-descriptions-item label="邮箱">
+            <template v-if="editingProfile">
+              <el-input v-model="profileForm.email" placeholder="请输入邮箱" maxlength="120" size="small" />
+            </template>
+            <template v-else>{{ userStore.userInfo.email || '-' }}</template>
+          </el-descriptions-item>
+          <!-- 手机号：只读 / 编辑 -->
+          <el-descriptions-item label="手机号">
+            <template v-if="editingProfile">
+              <el-input v-model="profileForm.phone" placeholder="请输入手机号" maxlength="20" size="small" />
+            </template>
+            <template v-else>{{ userStore.userInfo.phone || '-' }}</template>
+          </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 编辑模式：保存/取消 -->
+        <div v-if="editingProfile" class="profile-edit-actions">
+          <el-button size="small" @click="cancelEditProfile">取消</el-button>
+          <el-button type="primary" size="small" :loading="savingProfile" @click="saveProfile">保存</el-button>
+        </div>
 
         <el-divider />
         <div class="signature-section">
@@ -64,6 +82,14 @@
           </el-upload>
         </div>
       </div>
+
+      <template #footer>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <el-button text type="primary" size="small" @click="startEditProfile" v-if="!editingProfile">编辑资料</el-button>
+          <span v-else></span>
+          <el-button @click="showUserInfoDialog = false">关闭</el-button>
+        </div>
+      </template>
     </el-dialog>
 
     <!-- ==================== 修改密码弹窗 ==================== -->
@@ -82,7 +108,7 @@ import { useNotificationStore } from '@/stores/notification'
 import NotificationBell from '@/components/NotificationBell.vue'
 import SidebarNav from '@/layouts/components/SidebarNav.vue'
 import ChangePasswordDialog from '@/layouts/components/ChangePasswordDialog.vue'
-import { getMeApi, uploadSignatureApi, toUserInfo } from '@/api/auth'
+import { getMeApi, uploadSignatureApi, toUserInfo, updateProfileApi } from '@/api/auth'
 import { fetchSummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
@@ -131,6 +157,38 @@ const userInfoDetail = ref<{
   organization_id: number | null; organization_name: string | null
   has_signature: boolean
 } | null>(null)
+const editingProfile = ref(false)
+const savingProfile = ref(false)
+const profileForm = ref({ email: '', phone: '' })
+/** 进入编辑模式 —— 复制当前值到表单 */
+function startEditProfile() {
+  profileForm.value = {
+    email: userStore.userInfo?.email ?? '',
+    phone: userStore.userInfo?.phone ?? '',
+  }
+  editingProfile.value = true
+}
+/** 取消编辑 */
+function cancelEditProfile() {
+  editingProfile.value = false
+}
+/** 保存个人资料 */
+async function saveProfile() {
+  savingProfile.value = true
+  try {
+    await updateProfileApi({
+      email: profileForm.value.email.trim() || undefined,
+      phone: profileForm.value.phone.trim() || undefined,
+    })
+    ElMessage.success('个人信息已更新')
+    await refreshUserInfoDetail()
+    cancelEditProfile()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    savingProfile.value = false
+  }
+}
 const uploadingSignature = ref(false)
 const signatureBlobUrl = ref('')
 
@@ -303,6 +361,10 @@ async function handleSignatureUpload(file: File): Promise<boolean> {
 
 /* ==================== 弹窗内复用样式 ==================== */
 .user-info-panel { /* 容器 */ }
+
+.profile-edit-actions {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px;
+}
 
 .signature-section {
   &__title { font-size: 14px; font-weight: 600; margin: 0 0 4px; color: var(--el-text-color-primary); }

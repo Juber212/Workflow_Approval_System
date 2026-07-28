@@ -1,5 +1,6 @@
 """删除实例服务"""
 
+import logging
 import os
 
 from sqlalchemy import select, delete as sql_delete
@@ -8,13 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+from app.services.file_service import batch_delete_files_with_physical
 from app.models import (
     FlowInstance, InstanceNode, InstanceEdge,
     OperationLog,
     Task, CheckRecord, Approval, Endorsement, File,
 )
-from datetime import date as date_type
 
+logger = logging.getLogger(__name__)
 
 
 async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
@@ -57,14 +59,8 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     # 3. 删除文件（先DB后物理文件，避免事务回滚后物理文件丢失）
     files_result = await db.execute(select(File).where(File.instance_id == instance_id))
     files = files_result.scalars().all()
-    for f in files:
-        await db.delete(f)
-        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-        try:
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
-        except OSError:
-            pass
+    if files:
+        await batch_delete_files_with_physical(db, list(files))
 
     # 4. 删除任务
     if task_ids:
@@ -90,6 +86,7 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     try:
         if os.path.isdir(instance_dir):
             shutil.rmtree(instance_dir)
-    except OSError:
+    except OSError as e:
+        logger.warning(f"文件操作失败: {e}", exc_info=True)
         pass  # 目录不存在或权限问题，忽略
 

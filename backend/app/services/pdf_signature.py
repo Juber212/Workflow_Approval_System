@@ -111,6 +111,62 @@ async def get_role_signature_defaults(db: AsyncSession, role: str) -> dict:
     }
 
 
+async def create_signature_records(
+    db: AsyncSession,
+    *,
+    role_type: str,
+    source_id: int,
+    node_id: int,
+    signatures: list[dict],
+    default_signature_x: int = 400,
+    default_signature_y: int = 100,
+    default_signature_page: int = -1,
+    default_date_font_size: int = 14,
+) -> list[int]:
+    """统一创建签名记录 —— 消除 approval/check/endorse/task 4 个 Service 中的重复代码
+
+    Args:
+        db: 数据库会话
+        role_type: 签名角色 "assignee" / "checker" / "approver" / "endorser"
+        source_id: 关联记录 ID（approval_id / check_id / endorsement_id / task_id）
+        node_id: 节点 ID
+        signatures: 签名数据列表 [{file_id, signature_x?, signature_y?, ...}]
+        default_signature_x/y/page: 未指定时的默认值
+        default_date_font_size: 默认日期字体大小
+
+    Returns:
+        新创建的签名记录 ID 列表
+    """
+    from app.models import Signature
+
+    sig_records: list[Signature] = []  # 先保存对象引用，等 flush 后再取 ID
+    for idx, sig in enumerate(signatures):
+        sig_record = Signature(
+            file_id=sig["file_id"],
+            signer_id=sig.get("signer_id", 0),  # 调用方应传入
+            role_type=role_type,
+            source_id=source_id,
+            node_id=node_id,
+            signature_x=sig.get("signature_x", default_signature_x),
+            signature_y=sig.get("signature_y", default_signature_y),
+            signature_page=sig.get("signature_page", default_signature_page),
+            signature_width=sig.get("signature_width"),
+            signature_height=sig.get("signature_height"),
+            sign_date=sig.get("sign_date"),
+            show_date=sig.get("show_date", True),
+            date_x=sig.get("date_x"),
+            date_y=sig.get("date_y"),
+            date_font_size=sig.get("date_font_size", default_date_font_size),
+            applied=False,
+            sort_order=idx,
+        )
+        db.add(sig_record)
+        sig_records.append(sig_record)
+    await db.flush()  # 批量 flush，减少 DB 往返
+    # flush 后 SQLAlchemy 自动回填自增 ID，此时取 ID 才是有效值
+    return [r.id for r in sig_records]
+
+
 async def apply_signatures_to_node_pdfs(
     db: AsyncSession,
     node_id: int,
@@ -643,7 +699,8 @@ def _insert_signatures(
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
-            except OSError:
+            except OSError as e:
+                logger.warning(f"文件操作失败: {e}", exc_info=True)
                 pass
         raise
 

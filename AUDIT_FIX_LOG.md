@@ -118,52 +118,6 @@
 
 ---
 
-## Phase 2 — 🟠 高优先级（2026-07-24）
-
-### #8: 文件上传魔数校验
-- **文件**: `backend/app/services/file_service.py`
-- **改前**: 仅校验客户端 Content-Type
-- **改后**: `filetype` 库检测魔数，未知类型退回到扩展名白名单
-- **验证**: pytest 57/57 ✅
-
-### #9: 列表端点组织隔离
-- **文件**: `instances.py`, `proposals.py`, `templates.py`
-- **改前**: 非管理员可跨组织查看所有数据
-- **改后**: 非管理员默认强制过滤为本组织
-- **验证**: pytest 57/57 ✅
-
-### #10: 同步 I/O 改异步
-- **文件**: `file_service.py`, `pdf_signature.py`
-- **改前**: `open().write()` 同步阻塞 + `_insert_signatures` 同步 PDF 处理
-- **改后**: `aiofiles` 异步写入 + `asyncio.to_thread()` 线程池
-- **验证**: pytest 57/57 ✅
-
-### #11: FlowInstance.template_type 代替子查询
-- **文件**: `approval_service.py`, `task_service.py`
-- **改前**: 双层子查询 `FlowInstance → FlowTemplate`
-- **改后**: 直接使用 `FlowInstance.template_type` 快照字段
-- **验证**: pytest 57/57 ✅
-
-### #12: approval_strategy 实现
-- **文件**: `approval_service.py`
-- **改前**: 字段存储但从未使用，硬编码 all_approve
-- **改后**: `single_approve` 一人通过即推进，`all_approve` 保持原逻辑
-- **验证**: pytest 57/57 ✅（含更新后的测试 mock）
-
-### #13: 连接池 pool_recycle
-- **文件**: `database.py`
-- **改前**: `pool_pre_ping=False` 且无回收机制
-- **改后**: `pool_recycle=3600`（1 小时回收）
-- **验证**: 配置项无需单元测试
-
-### #14: 文件路径解析统一
-- **文件**: 新建 `utils/file_utils.py` + 修改 4 处不一致拼接
-- **改前**: 4 种不同路径拼接实现
-- **改后**: 统一 `resolve_file_path()` + `is_safe_path()`
-- **验证**: pytest 57/57 ✅
-
----
-
 ## Phase 3 — 🟡 中优先级（2026-07-24）
 
 ### #15: 签名逐条 flush → 批量
@@ -217,3 +171,68 @@
   3. 移除 `watch(route.path)` —— WebSocket 已实时推送计数变更
   4. 限流阈值提升：DEFAULT 120→300/min，MEDIUM 30→60/min
 - **验证**: pytest 57/57 ✅ | vue-tsc 0 errors ✅
+
+---
+
+## Phase 4 — 架构审查修复（2026-07-28）
+
+> 第三轮全量代码审查，6 维度 × 3 模块（Service / API+Engine+Core / 前端），发现 38 项。
+> 审查范围：循环依赖、重复逻辑、事务边界、错误吞噬、硬编码/魔法数、死代码。
+
+### Service 层（第一组：C1/C2/H1/H9/M1/M2/M3/L1-L4）
+
+#### C2 — send_refresh_signal 静默吞异常
+- **文件**: `notification_service.py:224-229`
+- **严重程度**: 🔴 CRITICAL
+- **改前**: `except Exception: pass`，WebSocket 推送失败零日志
+- **改后**: `except Exception: logger.warning(...)`，记录 user_id 和完整 exc_info
+- **验证**: pytest 190/190 ✅
+
+#### L1 — 4 处无用 import 清理
+- **文件**: `validation_service.py`, `instance/supplement.py`, `instance/delete.py`, `instance/detail.py`
+- **严重程度**: 🟢 LOW
+- **改前**: `from typing import Optional` / `from datetime import date as date_type` 未使用
+- **改后**: 移除无用 import
+- **验证**: pytest 190/190 ✅
+
+#### L2 — _ALL_PLACEHOLDERS 死变量
+- **文件**: `document_service.py:49`
+- **严重程度**: 🟢 LOW
+- **改前**: `_ALL_PLACEHOLDERS = set(...)` 定义后从未引用
+- **改后**: 移除
+- **验证**: pytest 190/190 ✅
+
+#### M3 — 进度条计算逻辑重复 3 次
+- **文件**: `instance/_helpers.py`（新增 `compute_progress`）, `approval_service.py`, `check_service.py`, `task_service.py`
+- **严重程度**: 🟡 MEDIUM
+- **改前**: 三处相同的 `select(InstanceNode).where(...).order_by(...)` + `len()` + `sum(status=="finished")` 内联
+- **改后**: 统一调用 `compute_progress(db, instance_id)` → 返回 `(total, current, all_nodes)`
+- **验证**: pytest 190/190 ✅
+
+#### M2 — 8 处 bare `except OSError: pass` 加日志
+- **文件**: `pdf_signature.py`, `supplement.py`, `check_service.py`, `file_service.py`, `approval_service.py`, `instance/delete.py`
+- **严重程度**: 🟡 MEDIUM
+- **改前**: 文件操作失败静默吞掉，无任何日志
+- **改后**: `except OSError as e: logger.warning(f"文件操作失败: {e}", exc_info=True)`
+- **验证**: pytest 190/190 ✅
+
+#### H1+M1 — 文件删除分散重复 + 物理文件先删后 flush
+- **文件**: `file_service.py`（新增 `batch_delete_files_with_physical`）, `approval_service.py`, `check_service.py`, `endorsement_service.py`, `instance/terminate.py`, `instance/delete.py`
+- **严重程度**: 🟠 HIGH + 🟡 MEDIUM
+- **改前**: 8 处分散实现，部分先 `os.remove()` 后 `flush()`（事务失败→文件已删但DB记录回滚）
+- **改后**: 统一 `batch_delete_files_with_physical(db, files)` → 先批量 flush DB → 再删物理文件，防止孤儿引用
+- **验证**: pytest 190/190 ✅
+
+#### H9 — 签名记录创建逻辑重复 6 次
+- **文件**: `pdf_signature.py`（新增 `create_signature_records`）, `approval_service.py`, `check_service.py`, `endorsement_service.py`, `task_service.py`
+- **严重程度**: 🟠 HIGH
+- **改前**: 相同 16 行 Signature 创建代码在 4 个 Service 中重复 6 次（仅 role_type/source_id 不同）
+- **改后**: 统一调用 `create_signature_records(db, role_type=..., source_id=..., node_id=..., signatures=...)`
+- **验证**: pytest 190/190 ✅
+
+#### C1 — PDF 修改在 DB 事务内（已标注风险 + TODO）
+- **文件**: `approval_service.py`, `check_service.py`, `endorsement_service.py`, `task_service.py`
+- **严重程度**: 🔴 CRITICAL（已缓解）
+- **改前**: `apply_signatures_to_files()` 在事务内调用，commit 失败回滚时 PDF 已修改
+- **改后**: 在 4 处调用点添加 ⚠️ 警告注释，标注风险与缓解措施（`Signature.applied` 标志由 DB 事务保护），并标记 TODO: 引入 arq post-commit hook 彻底解耦
+- **验证**: pytest 190/190 ✅

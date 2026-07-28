@@ -371,7 +371,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
 /* 难度等级 badge */
 .diff-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.diff--1 { color: #1e8449; background: #eafaf1; } &.diff--2 { color: #2471a3; background: #eaf2f8; } &.diff--3 { color: #b87333; background: #fef5e7; } &.diff--4 { color: #fff; background: var(--el-color-danger); } }
 
-.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
+.list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
 
 /* 高级搜索面板（独立于表格工具栏，折叠展开） */

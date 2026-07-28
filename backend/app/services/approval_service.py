@@ -1,15 +1,16 @@
 """审批服务 —— 审批列表、详情、通过（含签名）、退回、终审总驳回"""
-import os
+import logging
 from datetime import datetime
 
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
-from app.services.pdf_signature import get_role_signature_defaults
+from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
+from app.services.instance._helpers import compute_progress
+from app.services.file_service import batch_delete_files_with_physical
 from app.models import (
     Approval,
     Task,
@@ -34,6 +35,8 @@ from app.models.enums import (
 from app.schemas.common import PaginatedData
 from app.schemas.approval import ApprovalListItem, ApprovalDetail
 from app.engine.flow_engine import propagate_from_node
+
+logger = logging.getLogger(__name__)
 
 
 async def list_approvals(
@@ -134,17 +137,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     initiator = users_map.get(inst.initiator_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
-    all_nodes_result = await db.execute(
-        select(InstanceNode)
-        .where(InstanceNode.instance_id == a.instance_id)
-        .order_by(InstanceNode.sort_order)
-    )
-    all_nodes = all_nodes_result.scalars().all()
-    total_nodes = len(all_nodes)
-    current_node_index = sum(
-        1 for n in all_nodes
-        if (n.status or "").lower() == "finished"
-    )
+    total_nodes, current_node_index, all_nodes = await compute_progress(db, a.instance_id)
 
     # 文件（终审节点查看流程全部文件，普通节点只看本节点文件）
     if node.is_end:
@@ -355,29 +348,16 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     # 新版：多签名存入 signatures 表（暂不写 PDF，等全部审批通过后批量写入）
     sig_ids: list[int] = []
     if signatures:
-        for idx, sig in enumerate(signatures):
-            sig_record = Signature(
-                file_id=sig["file_id"],
-                signer_id=current_user_id,
-                role_type="approver",
-                source_id=approval_id,
-                node_id=a.node_id,
-                signature_x=sig.get("signature_x", 400),
-                signature_y=sig.get("signature_y", 100),
-                signature_page=sig.get("signature_page", -1),
-                signature_width=sig.get("signature_width"),
-                signature_height=sig.get("signature_height"),
-                sign_date=sig.get("sign_date"),
-                show_date=sig.get("show_date", True),
-                date_x=sig.get("date_x"),
-                date_y=sig.get("date_y"),
-                date_font_size=sig.get("date_font_size", 14),
-                applied=False,
-                sort_order=idx,
-            )
-            db.add(sig_record)
-            sig_ids.append(sig_record.id)
-        await db.flush()  # 批量 flush，减少 DB 往返
+        # 设置 signer_id 后再调用统一 helper
+        for sig in signatures:
+            sig["signer_id"] = current_user_id
+        sig_ids = await create_signature_records(
+            db,
+            role_type="approver",
+            source_id=approval_id,
+            node_id=a.node_id,
+            signatures=signatures,
+        )
     # 兼容旧版：无 signatures 但有单签名位置参数 → 自动生成一条签名记录
     elif signature_x is not None or signature_y is not None or signature_page is not None:
         # 获取审批人的签名位置（旧版模式下，默认签在节点第一个 PDF 上）
@@ -467,6 +447,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         )
         pending_sigs = pending_sigs_result.scalars().all()
         if pending_sigs:
+            # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
+            # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
+            # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
             from app.services.pdf_signature import apply_signatures_to_files
             await apply_signatures_to_files(db, [s.id for s in pending_sigs])
 
@@ -601,18 +584,12 @@ async def reject(
         target_node.arrived_count = 0
 
         # 删除目标节点当前文件（先DB后物理文件，避免事务回滚后物理文件丢失）
-        target_files = await db.execute(
+        target_files_result = await db.execute(
             select(File).where(File.node_id == target_node_id)
         )
-        for f in target_files.scalars().all():
-            abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-            await db.delete(f)
-            try:
-                if os.path.exists(abs_path):
-                    os.remove(abs_path)
-            except OSError as e:
-                logger = __import__('logging').getLogger(__name__)
-                logger.warning(f"[审批退回] 物理文件删除失败: {abs_path}, err={e}")
+        target_files = target_files_result.scalars().all()
+        if target_files:
+            await batch_delete_files_with_physical(db, list(target_files))
 
         # 生成新 Task
         if target_node.assignee_id:
@@ -634,15 +611,10 @@ async def reject(
         )
         for dn in downstream_result.scalars().all():
             # 删除下游节点文件（先DB后物理文件）
-            dn_files = await db.execute(select(File).where(File.node_id == dn.id))
-            for f in dn_files.scalars().all():
-                abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-                await db.delete(f)
-                try:
-                    if os.path.exists(abs_path):
-                        os.remove(abs_path)
-                except OSError:
-                    pass
+            dn_files_result = await db.execute(select(File).where(File.node_id == dn.id))
+            dn_files = dn_files_result.scalars().all()
+            if dn_files:
+                await batch_delete_files_with_physical(db, list(dn_files))
             # 终止下游节点未完成的 Task
             await db.execute(
                 update(Task).where(
@@ -725,17 +697,12 @@ async def reject(
         )
 
         # 删除当前轮文件（先DB后物理文件）
-        curr_files = await db.execute(
+        curr_files_result = await db.execute(
             select(File).where(File.node_id == a.node_id, File.round == node.round)
         )
-        for f in curr_files.scalars().all():
-            abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-            await db.delete(f)
-            try:
-                if os.path.exists(abs_path):
-                    os.remove(abs_path)
-            except OSError:
-                pass
+        curr_files = curr_files_result.scalars().all()
+        if curr_files:
+            await batch_delete_files_with_physical(db, list(curr_files))
 
         # Node → running, Task → processing，轮次 +1
         node.status = InstanceNodeStatus.RUNNING

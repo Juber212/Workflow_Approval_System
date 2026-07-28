@@ -1,6 +1,6 @@
 """项目 API —— 发起、查询、终止、换人、优先级、补交文件"""
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile
+from fastapi import APIRouter, Depends, Query, UploadFile, File as FastAPIFile, Form
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -266,6 +266,7 @@ async def supplement_instance_files(
     instance_id: int,
     node_id: int,
     files: list[UploadFile] = FastAPIFile(...),
+    folder_name: str | None = Form(None, description="补交文件所属文件夹名称（节点有文件分类时必填）"),
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -276,7 +277,7 @@ async def supplement_instance_files(
     文件支持：Word/Excel/图片/PDF，单文件 ≤50MB。
     不触发审批/校验/签名。
     """
-    result = await supplement_files(db, instance_id, node_id, files, current_user)
+    result = await supplement_files(db, instance_id, node_id, files, current_user, folder_name)
     await db.commit()
     return ApiResponse.ok(result, message="文件补交成功")
 

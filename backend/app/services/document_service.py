@@ -41,10 +41,9 @@ _VAR_MAP: dict[str, tuple[str, str]] = {
     "所属部门": ("org.name", "str"),
     "当前负责人": ("assignee.real_name", "str"),
     "当前日期": ("today", "date"),
+    "难度": ("instance.difficulty", "difficulty"),
+    "截止日期": ("node.deadline", "date"),
 }
-
-# 收集所有合法的占位符 key
-_ALL_PLACEHOLDERS = set(f"{{{{{k}}}}}" for k in _VAR_MAP.keys())
 
 
 async def resolve_template_variables(
@@ -108,7 +107,7 @@ async def resolve_template_variables(
 
     # 3. 解析每个变量
     result: dict[str, str] = {}
-    today_str = date.today().strftime("%Y-%m-%d")
+    today_str = date.today().strftime("%Y年%m月%d日")
 
     for var_name, (field_path, field_type) in _VAR_MAP.items():
         placeholder = f"{{{{{var_name}}}}}"
@@ -138,11 +137,14 @@ async def resolve_template_variables(
         if value is None:
             result[placeholder] = ""
         elif field_type == "date":
-            # 日期类型格式化为 YYYY-MM-DD
+            # 日期类型格式化为 YYYY年MM月DD日
             if hasattr(value, "strftime"):
-                result[placeholder] = value.strftime("%Y-%m-%d")
+                result[placeholder] = value.strftime("%Y年%m月%d日")
             else:
                 result[placeholder] = str(value)[:10]
+        elif field_type == "difficulty":
+            # 难度等级 → "1级" / "2级" / "3级" / "4级"
+            result[placeholder] = f"{value}级" if value else ""
         else:
             result[placeholder] = str(value)
 

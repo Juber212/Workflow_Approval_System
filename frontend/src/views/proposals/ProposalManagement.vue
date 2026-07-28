@@ -329,6 +329,6 @@ async function handlePermanentDelete(row: ProposalListItem) {
   flex-wrap: wrap;
 }
 
-.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
+.list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
 </style>

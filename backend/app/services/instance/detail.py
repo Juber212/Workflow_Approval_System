@@ -19,7 +19,6 @@ from app.schemas.instance import (
     ApprovalBrief,
     LogItemBrief,
 )
-from datetime import date as date_type
 
 
 

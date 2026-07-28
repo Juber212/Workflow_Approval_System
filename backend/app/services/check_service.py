@@ -1,12 +1,11 @@
 """校验服务 —— 校验列表、详情、通过、退回"""
 import asyncio
-import os
+import logging
 from datetime import datetime
 
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import (
@@ -24,7 +23,11 @@ from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, Approv
 from app.schemas.common import PaginatedData
 from app.schemas.check import CheckListItem, CheckDetail
 from app.services.notification_service import create_notification, clear_related
-from app.services.pdf_signature import get_role_signature_defaults
+from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
+from app.services.instance._helpers import compute_progress
+from app.services.file_service import batch_delete_files_with_physical
+
+logger = logging.getLogger(__name__)
 
 
 async def list_checks(
@@ -131,17 +134,7 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     submitter = users_map.get(task.assignee_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
-    all_nodes_result = await db.execute(
-        select(InstanceNode)
-        .where(InstanceNode.instance_id == c.instance_id)
-        .order_by(InstanceNode.sort_order)
-    )
-    all_nodes = all_nodes_result.scalars().all()
-    total_nodes = len(all_nodes)
-    current_node_index = sum(
-        1 for n in all_nodes
-        if (n.status or "").lower() == "finished"
-    )
+    total_nodes, current_node_index, all_nodes = await compute_progress(db, c.instance_id)
 
     # 文件
     files_result = await db.execute(
@@ -266,29 +259,16 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     # 保存签名记录到 signatures 表（暂不写 PDF，等全部校验通过后批量写入）
     sig_ids: list[int] = []
     if signatures:
-        for idx, sig in enumerate(signatures):
-            sig_record = Signature(
-                file_id=sig["file_id"],
-                signer_id=current_user_id,
-                role_type="checker",
-                source_id=check_id,
-                node_id=c.node_id,
-                signature_x=sig.get("signature_x", 400),
-                signature_y=sig.get("signature_y", 100),
-                signature_page=sig.get("signature_page", -1),
-                signature_width=sig.get("signature_width"),
-                signature_height=sig.get("signature_height"),
-                sign_date=sig.get("sign_date"),
-                show_date=sig.get("show_date", True),
-                date_x=sig.get("date_x"),
-                date_y=sig.get("date_y"),
-                date_font_size=sig.get("date_font_size", 14),
-                applied=False,  # 等全部校验通过后批量写入
-                sort_order=idx,
-            )
-            db.add(sig_record)
-            sig_ids.append(sig_record.id)
-        await db.flush()  # 批量 flush，减少 DB 往返
+        # 设置 signer_id 后再调用统一 helper
+        for sig in signatures:
+            sig["signer_id"] = current_user_id
+        sig_ids = await create_signature_records(
+            db,
+            role_type="checker",
+            source_id=check_id,
+            node_id=c.node_id,
+            signatures=signatures,
+        )
 
     # 记录操作日志
     log = OperationLog(
@@ -328,6 +308,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             )
             all_checker_sigs = all_checker_sigs_result.scalars().all()
             if all_checker_sigs:
+                # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
+                # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
+                # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
                 from app.services.pdf_signature import apply_signatures_to_files
                 await apply_signatures_to_files(db, [s.id for s in all_checker_sigs])
 
@@ -434,14 +417,8 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         select(File).where(File.task_id == c.task_id, File.round == node.round)
     )).scalars().all()
     # 先DB后物理文件（避免事务回滚后物理文件已丢失）
-    for f in files:
-        abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-        await db.delete(f)
-        try:
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
-        except OSError:
-            pass
+    if files:
+        await batch_delete_files_with_physical(db, list(files))
 
     # Task → processing，Node → running，轮次 +1
     task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()

@@ -25,11 +25,15 @@ ORGS = [
 
 # 预置系统配置
 CONFIGS = [
+    # ── 文件上传 ──
     {"config_key": "allowed_file_extensions", "config_value": ".doc,.docx,.xls,.xlsx,.pdf,.png,.jpg,.jpeg", "description": "允许上传的文件扩展名"},
     {"config_key": "max_file_size_mb", "config_value": "50", "description": "上传文件大小限制(MB)"},
-    {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名X坐标"},
-    {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名Y坐标"},
-    {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
+    # ── PDF 签名通用 ──
+    {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名默认X坐标"},
+    {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名默认Y坐标"},
+    {"config_key": "pdf_signature_offset", "config_value": "150", "description": "多签名X偏移量（同页多人签名时的水平间距）"},
+    {"config_key": "pdf_signature_max_width", "config_value": "100", "description": "签名图片最大宽度(px)"},
+    {"config_key": "pdf_signature_max_height", "config_value": "26", "description": "签名图片最大高度(px)"},
     # ── 角色维度签名默认位置 ──
     {"config_key": "pdf_signature_assignee_x", "config_value": "400", "description": "负责人签名默认X坐标"},
     {"config_key": "pdf_signature_assignee_y", "config_value": "100", "description": "负责人签名默认Y坐标"},
@@ -39,6 +43,8 @@ CONFIGS = [
     {"config_key": "pdf_signature_approver_y", "config_value": "100", "description": "审批人签名默认Y坐标"},
     {"config_key": "pdf_signature_endorser_x", "config_value": "400", "description": "批准人签名默认X坐标"},
     {"config_key": "pdf_signature_endorser_y", "config_value": "100", "description": "批准人签名默认Y坐标"},
+    # ── 通用 ──
+    {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
 ]
 
 # 默认管理员密码从环境变量读取，未设置则拒绝运行

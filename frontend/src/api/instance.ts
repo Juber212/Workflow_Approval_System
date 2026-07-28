@@ -348,9 +348,11 @@ export async function supplementFiles(
   instanceId: number,
   nodeId: number,
   files: File[],
+  folderName?: string,
 ): Promise<{ files: NodeFileBrief[] }> {
   const form = new FormData()
   files.forEach(f => form.append('files', f))
+  if (folderName) form.append('folder_name', folderName)
   const res = await request.post(
     `/instances/${instanceId}/nodes/${nodeId}/supplement-files`,
     form,

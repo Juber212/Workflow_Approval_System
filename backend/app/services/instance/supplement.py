@@ -1,5 +1,6 @@
 """补交文件服务"""
 
+import logging
 import os
 import uuid
 
@@ -22,8 +23,8 @@ from app.schemas.instance import (
     SupplementFileResponse,
 )
 from app.api.deps import CurrentUser
-from datetime import date as date_type
 
+logger = logging.getLogger(__name__)
 
 
 async def supplement_files(
@@ -32,6 +33,7 @@ async def supplement_files(
     node_id: int,
     files: list[UploadFile],
     current_user: CurrentUser,
+    folder_name: str | None = None,
 ) -> dict:
     """补交文件到已完成实例的已完成节点
 
@@ -128,6 +130,7 @@ async def supplement_files(
             round=node.round,  # 使用节点完成时的轮次
             uploader_id=current_user.id,
             upload_type=UploadType.SUPPLEMENT,
+            folder_name=folder_name,  # 补交文件所属文件夹（有分类的节点必选）
             original_name=upload_file_obj.filename or "unknown",
             stored_name=stored_name,
             file_path=os.path.join(archive_subdir, instance.name, stored_name),
@@ -148,7 +151,8 @@ async def supplement_files(
             if os.path.exists(wf):
                 try:
                     os.remove(wf)
-                except OSError:
+                except OSError as e:
+                    logger.warning(f"文件操作失败: {e}", exc_info=True)
                     pass
         raise
 

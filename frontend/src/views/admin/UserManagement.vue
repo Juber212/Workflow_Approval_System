@@ -2,26 +2,30 @@
   <div class="user-management">
     <!-- 搜索栏 -->
     <div class="search-bar">
-      <el-form :inline="true" :model="query" @submit.prevent="handleSearch">
-        <el-form-item label="关键词">
-          <el-input v-model="query.keyword" placeholder="用户名/姓名" clearable @clear="handleSearch" />
-        </el-form-item>
-        <el-form-item label="组织">
-          <el-select v-model="query.organization_id" placeholder="全部" clearable style="width: 160px" @change="handleSearch">
-            <el-option v-for="org in orgOptions" :key="org.id" :label="org.name" :value="org.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.is_active" placeholder="全部" clearable style="width: 120px" @change="handleSearch">
-            <el-option label="启用" :value="true" />
-            <el-option label="禁用" :value="false" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button type="success" @click="openCreate">新增用户</el-button>
-        </el-form-item>
-      </el-form>
+      <div class="search-bar__filters">
+        <el-form :inline="true" :model="query" @submit.prevent="handleSearch" style="margin-bottom:0">
+          <el-form-item label="关键词">
+            <el-input v-model="query.keyword" placeholder="用户名/姓名" clearable @clear="handleSearch" />
+          </el-form-item>
+          <el-form-item label="组织">
+            <el-select v-model="query.organization_id" placeholder="全部" clearable style="width: 160px" @change="handleSearch">
+              <el-option v-for="org in orgOptions" :key="org.id" :label="org.name" :value="org.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="query.is_active" placeholder="全部" clearable style="width: 120px" @change="handleSearch">
+              <el-option label="启用" :value="true" />
+              <el-option label="禁用" :value="false" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">搜索</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+      <div class="search-bar__actions">
+        <el-button type="success" @click="openCreate">新增用户</el-button>
+      </div>
     </div>
 
     <!-- 用户列表 -->
@@ -273,8 +277,12 @@ async function handleResetPwdSubmit(password: string) {
 .user-management {
   .search-bar {
     display: flex;
-    justify-content: center;
-    margin-bottom: 16px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+
+    :deep(.el-form),
+    :deep(.el-form-item) { margin-bottom: 0; }
   }
 
   .table-section {

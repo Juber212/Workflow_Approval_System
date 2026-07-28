@@ -51,6 +51,11 @@ export async function changePasswordApi(data: { old_password: string; new_passwo
   await request.put('/auth/password', data)
 }
 
+/** 更新个人资料（邮箱/手机号） */
+export async function updateProfileApi(data: { email?: string; phone?: string }): Promise<void> {
+  await request.put('/auth/profile', data)
+}
+
 /** 上传签名图片（multipart/form-data） */
 export async function uploadSignatureApi(file: File): Promise<{ signature_url: string }> {
   const form = new FormData()

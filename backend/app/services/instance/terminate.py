@@ -1,17 +1,16 @@
 """终止项目服务"""
 
-import os
 from datetime import datetime
 
 from ._helpers import _get_type_label
 
-from sqlalchemy import select, delete as sql_delete, update as sql_update
+from sqlalchemy import select, update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
+from app.services.file_service import batch_delete_files_with_physical
 from app.models import (
     FlowInstance, InstanceNode,
     OperationLog,
@@ -61,20 +60,9 @@ async def terminate_instance(
     file_result = await db.execute(file_stmt)
     files = file_result.scalars().all()
 
-    # 先删除文件记录（DB），再删物理文件（避免事务回滚后物理文件丢失）
+    # 批量删除 DB 记录 + 物理文件（先 flush DB 再删磁盘，防止事务回滚后磁盘文件丢失）
     if files:
-        await db.execute(sql_delete(File).where(File.instance_id == instance_id))
-
-    # 逐个物理删除磁盘文件（DB记录已删，物理删除失败不影响DB一致性）
-    for f in files:
-        if f.file_path:
-            full_path = resolve_file_path(f.file_path)
-            try:
-                if os.path.exists(full_path):
-                    os.remove(full_path)
-            except OSError:
-                # 文件不存在或无权删除，不阻断流程
-                pass
+        await batch_delete_files_with_physical(db, list(files))
 
     # ========== 5. 关闭非终态 instance_nodes ==========
     non_terminal_statuses = ["finished", "terminated"]

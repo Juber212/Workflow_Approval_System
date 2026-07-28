@@ -226,7 +226,7 @@ async def send_refresh_signal(user_id: int) -> None:
     try:
         await manager.send_to_user(user_id, {"type": "refresh_count"})
     except Exception:
-        pass
+        logger.warning(f"WebSocket 推送 refresh_count 失败: user_id={user_id}", exc_info=True)
 
 
 async def get_overdue_items(db: AsyncSession) -> dict:

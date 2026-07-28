@@ -949,6 +949,30 @@ body 为文件模板 ID 数组，全量替换关联。
 | PUT | `/notifications/{id}/read` | 用户 | 标记单条已读 |
 | PUT | `/notifications/read-all` | 用户 | 全部已读 |
 
+#### GET `/notifications/summary`
+
+响应（汇总 + 按项目/方案分类 breakdown）：
+```json
+{
+  "code": 20000,
+  "data": {
+    "task_count": 3,
+    "check_count": 1,
+    "approval_count": 2,
+    "endorsement_count": 0,
+    "project_pending": 5,
+    "proposal_pending": 1,
+    "project_task_count": 2,
+    "project_check_count": 1,
+    "project_approval_count": 2,
+    "project_endorsement_count": 0,
+    "proposal_task_count": 1,
+    "proposal_approval_count": 0,
+    "proposal_endorsement_count": 0
+  }
+}
+```
+
 #### GET `/notifications/unread-count`
 
 响应：

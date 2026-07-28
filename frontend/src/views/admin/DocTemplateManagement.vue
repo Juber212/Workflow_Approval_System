@@ -72,13 +72,14 @@
     </div>
 
     <!-- 可用变量提示 -->
-    <el-collapse style="margin-top:20px">
-      <el-collapse-item title="可用变量参考（供管理员制作模板时使用）">
-        <div class="var-tags">
-          <el-tag v-for="v in variables" :key="v" size="small" type="info" style="font-family:monospace;margin:2px 4px">{{ v }}</el-tag>
-        </div>
-      </el-collapse-item>
-    </el-collapse>
+    <el-card shadow="never" style="margin-top:20px">
+      <template #header>
+        <span>可用变量参考（供管理员制作模板时使用）</span>
+      </template>
+      <div class="var-tags">
+        <el-tag v-for="v in variables" :key="v" size="small" type="info" style="font-family:monospace;margin:2px 4px">{{ v }}</el-tag>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -108,7 +109,7 @@ const variables = [
   '{{项目名称}}', '{{项目描述}}', '{{合同号}}', '{{产品型号}}',
   '{{销售经理}}', '{{模板名称}}', '{{优先级}}', '{{当前节点}}',
   '{{发起人}}', '{{发起日期}}', '{{所属部门}}', '{{当前负责人}}',
-  '{{当前日期}}',
+  '{{当前日期}}', '{{难度}}', '{{截止日期}}',
 ]
 
 async function fetchList() {
@@ -178,6 +179,6 @@ onMounted(() => {
 <style lang="scss" scoped>
 .doc-tpl-admin {
   .filter-bar { display: flex; align-items: center; }
-  .pager-wrap { display: flex; justify-content: center; margin-top: 16px; }
+  .pager-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
 }
 </style>

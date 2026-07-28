@@ -54,7 +54,7 @@ class TestTerminateInstance:
         """正常终止 → 实例状态更新 + 文件删除 + 相关记录关闭"""
         mocker.patch("app.services.instance.terminate.create_notification", new=AsyncMock())
         mocker.patch("app.services.instance.terminate.clear_related", new=AsyncMock())
-        mocker.patch("app.services.instance.terminate.os.path.exists", return_value=False)
+        mocker.patch("app.services.instance.terminate.batch_delete_files_with_physical", new=AsyncMock())
         inst = make_instance(id=1, initiator_id=1, status="running")
 
         mock_db.execute = AsyncMock()

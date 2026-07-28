@@ -678,5 +678,5 @@ watch(propActiveTab, (tab) => {
 }
 
 /* 分页 */
-.list-pagination { display: flex; justify-content: center; margin-top: 16px; }
+.list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 </style>

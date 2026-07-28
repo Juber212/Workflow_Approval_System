@@ -17,7 +17,8 @@ from app.models import (
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
 from app.services.notification_service import create_notification, clear_related
-from app.services.pdf_signature import get_role_signature_defaults
+from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
+from app.services.file_service import batch_delete_files_with_physical
 
 logger = logging.getLogger(__name__)
 
@@ -254,28 +255,19 @@ async def endorse(
         e.signature_page = signature_page
 
     # 4. 保存签名记录
-    sig_ids = []
+    sig_ids: list[int] = []
     if signatures:
+        # 设置 signer_id 后再调用统一 helper
         for sig in signatures:
-            s = Signature(
-                file_id=sig.get("file_id"),
-                node_id=e.node_id,
-                role_type="endorser",
-                source_id=e.id,
-                signer_id=current_user_id,
-                signature_x=sig.get("signature_x", 400),
-                signature_y=sig.get("signature_y", 100),
-                signature_page=sig.get("signature_page", -1),
-                sign_date=sig.get("sign_date"),
-                show_date=sig.get("show_date", True),
-                date_x=sig.get("date_x"),
-                date_y=sig.get("date_y"),
-                date_font_size=sig.get("date_font_size", 14),
-            )
-            db.add(s)
-            sig_ids.append(s.id)
-        await db.flush()  # 批量 flush，减少 DB 往返
-    elif signature_x is not None:  # 旧版单签名兼容
+            sig["signer_id"] = current_user_id
+        sig_ids = await create_signature_records(
+            db,
+            role_type="endorser",
+            source_id=e.id,
+            node_id=e.node_id,
+            signatures=signatures,
+        )
+    elif signature_x is not None:  # 旧版单签名兼容（file_id=None 场景）
         s = Signature(
             file_id=None,
             node_id=e.node_id,
@@ -316,6 +308,9 @@ async def endorse(
 
     # 7. 签名上PDF
     if node.require_endorser_signature and sig_ids:
+        # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
+        # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
+        # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
         from app.services.pdf_signature import apply_signatures_to_files
         await apply_signatures_to_files(db, sig_ids)
 
@@ -413,10 +408,6 @@ async def endorse_reject(
     )
 
     # 6. 删除当前轮文件（DB + 物理文件）
-    from app.models import File
-    import os
-    from app.core.config import settings
-
     files_result = await db.execute(
         select(File).where(
             File.instance_id == e.instance_id,
@@ -425,17 +416,8 @@ async def endorse_reject(
         )
     )
     old_files = files_result.scalars().all()
-    for f in old_files:
-        await db.delete(f)
-    await db.flush()
-    # 物理文件删除
-    for f in old_files:
-        try:
-            abs_path = os.path.join(settings.STORAGE_ROOT, f.file_path) if not os.path.isabs(f.file_path) else f.file_path
-            if os.path.exists(abs_path):
-                os.remove(abs_path)
-        except OSError as exc:
-            logger.warning("删除旧文件失败: %s", exc)
+    if old_files:
+        await batch_delete_files_with_physical(db, list(old_files))
 
     # 7. 节点回到运行状态，round+1
     node.status = InstanceNodeStatus.RUNNING

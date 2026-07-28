@@ -305,19 +305,6 @@
           </div>
         </el-form-item>
 
-        <!-- 签名位置（至少一个开关开启时显示） -->
-        <template v-if="form.require_assignee_signature || form.require_checker_signature || form.require_approver_signature || form.require_endorser_signature">
-          <el-form-item label="签名X坐标">
-            <el-input-number v-model="form.signature_x" :min="0" :max="800" style="width:100%" @change="syncToNode" />
-          </el-form-item>
-          <el-form-item label="签名Y坐标">
-            <el-input-number v-model="form.signature_y" :min="0" :max="800" style="width:100%" @change="syncToNode" />
-          </el-form-item>
-          <el-form-item label="签名页码（-1=最后一页）">
-            <el-input-number v-model="form.signature_page" :min="-1" :max="100" style="width:100%" @change="syncToNode" />
-          </el-form-item>
-        </template>
-
       </el-form>
     </div>
   </div>
@@ -369,9 +356,6 @@ const form = reactive({
   endorser_id: undefined as number | undefined,
   endorser_name: '' as string,
   require_endorser_signature: true,
-  signature_x: 400,
-  signature_y: 100,
-  signature_page: -1,
 })
 
 /** 文件夹配置 */
@@ -471,9 +455,6 @@ function loadFromNode() {
   form.endorser_id = p.endorser_id ?? undefined
   form.endorser_name = p.endorser_name || ''
   form.require_endorser_signature = p.require_endorser_signature ?? true
-  form.signature_x = p.signature_x ?? 400
-  form.signature_y = p.signature_y ?? 100
-  form.signature_page = p.signature_page ?? -1
 
   // 发起模式：从预计算映射取 begin + deadline 填入日期范围
   const dbId = p.db_id
@@ -535,9 +516,6 @@ function syncToNode() {
     endorser_id: form.endorser_id ?? null,
     endorser_name: form.endorser_name || null,
     require_endorser_signature: form.require_endorser_signature,
-    signature_x: form.signature_x,
-    signature_y: form.signature_y,
-    signature_page: form.signature_page,
     // 发起模式下保存 deadline_range，后续 handleLaunch 会收集为 node_override
     ...(props.launchMode && form.deadlineRange?.length === 2 ? { deadline_range: form.deadlineRange } : {}),
   })
