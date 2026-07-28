@@ -15,6 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import InstanceNode, InstanceEdge, Task, FlowInstance, Approval
 from app.models.enums import InstanceNodeStatus, ApprovalStatus, TaskStatus
+# NOTE: engine 层直接依赖 services 层，形成隐式双向耦合（多个 Service 也 import engine）
+# 这是当前架构的已知权衡——通知创建与节点传播紧密耦合，强行解耦会增加不必要的抽象
+# 若未来引入循环引用，可考虑用事件回调或延迟导入重构
 from app.services.notification_service import create_notification
 
 

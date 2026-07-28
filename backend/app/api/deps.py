@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import decode_access_token
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
-from app.models import User, Role, UserRole
+from app.models import User, Role, UserRole, FlowTemplate
 
 
 class CurrentUser:
@@ -78,3 +78,29 @@ def require_same_org(current_user: CurrentUser, org_id: int) -> None:
     """要求当前用户属于指定组织，否则抛出 403（防止跨所操作）"""
     if current_user.organization_id != org_id:
         raise AppException(ErrorCode.FORBIDDEN, "不可跨所操作，仅本所所长可执行此操作")
+
+
+def resolve_org_scope(current_user: CurrentUser, organization_id: int | None) -> int | None:
+    """解析组织筛选范围：非管理员不传 org_id 时默认限制为本组织（防止跨所数据泄露）
+
+    用于 templates / instances / proposals 列表端点的 organization_id 参数处理。
+    """
+    if organization_id is None and not current_user.is_admin():
+        return current_user.organization_id
+    return organization_id
+
+
+async def check_template_ownership(db: AsyncSession, template_id: int, current_user: CurrentUser) -> int:
+    """校验模板存在 + 当前用户是本所所长 → 返回模板所属组织 ID
+
+    可用于 PUT/DELETE 模板端点及发起实例时的模板校验。
+    原为 designer.py 私有函数 _check_template_ownership，已提升为公共 helper。
+    """
+    require_manager(current_user)
+    org_id = (await db.execute(
+        select(FlowTemplate.organization_id).where(FlowTemplate.id == template_id)
+    )).scalar_one_or_none()
+    if org_id is None:
+        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+    require_same_org(current_user, org_id)
+    return org_id

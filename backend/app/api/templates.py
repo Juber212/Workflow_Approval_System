@@ -17,7 +17,7 @@ from app.services.template_service import (
     get_organization_summaries, list_templates, create_template,
     get_template_detail, update_template, delete_template,
 )
-from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org, require_admin
+from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org, require_admin, resolve_org_scope
 
 router = APIRouter(prefix="/api/v1", tags=["项目模板"])
 
@@ -54,9 +54,7 @@ async def get_templates(
     db: AsyncSession = Depends(get_db),
 ):
     """模板列表（非管理员默认只看本所模板）"""
-    # 组织隔离：非管理员默认只看本所数据
-    if organization_id is None and not current_user.is_admin():
-        organization_id = current_user.organization_id
+    organization_id = resolve_org_scope(current_user, organization_id)
 
     result = await list_templates(
         db, page=page, page_size=page_size,

@@ -1,12 +1,9 @@
 """预置数据种子脚本 —— 首次部署时执行，插入角色、示例组织、系统配置"""
 
 import asyncio
-import bcrypt
 from app.core.database import async_session_factory
+from app.core.security import hash_password
 from app.models import Role, Organization, SystemConfig, User, UserRole
-
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 # 预置角色
 ROLES = [

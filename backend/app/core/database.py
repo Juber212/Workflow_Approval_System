@@ -31,7 +31,13 @@ class Base(DeclarativeBase):
 
 
 async def get_db() -> AsyncSession:
-    """FastAPI 依赖注入：获取数据库会话"""
+    """FastAPI 依赖注入：获取数据库会话
+
+    NOTE: 此函数在 endpoint 成功返回后自动调用 commit()。
+    现有部分端点也显式调用 db.commit()（导致双重 commit，第二次为 no-op）。
+    理想模式是仅依赖 get_db 的自动提交，端点的显式 commit 应逐步移除。
+    在此之前，请确保 send_refresh_signal() 等 post-commit 回调在显式 commit 之后调用。
+    """
     async with async_session_factory() as session:
         try:
             yield session

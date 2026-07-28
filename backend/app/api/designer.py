@@ -17,16 +17,8 @@ from app.api.deps import get_current_active_user, CurrentUser, require_manager, 
 router = APIRouter(prefix="/api/v1", tags=["项目设计器"])
 
 
-async def _check_template_ownership(db: AsyncSession, template_id: int, current_user: CurrentUser) -> int:
-    """校验模板存在 + 当前用户是本所所长 → 返回模板所属组织 ID"""
-    require_manager(current_user)
-    org_id = (await db.execute(
-        select(FlowTemplate.organization_id).where(FlowTemplate.id == template_id)
-    )).scalar_one_or_none()
-    if org_id is None:
-        raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
-    require_same_org(current_user, org_id)
-    return org_id
+# _check_template_ownership 已提升为 deps.check_template_ownership，此处保留别名兼容旧代码
+from app.api.deps import check_template_ownership as _check_template_ownership
 
 
 @router.put("/templates/{template_id}/design")

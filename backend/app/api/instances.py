@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import FlowTemplate
-from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org
+from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org, resolve_org_scope
 from app.services.notification_service import send_refresh_signal
 from app.schemas.common import ApiResponse
 from app.schemas.instance import (
@@ -94,9 +94,7 @@ async def get_instances(
     if status:
         status_list = [s.strip() for s in status.split(",") if s.strip()]
 
-    # 组织隔离：非管理员默认只看本所数据
-    if organization_id is None and not current_user.is_admin():
-        organization_id = current_user.organization_id
+    organization_id = resolve_org_scope(current_user, organization_id)
 
     result = await list_instances(
         db,

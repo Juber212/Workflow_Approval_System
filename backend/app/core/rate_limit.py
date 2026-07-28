@@ -60,7 +60,7 @@ _window = _SlidingWindow()
 
 # ==================== 限流规则配置 ====================
 
-# 全局默认：120次/分钟（宽松档）
+# 全局默认：300次/分钟（宽松档，2026-07-24 从 120 提升以避免正常浏览误触限流）
 DEFAULT_LIMIT = 300
 
 # 严格规则：20次/分钟（登录用IP限流）
@@ -69,7 +69,7 @@ STRICT_RULES: list[tuple[str, str]] = [
     ("POST", "/api/v1/auth/login"),
 ]
 
-# 中等规则：30次/分钟（文件上传、发起/终止流程、提交任务）
+# 中等规则：60次/分钟（文件上传、发起/终止流程、提交任务，2026-07-24 从 30 提升）
 MEDIUM_LIMIT = 60
 MEDIUM_RULES: list[tuple[str, str] | Callable[[str, str], bool]] = [
     # 精确路径匹配
@@ -102,13 +102,15 @@ def _get_limit_key(request: Request) -> str:
         try:
             payload = decode_access_token(auth[7:])
             if payload:
+                if payload is None:
+                    raise ValueError("token decode returned None")
                 user_id = payload.get("sub", "unknown")
                 roles = payload.get("roles", [])
                 if "system_admin" in roles:
                     return f"admin:{uuid.uuid4()}"
                 return f"user:{user_id}"
-        except Exception:
-            pass  # JWT 解析失败 → 降级为 IP 限流
+        except (AttributeError, ValueError, KeyError):
+            pass  # JWT 解析失败 / payload 为 None / 缺少字段 → 降级为 IP 限流
 
     # 未认证：优先反向代理转发的真实 IP
     forwarded = request.headers.get("X-Forwarded-For", "")
