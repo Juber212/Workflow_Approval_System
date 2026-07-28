@@ -326,3 +326,30 @@
 - M10: 状态标签 CSS 6 文件重复 → 待统
 
 #### 验证: vue-tsc 0 errors ✅
+
+---
+
+## Phase 5 — EndorseDetail 批准处理页修复（2026-07-28）
+
+> 批准处理页（EndorseDetail.vue）校验进度和审批进度显示用户 ID 而非姓名，签批确认预览 PDF 识别不完善。
+
+### E1 — 校验进度/审批进度显示 ID 而非姓名
+- **文件**: `backend/app/services/endorsement_service.py` + `frontend/src/views/profile/EndorseDetail.vue` + `frontend/src/api/endorsement.ts`
+- **严重程度**: 🟠 HIGH
+- **改前**: 
+  - 后端 `get_endorsement_detail()` 返回 checks/approvals 只有 checker_id/approver_id，无姓名字段
+  - 前端直接显示 `校验人 ID:{{ c.checker_id }}` 和 `审批人 ID:{{ a.approver_id }}`
+- **改后**: 
+  - 后端批量查询 User 表补 checker_name/approver_name（与 approval_service 保持一致）
+  - 前端显示 `c.checker_name` 和 `a.approver_name`
+  - 前端类型补齐 checker_name/approver_name 字段
+- **影响**: 批准处理页校验/审批进度显示数字ID而非人名
+- **验证**: pytest 190/190 ✅ | vue-tsc 0 errors ✅
+
+### E2 — files 补齐 mime_type + PDF 识别优化
+- **文件**: `backend/app/services/endorsement_service.py` + `frontend/src/views/profile/EndorseDetail.vue`
+- **严重程度**: 🟡 MEDIUM
+- **改前**: 后端 files 不返回 mime_type；前端 pdfFiles 计算仅依赖文件名后缀
+- **改后**: 后端返回 mime_type；前端优先用 `mime_type === 'application/pdf'` 判断（与 ApprovalDetail 一致）
+- **影响**: 签批确认预览可能漏识别 PDF 文件
+- **验证**: vue-tsc 0 errors ✅

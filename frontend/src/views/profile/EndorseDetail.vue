@@ -85,7 +85,7 @@
         <div class="card__header">校验进度</div>
         <div class="card__body">
           <div v-for="c in detail.checks" :key="c.id" class="progress-row">
-            <span>校验人 ID:{{ c.checker_id }}</span>
+            <span>{{ c.checker_name }}</span>
             <span class="status-tag" :class="checkStatusClass(c.status)">{{ checkStatusLabel(c.status) }}</span>
             <span v-if="c.opinion" class="opinion">「{{ c.opinion }}」</span>
           </div>
@@ -97,7 +97,7 @@
         <div class="card__header">审批进度</div>
         <div class="card__body">
           <div v-for="a in detail.approvals" :key="a.id" class="progress-row">
-            <span>审批人 ID:{{ a.approver_id }}</span>
+            <span>{{ a.approver_name }}</span>
             <span class="status-tag" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
             <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
             <span v-if="a.opinion" class="opinion">「{{ a.opinion }}」</span>
@@ -169,11 +169,13 @@ const rejecting = ref(false)
 const showSignatureDialog = ref(false)
 const sigSlots = ref<SignatureSlot[] | null>(null)
 
-/** PDF 文件列表（供签批弹框使用） */
+/** PDF 文件列表（供签批弹框使用）
+
+优先用 mime_type 判断是否为 PDF，兜底用文件名后缀。 */
 const pdfFiles = computed(() => {
   if (!detail.value) return []
   return (detail.value.files as any[])
-    .filter(f => (f.original_name || '').toLowerCase().endsWith('.pdf'))
+    .filter(f => f.mime_type === 'application/pdf' || (f.original_name || '').toLowerCase().endsWith('.pdf'))
     .map(f => ({
       file_id: f.id,
       name: f.original_name || '',

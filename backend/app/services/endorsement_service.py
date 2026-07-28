@@ -145,6 +145,15 @@ async def get_endorsement_detail(
     )
     approvals = approvals_result.scalars().all()
 
+    # 批量查询校验人和审批人的真实姓名（与 approval_service 保持一致）
+    checker_ids = list(set(c.checker_id for c in checks))
+    approver_ids = list(set(a.approver_id for a in approvals))
+    name_user_ids = checker_ids + [uid for uid in approver_ids if uid not in checker_ids]
+    name_users_map: dict[int, User] = {}
+    if name_user_ids:
+        name_result = await db.execute(select(User).where(User.id.in_(name_user_ids)))
+        name_users_map = {u.id: u for u in name_result.scalars().all()}
+
     # 查询节点列表（进度链）
     nodes_result = await db.execute(
         select(InstanceNode).where(
@@ -197,12 +206,16 @@ async def get_endorsement_detail(
         "total_nodes": len(all_nodes),
         "nodes": [{"id": n.id, "name": n.name, "status": n.status, "is_start": n.is_start, "is_end": n.is_end}
                    for n in all_nodes],
-        "files": [{"id": f.id, "original_name": f.original_name, "file_size": f.file_size,
-                    "round": f.round} for f in files],
-        "checks": [{"id": c.id, "checker_id": c.checker_id, "status": c.status,
-                     "opinion": c.opinion, "decided_at": c.decided_at} for c in checks],
-        "approvals": [{"id": a.id, "approver_id": a.approver_id, "status": a.status,
-                       "opinion": a.opinion, "signature_applied": a.signature_applied,
+        "files": [{"id": f.id, "original_name": f.original_name, "mime_type": f.mime_type,
+                    "file_size": f.file_size, "round": f.round} for f in files],
+        "checks": [{"id": c.id, "checker_id": c.checker_id,
+                     "checker_name": name_users_map.get(c.checker_id).real_name if name_users_map.get(c.checker_id) else "",
+                     "status": c.status, "opinion": c.opinion,
+                     "decided_at": c.decided_at} for c in checks],
+        "approvals": [{"id": a.id, "approver_id": a.approver_id,
+                       "approver_name": name_users_map.get(a.approver_id).real_name if name_users_map.get(a.approver_id) else "",
+                       "status": a.status, "opinion": a.opinion,
+                       "signature_applied": a.signature_applied,
                        "decided_at": a.decided_at} for a in approvals],
         "decided_at": e.decided_at,
         "created_at": e.created_at,

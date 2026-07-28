@@ -46,8 +46,8 @@ export interface EndorsementDetail {
   total_nodes: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string }[]
   files: { id: number; original_name: string; file_size: number | null; round: number }[]
-  checks: { id: number; checker_id: number; status: string; opinion: string | null; decided_at: string | null }[]
-  approvals: { id: number; approver_id: number; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]
+  checks: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]
+  approvals: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]
   decided_at: string | null
   created_at: string | null
 }
