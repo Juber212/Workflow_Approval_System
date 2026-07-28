@@ -108,11 +108,10 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
     if len(roles) != len(data.role_ids):
         raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
 
-    # 创建用户（使用默认密码或管理员指定密码，标记首次登录需改密）
-    default_password = data.password if data.password else settings.DEFAULT_USER_PASSWORD
+    # 创建用户（使用系统默认初始密码，首次登录需改密）
     user = User(
         username=data.username,
-        password_hash=hash_password(default_password),
+        password_hash=hash_password(settings.DEFAULT_USER_PASSWORD),
         real_name=data.real_name,
         organization_id=data.organization_id,
         email=data.email,

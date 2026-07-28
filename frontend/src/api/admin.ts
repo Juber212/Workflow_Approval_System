@@ -34,11 +34,10 @@ export interface UserListData {
   page_size: number
 }
 
-/** 新增用户参数（密码可选，不填则使用系统默认初始密码） */
+/** 新增用户参数（密码由系统默认生成） */
 export interface UserCreateData {
   username: string
   real_name: string
-  password?: string | null
   organization_id: number
   role_ids: number[]
   email?: string | null

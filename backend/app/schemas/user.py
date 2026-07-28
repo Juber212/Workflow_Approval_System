@@ -10,7 +10,6 @@ class UserCreate(BaseModel):
 
     username: str = Field(..., min_length=3, max_length=30, description="登录用户名")
     real_name: str = Field(..., min_length=1, max_length=20, description="真实姓名")
-    password: str | None = Field(None, min_length=1, max_length=128, description="登录密码（不填则使用默认初始密码）")
     organization_id: int = Field(..., description="所属组织 ID")
     role_ids: list[int] = Field(..., min_length=1, description="角色 ID 列表")
     email: str | None = Field(None, max_length=100)
