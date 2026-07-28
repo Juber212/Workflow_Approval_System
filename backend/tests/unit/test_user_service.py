@@ -187,5 +187,5 @@ class TestResetUserPassword:
         ]
 
         with pytest.raises(AppException) as exc:
-            await reset_user_password(mock_db, user_id=999, new_password="newpass")
+            await reset_user_password(mock_db, user_id=999)
         assert exc.value.code == ErrorCode.NOT_FOUND

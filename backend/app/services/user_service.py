@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import hash_password
+from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models import User, UserRole, Role, Organization
@@ -107,14 +108,16 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
     if len(roles) != len(data.role_ids):
         raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
 
-    # 创建用户
+    # 创建用户（使用默认密码或管理员指定密码，标记首次登录需改密）
+    default_password = data.password if data.password else settings.DEFAULT_USER_PASSWORD
     user = User(
         username=data.username,
-        password_hash=hash_password(data.password),
+        password_hash=hash_password(default_password),
         real_name=data.real_name,
         organization_id=data.organization_id,
         email=data.email,
         phone=data.phone,
+        must_change_password=True,  # 首次登录强制改密码
     )
     db.add(user)
     await db.flush()  # 获取 user.id
@@ -195,14 +198,15 @@ async def toggle_user_status(db: AsyncSession, user_id: int, is_active: bool) ->
     await db.flush()
 
 
-async def reset_user_password(db: AsyncSession, user_id: int, new_password: str) -> None:
-    """管理员重置用户密码"""
+async def reset_user_password(db: AsyncSession, user_id: int) -> None:
+    """管理员重置用户密码 —— 恢复为默认初始密码，标记首次登录需改密"""
 
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
-    user.password_hash = hash_password(new_password)
+    user.password_hash = hash_password(settings.DEFAULT_USER_PASSWORD)
+    user.must_change_password = True  # 强制用户下次登录修改密码
     await db.flush()
 
 

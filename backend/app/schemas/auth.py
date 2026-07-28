@@ -16,6 +16,7 @@ class LoginResponse(BaseModel):
     roles: list[str]
     organization_id: int | None
     organization_name: str | None
+    must_change_password: bool = False  # 首次登录是否需要强制改密码
 
 
 class UserInfoResponse(BaseModel):
@@ -32,9 +33,9 @@ class UserInfoResponse(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    """用户修改自己的密码"""
+    """用户修改自己的密码（密码强度由后端 validate_password_strength 校验）"""
     old_password: str = Field(..., min_length=1, description="原密码")
-    new_password: str = Field(..., min_length=6, max_length=32, description="新密码（6-32位）")
+    new_password: str = Field(..., min_length=8, max_length=128, description="新密码（≥8位，含字母和数字）")
 
 
 class UpdateProfileRequest(BaseModel):

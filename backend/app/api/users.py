@@ -11,7 +11,6 @@ from app.schemas.user import (
     UserCreate,
     UserUpdate,
     UserStatusUpdate,
-    ResetPasswordRequest,
 )
 from app.services.user_service import (
     list_users,
@@ -96,16 +95,15 @@ async def put_user_status(
 @router.put("/users/{user_id}/reset-password")
 async def put_user_reset_password(
     user_id: int,
-    data: ResetPasswordRequest,
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """管理员重置用户密码 —— 仅系统管理员"""
+    """管理员重置用户密码为默认初始密码 —— 仅系统管理员"""
     require_admin(current_user)
 
-    await reset_user_password(db, user_id, data.new_password)
+    await reset_user_password(db, user_id)
     await db.commit()
-    return ApiResponse.ok(message="密码已重置")
+    return ApiResponse.ok(message="密码已重置为默认初始密码")
 
 
 @router.get("/users/search")

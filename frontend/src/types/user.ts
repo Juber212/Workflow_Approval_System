@@ -9,4 +9,6 @@ export interface UserInfo {
   organization_name: string | null
   /** 角色列表，用于前端权限判断 */
   roles: string[]
+  /** 首次登录是否需要强制修改密码 */
+  must_change_password: boolean
 }

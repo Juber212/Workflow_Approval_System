@@ -17,6 +17,7 @@ interface LoginData {
   roles: string[]
   organization_id: number | null
   organization_name: string | null
+  must_change_password: boolean  // 首次登录是否强制改密码
 }
 
 /** 用户登录 */
@@ -76,6 +77,7 @@ export function toUserInfo(data: {
   roles: string[]
   organization_id: number | null
   organization_name: string | null
+  must_change_password?: boolean
 }): UserInfo {
   return {
     id: data.user_id,
@@ -86,5 +88,6 @@ export function toUserInfo(data: {
     organization_id: data.organization_id,
     organization_name: data.organization_name,
     roles: data.roles,
+    must_change_password: data.must_change_password ?? false,
   }
 }

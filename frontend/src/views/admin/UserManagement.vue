@@ -242,13 +242,12 @@ async function handleFormSubmit(data: any) {
     await createUser({
       username: data.username,
       real_name: data.real_name,
-      password: data.password,
       organization_id: data.organization_id,
       role_ids: data.role_ids,
       email: data.email,
       phone: data.phone,
     })
-    ElMessage.success('用户创建成功')
+    ElMessage.success('用户创建成功，初始密码为系统默认密码')
   }
   fetchList()
 }
@@ -267,9 +266,9 @@ function openResetPassword(row: UserItem) {
   resetPwdVisible.value = true
 }
 
-async function handleResetPwdSubmit(password: string) {
-  await resetUserPassword(resetPwdUserId.value, password)
-  ElMessage.success('密码已重置')
+async function handleResetPwdSubmit() {
+  await resetUserPassword(resetPwdUserId.value)
+  ElMessage.success('密码已重置为默认初始密码')
 }
 </script>
 

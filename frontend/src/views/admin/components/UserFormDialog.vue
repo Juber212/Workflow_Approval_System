@@ -17,11 +17,6 @@
         <el-input v-model="form.real_name" placeholder="请输入真实姓名" />
       </el-form-item>
 
-      <!-- 密码（仅新增时显示） -->
-      <el-form-item v-if="!isEdit" label="密码" prop="password">
-        <el-input v-model="form.password" type="password" placeholder="至少 6 位" show-password />
-      </el-form-item>
-
       <!-- 所属组织 -->
       <el-form-item label="所属组织" prop="organization_id">
         <el-select v-model="form.organization_id" placeholder="请选择组织" style="width: 100%">
@@ -91,7 +86,6 @@ const emit = defineEmits<{
   submit: [data: {
     username: string
     real_name: string
-    password?: string
     organization_id: number
     role_ids: number[]
     email: string | null
@@ -110,7 +104,6 @@ const submitting = ref(false)
 const form = reactive({
   username: '',
   real_name: '',
-  password: '',
   organization_id: null as number | null,
   role_ids: [] as number[],
   email: '' as string | null,
@@ -125,10 +118,6 @@ const rules: FormRules = {
     { min: 3, max: 30, message: '3~30 个字符', trigger: 'blur' },
   ],
   real_name: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '至少 6 位', trigger: 'blur' },
-  ],
   organization_id: [{ required: true, message: '请选择组织', trigger: 'change' }],
   role_ids: [{ required: true, message: '请选择至少一个角色', trigger: 'change' }],
 }
@@ -147,7 +136,6 @@ watch(visible, (val) => {
   } else if (val && !props.initialData) {
     form.username = ''
     form.real_name = ''
-    form.password = ''
     form.organization_id = null
     form.role_ids = []
     form.email = ''
@@ -165,7 +153,6 @@ async function handleSubmit() {
     emit('submit', {
       username: form.username,
       real_name: form.real_name,
-      password: form.password || undefined,
       organization_id: form.organization_id!,
       role_ids: form.role_ids,
       email: form.email || null,

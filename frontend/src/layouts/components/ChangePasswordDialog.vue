@@ -12,7 +12,7 @@
         <el-input v-model="pwdForm.old_password" type="password" show-password placeholder="请输入原密码" />
       </el-form-item>
       <el-form-item label="新密码" prop="new_password">
-        <el-input v-model="pwdForm.new_password" type="password" show-password placeholder="6-32位新密码" />
+        <el-input v-model="pwdForm.new_password" type="password" show-password placeholder="≥8位，必须包含字母和数字" />
       </el-form-item>
       <el-form-item label="确认密码" prop="confirm_password">
         <el-input v-model="pwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码" />
@@ -48,11 +48,20 @@ const validateConfirmPassword = (_rule: any, value: string, callback: (err?: Err
   callback(value !== pwdForm.new_password ? new Error('两次输入的密码不一致') : undefined)
 }
 
+/** 校验新密码强度：≥8位 + 必须包含字母和数字 */
+const validatePasswordStrength = (_rule: any, value: string, callback: (err?: Error) => void) => {
+  if (value.length < 8) { callback(new Error('密码长度不能少于8位')); return }
+  if (!/[a-zA-Z]/.test(value)) { callback(new Error('密码必须包含字母')); return }
+  if (!/\d/.test(value)) { callback(new Error('密码必须包含数字')); return }
+  callback()
+}
+
 const pwdRules: FormRules = {
   old_password: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
   new_password: [
     { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, max: 32, message: '密码长度 6-32 位', trigger: 'blur' },
+    { min: 8, max: 128, message: '密码长度 8-128 位', trigger: 'blur' },
+    { validator: validatePasswordStrength, trigger: 'blur' },
   ],
   confirm_password: [
     { required: true, message: '请确认新密码', trigger: 'blur' },

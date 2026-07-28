@@ -353,3 +353,50 @@
 - **改后**: 后端返回 mime_type；前端优先用 `mime_type === 'application/pdf'` 判断（与 ApprovalDetail 一致）
 - **影响**: 签批确认预览可能漏识别 PDF 文件
 - **验证**: vue-tsc 0 errors ✅
+
+---
+
+## Phase 6 — 密码约束强化（2026-07-28）
+
+> 用户密码规则加强：复杂度校验、管理员免输密码、首次登录强制改密。
+
+### 密码规则
+
+| 规则 | 适用场景 |
+|------|----------|
+| ≥8位 + 含字母和数字 + 不能与用户名相同 + 新旧不能相同 | 用户自己改密码 |
+| 默认初始密码（`DEFAULT_USER_PASSWORD` 环境变量，兜底 `Workflow@2024`） | 管理员创建用户 / 重置密码 |
+| 首次登录强制修改密码 | 创建用户后 / 重置密码后首次登录 |
+
+### F1 — 后端：密码强度校验 + User 模型
+- **文件**: `backend/app/core/security.py` + `backend/app/models/user.py` + `backend/app/core/config.py`
+- **严重程度**: 🟠 HIGH
+- **改前**: 密码仅校验 6-32 位长度，无复杂度要求；无 must_change_password 字段
+- **改后**: 
+  - 新增 `validate_password_strength()` 函数（≥8位 + 含字母和数字 + 不能与用户名相同）
+  - User 模型新增 `must_change_password` 字段（默认 True）
+  - Config 新增 `DEFAULT_USER_PASSWORD` 环境变量（兜底 `Workflow@2024`）
+- **验证**: pytest 190/190 ✅
+
+### F2 — 后端：API/Service 改造
+- **文件**: `backend/app/api/auth.py` + `backend/app/api/users.py` + `backend/app/services/user_service.py` + `backend/app/schemas/auth.py` + `backend/app/schemas/user.py`
+- **严重程度**: 🟠 HIGH
+- **改前**: 创建用户需管理员手动输入密码；重置密码需管理员手动输入密码；改密码无强度校验
+- **改后**: 
+  - 登录返回 `must_change_password` 标记
+  - 改密码增加强度校验 + 新旧不能相同 + 成功后清除 `must_change_password`
+  - 创建用户：密码可选（不填用默认密码，填了用管理员指定密码），自动 `must_change_password=True`
+  - 重置密码：无需传密码参数，自动恢复为默认密码 + `must_change_password=True`
+- **验证**: pytest 190/190 ✅
+
+### F3 — 前端：创建/重置/改密/首次登录改造
+- **文件**: 7 个前端文件
+  - `frontend/src/types/user.ts` — UserInfo 加 `must_change_password`
+  - `frontend/src/api/auth.ts` — LoginData 加 `must_change_password`
+  - `frontend/src/api/admin.ts` — UserCreateData.password 可选；resetUserPassword 无参数
+  - `frontend/src/layouts/components/ChangePasswordDialog.vue` — 校验规则：≥8位 + 含字母数字 + 一致
+  - `frontend/src/views/admin/components/UserFormDialog.vue` — 删掉密码输入框
+  - `frontend/src/views/admin/components/ResetPasswordDialog.vue` — 简化为确认对话框
+  - `frontend/src/views/admin/UserManagement.vue` — 适配新参数
+  - `frontend/src/views/login/index.vue` — 首次登录弹出强制改密码对话框（不可关闭，不可跳过）
+- **验证**: vue-tsc 0 errors ✅

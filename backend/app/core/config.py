@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""  # 必须在环境变量中设置，空值会导致启动失败
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 小时
 
+    # 用户默认密码（环境变量或 .env 中配置，新用户/重置密码使用）
+    DEFAULT_USER_PASSWORD: str = "Workflow@2024"
+
     # Redis（ARQ 任务队列 + Pub/Sub 桥接）
     REDIS_URL: str = "redis://localhost:6379/0"  # Redis 连接地址
     REDIS_ARQ_DB: int = 0   # ARQ 任务队列 DB

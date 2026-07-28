@@ -9,7 +9,7 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, hash_password
+from app.core.security import verify_password, create_access_token, hash_password, validate_password_strength
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
@@ -66,6 +66,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
             roles=roles,
             organization_id=user.organization_id,
             organization_name=user.organization.name if user.organization else None,
+            must_change_password=user.must_change_password,
         ).model_dump()
     )
 
@@ -112,7 +113,7 @@ async def change_password(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """用户修改自己的密码 —— 需验证原密码"""
+    """用户修改自己的密码 —— 需验证原密码 + 密码强度校验"""
     # 查询用户
     stmt = select(User).where(User.id == current_user.id)
     result = await db.execute(stmt)
@@ -125,8 +126,16 @@ async def change_password(
     if not verify_password(req.old_password, user.password_hash):
         raise AppException(ErrorCode.FORBIDDEN, "原密码错误")
 
-    # 更新密码
+    # 新旧密码不能相同
+    if req.old_password == req.new_password:
+        raise AppException(ErrorCode.BAD_REQUEST, "新密码不能与旧密码相同")
+
+    # 密码强度校验（≥8位 + 含字母数字 + 不能与用户名相同）
+    validate_password_strength(req.new_password, current_user.username)
+
+    # 更新密码 + 清除强制改密码标记
     user.password_hash = hash_password(req.new_password)
+    user.must_change_password = False
     await db.commit()
 
     return ApiResponse.ok(message="密码修改成功")

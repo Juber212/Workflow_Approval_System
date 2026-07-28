@@ -19,6 +19,7 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(20), comment="手机号")
     signature_image: Mapped[str | None] = mapped_column(String(500), comment="签名图片路径")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否启用")
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=True, comment="首次登录是否需要强制改密码")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 

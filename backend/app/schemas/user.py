@@ -6,11 +6,11 @@ import re
 
 
 class UserCreate(BaseModel):
-    """新增用户请求"""
+    """新增用户请求 —— 密码由系统默认生成，管理员无需手动输入"""
 
     username: str = Field(..., min_length=3, max_length=30, description="登录用户名")
     real_name: str = Field(..., min_length=1, max_length=20, description="真实姓名")
-    password: str = Field(..., min_length=6, max_length=128, description="登录密码")
+    password: str | None = Field(None, min_length=1, max_length=128, description="登录密码（不填则使用默认初始密码）")
     organization_id: int = Field(..., description="所属组织 ID")
     role_ids: list[int] = Field(..., min_length=1, description="角色 ID 列表")
     email: str | None = Field(None, max_length=100)
@@ -42,9 +42,8 @@ class UserStatusUpdate(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    """管理员重置密码"""
-
-    new_password: str = Field(..., min_length=6, max_length=128, description="新密码")
+    """管理员重置密码 —— 恢复为默认初始密码，无需手动输入"""
+    pass
 
 
 class UserListItem(BaseModel):

@@ -6,30 +6,23 @@
     :close-on-click-modal="false"
     @closed="handleClosed"
   >
-    <p class="reset-tip">正在为用户 <strong>{{ username }}</strong> 重置密码</p>
-
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-      <el-form-item label="新密码" prop="password">
-        <el-input
-          v-model="form.password"
-          type="password"
-          placeholder="至少 6 位"
-          show-password
-          @keyup.enter="handleSubmit"
-        />
-      </el-form-item>
-    </el-form>
+    <p class="reset-tip">
+      正在为用户 <strong>{{ username }}</strong> 重置密码
+    </p>
+    <p class="reset-desc">
+      密码将恢复为系统默认初始密码，用户下次登录时需要修改密码。
+    </p>
 
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">确定重置</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">确认重置</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
+/** 重置密码弹窗 —— 恢复为默认初始密码，无需手动输入 */
+import { ref, watch } from 'vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -38,32 +31,19 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  submit: [password: string]
+  submit: []
 }>()
 
 const visible = ref(props.modelValue)
 watch(() => props.modelValue, (v) => { visible.value = v })
 watch(visible, (v) => { emit('update:modelValue', v) })
 
-const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
-const form = reactive({ password: '' })
-
-const rules: FormRules = {
-  password: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '至少 6 位', trigger: 'blur' },
-  ],
-}
-
 async function handleSubmit() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
   submitting.value = true
   try {
-    emit('submit', form.password)
+    emit('submit')
     visible.value = false
   } finally {
     submitting.value = false
@@ -71,15 +51,19 @@ async function handleSubmit() {
 }
 
 function handleClosed() {
-  formRef.value?.resetFields()
-  form.password = ''
+  // 无需清理
 }
 </script>
 
 <style lang="scss" scoped>
 .reset-tip {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   font-size: 14px;
   color: var(--el-text-color-regular);
+}
+.reset-desc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 0;
 }
 </style>

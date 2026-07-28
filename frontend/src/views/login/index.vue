@@ -66,6 +66,30 @@
         class="login-error"
       />
 
+      <!-- 首次登录强制改密码对话框（不可关闭） -->
+      <el-dialog
+        v-model="showForcePwdDialog"
+        title="首次登录 — 请修改密码"
+        width="420px"
+        :close-on-click-modal="false"
+        :show-close="false"
+        :close-on-press-escape="false"
+      >
+        <p class="force-pwd-tip">为确保账户安全，首次登录请设置新密码（≥8位，必须包含字母和数字）</p>
+        <el-form ref="forcePwdFormRef" :model="forcePwdForm" :rules="forcePwdRules" label-width="80px" class="force-pwd-form">
+          <el-form-item label="新密码" prop="new_password">
+            <el-input v-model="forcePwdForm.new_password" type="password" show-password placeholder="≥8位，含字母和数字" />
+          </el-form-item>
+          <el-form-item label="确认密码" prop="confirm_password">
+            <el-input v-model="forcePwdForm.confirm_password" type="password" show-password placeholder="再次输入新密码" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button type="primary" :loading="changingPwd" @click="handleForceChangePassword" style="width:100%">
+            确认修改并进入系统
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -74,8 +98,10 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { User, Lock } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { changePasswordApi } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -107,6 +133,61 @@ onMounted(() => {
   }
 })
 
+// ========== 首次登录强制改密码 ==========
+const showForcePwdDialog = ref(false)
+const changingPwd = ref(false)
+const forcePwdFormRef = ref<FormInstance>()
+const forcePwdForm = reactive({ new_password: '', confirm_password: '' })
+
+const validateForceConfirm = (_rule: any, value: string, callback: (err?: Error) => void) => {
+  callback(value !== forcePwdForm.new_password ? new Error('两次输入的密码不一致') : undefined)
+}
+
+const validateForceStrength = (_rule: any, value: string, callback: (err?: Error) => void) => {
+  if (value.length < 8) { callback(new Error('密码长度不能少于8位')); return }
+  if (!/[a-zA-Z]/.test(value)) { callback(new Error('密码必须包含字母')); return }
+  if (!/\d/.test(value)) { callback(new Error('密码必须包含数字')); return }
+  callback()
+}
+
+const forcePwdRules: FormRules = {
+  new_password: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { validator: validateForceStrength, trigger: 'blur' },
+  ],
+  confirm_password: [
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    { validator: validateForceConfirm, trigger: 'blur' },
+  ],
+}
+
+/** 首次登录强制改密码 */
+async function handleForceChangePassword() {
+  const valid = await forcePwdFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  changingPwd.value = true
+  try {
+    await changePasswordApi({
+      old_password: form.password,  // 用登录时输入的密码作为原密码
+      new_password: forcePwdForm.new_password,
+    })
+    ElMessage.success('密码修改成功')
+    showForcePwdDialog.value = false
+    // 更新 store 中的标记
+    if (userStore.userInfo) {
+      userStore.userInfo.must_change_password = false
+    }
+    // 跳转
+    const redirect = (route.query.redirect as string) || '/dashboard'
+    router.push(redirect)
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || '修改失败')
+  } finally {
+    changingPwd.value = false
+  }
+}
+
 /** 执行登录 */
 async function handleLogin() {
   const valid = await formRef.value?.validate().catch(() => false)
@@ -116,13 +197,21 @@ async function handleLogin() {
   errorMsg.value = ''
 
   try {
-    await userStore.login(form.username, form.password)
+    const data = await userStore.login(form.username, form.password)
 
     // 记住用户名
     if (form.remember) {
       localStorage.setItem('rememberedUsername', form.username)
     } else {
       localStorage.removeItem('rememberedUsername')
+    }
+
+    // 首次登录 → 弹出强制改密码对话框
+    if (data.must_change_password) {
+      forcePwdForm.new_password = ''
+      forcePwdForm.confirm_password = ''
+      showForcePwdDialog.value = true
+      return
     }
 
     // 跳转到重定向页面或默认 Dashboard
@@ -196,5 +285,18 @@ async function handleLogin() {
 
 .login-error {
   margin-top: 4px;
+}
+
+/* 强制改密码弹窗 */
+.force-pwd-tip {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+.force-pwd-form {
+  :deep(.el-form-item) {
+    margin-bottom: 16px;
+  }
 }
 </style>

@@ -34,11 +34,11 @@ export interface UserListData {
   page_size: number
 }
 
-/** 新增用户参数 */
+/** 新增用户参数（密码可选，不填则使用系统默认初始密码） */
 export interface UserCreateData {
   username: string
   real_name: string
-  password: string
+  password?: string | null
   organization_id: number
   role_ids: number[]
   email?: string | null
@@ -75,9 +75,9 @@ export async function toggleUserStatus(id: number, isActive: boolean): Promise<v
   await request.put(`/users/${id}/status`, { is_active: isActive })
 }
 
-/** 重置用户密码 */
-export async function resetUserPassword(id: number, newPassword: string): Promise<void> {
-  await request.put(`/users/${id}/reset-password`, { new_password: newPassword })
+/** 重置用户密码 —— 恢复为默认初始密码，无需手动输入 */
+export async function resetUserPassword(id: number): Promise<void> {
+  await request.put(`/users/${id}/reset-password`)
 }
 
 // ==================== 组织/角色选项 ====================
