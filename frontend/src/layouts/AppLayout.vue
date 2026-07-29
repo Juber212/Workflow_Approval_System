@@ -174,11 +174,22 @@ function cancelEditProfile() {
 }
 /** 保存个人资料 */
 async function saveProfile() {
+  // 前端格式校验
+  const email = profileForm.value.email.trim()
+  const phone = profileForm.value.phone.trim()
+  if (email && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
+    ElMessage.error('邮箱格式不正确')
+    return
+  }
+  if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
+    ElMessage.error('手机号格式不正确（11位中国大陆手机号）')
+    return
+  }
   savingProfile.value = true
   try {
     await updateProfileApi({
-      email: profileForm.value.email.trim() || undefined,
-      phone: profileForm.value.phone.trim() || undefined,
+      email: email || undefined,
+      phone: phone || undefined,
     })
     ElMessage.success('个人信息已更新')
     await refreshUserInfoDetail()

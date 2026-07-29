@@ -23,6 +23,26 @@ class UserCreate(BaseModel):
             raise ValueError("用户名只能包含字母、数字和下划线")
         return v
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        """邮箱格式校验（允许空值）"""
+        if v is not None and v.strip():
+            if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v.strip()):
+                raise ValueError("邮箱格式不正确")
+            return v.strip()
+        return None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        """手机号格式校验（允许空值，支持中国大陆手机号）"""
+        if v is not None and v.strip():
+            if not re.match(r"^1[3-9]\d{9}$", v.strip()):
+                raise ValueError("手机号格式不正确（11位中国大陆手机号）")
+            return v.strip()
+        return None
+
 
 class UserUpdate(BaseModel):
     """编辑用户请求（不可改 username）"""
@@ -32,6 +52,10 @@ class UserUpdate(BaseModel):
     role_ids: list[int] = Field(..., min_length=1, description="角色 ID 列表")
     email: str | None = Field(None, max_length=100)
     phone: str | None = Field(None, max_length=20)
+
+    # 复用 UserCreate 的校验器
+    _validate_email = field_validator("email")(UserCreate.validate_email)
+    _validate_phone = field_validator("phone")(UserCreate.validate_phone)
 
 
 class UserStatusUpdate(BaseModel):

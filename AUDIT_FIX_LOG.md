@@ -412,3 +412,29 @@
   - 通用回退消息改为纯中文 `请求失败，请稍后重试`
 - **影响**: 登录密码错误时显示英文 `Request failed with status code 401` 且无中文提示
 - **验证**: vue-tsc 0 errors ✅
+
+---
+
+## Phase 7 — 系统约束补全（2026-07-28）
+
+> 覆盖后端 Schema 校验、业务规则、前端表单校验三个维度的约束缺失。
+
+### G1 — Schema 格式校验
+- **文件**: `schemas/user.py`, `schemas/auth.py`, `schemas/organization.py`
+- **S1/S2/S3**: UserCreate/UserUpdate/UpdateProfileRequest 新增 email（正则）和 phone（11位手机号）格式校验
+- **S4**: OrganizationCreate/OrganizationUpdate 新增 name 非空（去空白）校验
+- **验证**: pytest 190/190 ✅
+
+### G2 — 业务规则约束
+- **文件**: `api/users.py`, `api/organizations.py`, `api/configs.py`
+- **B1**: 管理员不能禁用自己（`put_user_status` 增加判断）
+- **B2**: 管理员不能停用自己所在组织（`put_org_status` 增加判断）
+- **B3**: 配置更新时签名坐标等数字字段校验 ≥0（后端兜底，前端已有 `min="0"`）
+- **验证**: pytest 190/190 ✅
+
+### G3 — 前端表单校验
+- **文件**: `views/admin/components/UserFormDialog.vue`, `layouts/AppLayout.vue`
+- **F1**: UserFormDialog 新增 email/phone 格式校验规则
+- **F2**: AppLayout 个人资料保存前增加 email/phone 格式校验
+- **F3**: ConfigManagement 已有 `min="0"` 限制，无需额外改动
+- **验证**: vue-tsc 0 errors ✅

@@ -74,6 +74,11 @@ async def put_org_status(
 ):
     """启用/停用组织"""
     require_admin(current_user)
+
+    # 管理员不能停用自己所在的组织
+    if not data.is_active and current_user.organization_id and org_id == current_user.organization_id:
+        raise AppException(ErrorCode.BAD_REQUEST, "不能停用自己所在的组织")
+
     await toggle_org_status(db, org_id, data.is_active)
     await db.commit()
     return ApiResponse.ok(message="已启用" if data.is_active else "已停用")

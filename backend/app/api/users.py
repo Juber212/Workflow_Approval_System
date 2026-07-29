@@ -87,6 +87,10 @@ async def put_user_status(
     """启用/禁用用户 —— 仅系统管理员"""
     require_admin(current_user)
 
+    # 管理员不能禁用自己
+    if user_id == current_user.id and not data.is_active:
+        raise AppException(ErrorCode.BAD_REQUEST, "不能禁用自己的账号")
+
     await toggle_user_status(db, user_id, data.is_active)
     await db.commit()
     return ApiResponse.ok(message="已启用" if data.is_active else "已禁用")

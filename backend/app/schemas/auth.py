@@ -1,6 +1,7 @@
 """认证相关 Schema"""
 
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -42,3 +43,23 @@ class UpdateProfileRequest(BaseModel):
     """用户更新个人资料（邮箱/手机号）"""
     email: str | None = Field(None, max_length=120, description="邮箱地址")
     phone: str | None = Field(None, max_length=20, description="手机号")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str | None) -> str | None:
+        """邮箱格式校验（允许空值）"""
+        if v is not None and v.strip():
+            if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", v.strip()):
+                raise ValueError("邮箱格式不正确")
+            return v.strip()
+        return None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        """手机号格式校验（允许空值）"""
+        if v is not None and v.strip():
+            if not re.match(r"^1[3-9]\d{9}$", v.strip()):
+                raise ValueError("手机号格式不正确（11位中国大陆手机号）")
+            return v.strip()
+        return None

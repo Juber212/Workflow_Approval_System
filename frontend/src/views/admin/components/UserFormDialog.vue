@@ -118,6 +118,12 @@ const rules: FormRules = {
     { min: 3, max: 30, message: '3~30 个字符', trigger: 'blur' },
   ],
   real_name: [{ required: true, message: '请输入真实姓名', trigger: 'blur' }],
+  email: [
+    { pattern: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, message: '邮箱格式不正确', trigger: 'blur' },
+  ],
+  phone: [
+    { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确（11位）', trigger: 'blur' },
+  ],
   organization_id: [{ required: true, message: '请选择组织', trigger: 'change' }],
   role_ids: [{ required: true, message: '请选择至少一个角色', trigger: 'change' }],
 }
