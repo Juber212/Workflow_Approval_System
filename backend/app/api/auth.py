@@ -287,16 +287,16 @@ async def get_signature_image(
 ):
     """获取用户签名图片 —— 返回文件流，供前端 img 标签直接使用"""
     from fastapi.responses import FileResponse
+    from app.utils.file_utils import resolve_file_path, is_safe_path
 
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None or not user.signature_image:
         raise AppException(ErrorCode.NOT_FOUND, "用户未上传签名图片")
 
-    # signature_image 可能已含 STORAGE_ROOT 前缀（上传时写入完整相对路径）
-    full_path = user.signature_image if os.path.isabs(user.signature_image) else os.path.join(settings.STORAGE_ROOT, user.signature_image)
-    # 如果 STORAGE_ROOT 已被包含，避免重复拼接
-    if not os.path.exists(full_path):
-        full_path = user.signature_image  # 直接尝试原路径
+    # 路径穿越防御：使用统一的安全路径解析
+    if not is_safe_path(user.signature_image):
+        raise AppException(ErrorCode.FORBIDDEN, "非法文件路径")
+    full_path = resolve_file_path(user.signature_image)
     if not os.path.exists(full_path):
         raise AppException(ErrorCode.NOT_FOUND, "签名文件不存在")
 

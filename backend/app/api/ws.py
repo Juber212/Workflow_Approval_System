@@ -62,7 +62,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="token 中缺少用户标识")
         return
 
-    manager.register(user_id, websocket)
+    await manager.register(user_id, websocket)
     try:
         # 保持连接，接收后续消息（心跳等），等待客户端断开
         while True:
@@ -73,4 +73,4 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception:
         logger.debug(f"WebSocket 异常断开: user_id={user_id}", exc_info=True)
     finally:
-        manager.disconnect(user_id, websocket)
+        await manager.disconnect(user_id, websocket)

@@ -10,6 +10,7 @@ export interface TaskListItem {
   id: number
   instance_id: number
   instance_name: string
+  template_name: string  // 所属模板名称
   node_id: number
   node_name: string
   initiator_name: string
@@ -57,6 +58,7 @@ export interface TaskDetail {
   require_assignee_signature: boolean
   require_checker_signature: boolean
   require_approver_signature: boolean
+  require_endorser_signature: boolean
   signature_x: number
   signature_y: number
   signature_page: number

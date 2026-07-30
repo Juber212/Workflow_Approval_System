@@ -12,6 +12,11 @@ class SignatureSlot(BaseModel):
     signature_page: int = Field(-1, description="签名页码（-1=最后一页）")
     signature_width: float | None = Field(None, description="签名宽度（NULL=使用全局默认）")
     signature_height: float | None = Field(None, description="签名高度（NULL=使用全局默认）")
+    show_date: bool = Field(True, description="是否显示签名日期")
+    sign_date: datetime | None = Field(None, description="签名日期")
+    date_x: float | None = Field(None, description="日期 X 坐标")
+    date_y: float | None = Field(None, description="日期 Y 坐标")
+    date_font_size: int = Field(14, description="日期字号")
 
 
 class SignatureItem(BaseModel):
@@ -28,6 +33,11 @@ class SignatureItem(BaseModel):
     signature_page: int = -1
     signature_width: float | None = None
     signature_height: float | None = None
+    sign_date: datetime | None = None  # 签名日期
+    show_date: bool = True  # 是否显示签名日期
+    date_x: float | None = None  # 日期 X 坐标
+    date_y: float | None = None  # 日期 Y 坐标
+    date_font_size: int = 14  # 日期字号
     applied: bool = False
     sort_order: int = 0
     created_at: datetime | None = None

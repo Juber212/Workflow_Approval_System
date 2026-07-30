@@ -91,11 +91,12 @@ class TestPropagateFromNode:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
-            MockResult(scalar_one=target),      # 2: SELECT target（重取）
-            MagicMock(),                         # 3: UPDATE node → running
-            MagicMock(),                         # 4: add Task
-            MagicMock(),                         # 5: flush
+            MagicMock(),                         # 1: SELECT ... FOR UPDATE（行锁）
+            MagicMock(),                         # 2: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=target),      # 3: SELECT target（重取）
+            MagicMock(),                         # 4: UPDATE node → running
+            MagicMock(),                         # 5: add Task
+            MagicMock(),                         # 6: flush
         ]
 
         result = await propagate_from_node(mock_db, instance_id=1, finished_node_id=5)
@@ -117,8 +118,9 @@ class TestPropagateFromNode:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
-            MockResult(scalar_one=target),      # 2: SELECT target（重取）
+            MagicMock(),                         # 1: SELECT ... FOR UPDATE（行锁）
+            MagicMock(),                         # 2: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=target),      # 3: SELECT target（重取）
         ]
 
         result = await propagate_from_node(mock_db, instance_id=1, finished_node_id=5)
@@ -141,10 +143,11 @@ class TestPropagateFromNode:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
-            MockResult(scalar_one=end_node),    # 2: SELECT target（重取）
-            MagicMock(),                         # 3: add Approval
-            MagicMock(),                         # 4: flush
+            MagicMock(),                         # 1: SELECT ... FOR UPDATE（行锁）
+            MagicMock(),                         # 2: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=end_node),    # 3: SELECT target（重取）
+            MagicMock(),                         # 4: add Approval
+            MagicMock(),                         # 5: flush
         ]
 
         result = await propagate_from_node(mock_db, instance_id=1, finished_node_id=5)

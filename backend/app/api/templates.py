@@ -739,8 +739,13 @@ async def get_category_public(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取分类详情 —— 含内部文件模板列表，所有登录用户可用"""
+    """获取分类详情 —— 含内部文件模板列表，仅本组织用户可查看"""
+    from app.core.exceptions import AppException
+    from app.core.error_codes import ErrorCode
     detail = await get_category_detail(db, category_id)
+    # 组织隔离：非管理员只能查看本组织的分类
+    if "system_admin" not in current_user.roles and detail.organization_id != current_user.organization_id:
+        raise AppException(ErrorCode.FORBIDDEN, "无权查看其他组织的分类")
     return ApiResponse.ok(detail.model_dump())
 
 

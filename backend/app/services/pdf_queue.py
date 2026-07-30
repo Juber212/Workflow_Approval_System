@@ -6,6 +6,7 @@ FastAPI 端通过 enqueue 函数提交转换任务，不等待结果。
 转换完成后通过 Redis Pub/Sub 通知 FastAPI → WebSocket → 前端。
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -24,13 +25,17 @@ logger = logging.getLogger(__name__)
 
 # ARQ 连接池（FastAPI 端用于入队，惰性初始化）
 _arq_pool = None
+_arq_pool_lock = asyncio.Lock()  # 防并发重复创建
 
 
 async def _get_arq_pool():
-    """获取或创建 ARQ 连接池"""
+    """获取或创建 ARQ 连接池（asyncio.Lock 防并发重复创建）"""
     global _arq_pool
     if _arq_pool is None:
-        _arq_pool = await create_pool(RedisSettings.from_dsn(ARQ_REDIS_URL))
+        async with _arq_pool_lock:
+            # 双重检查：锁内再次确认未被并发创建
+            if _arq_pool is None:
+                _arq_pool = await create_pool(RedisSettings.from_dsn(ARQ_REDIS_URL))
     return _arq_pool
 
 

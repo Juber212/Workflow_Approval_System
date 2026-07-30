@@ -119,10 +119,11 @@ async def create_instance(
         node_override: dict = override_map.get(tn.id, {})
 
         # 配置合并：发起覆盖 > 模板默认值
-        assignee_id = node_override.get("assignee_id") or tn.assignee_id
-        time_limit_days = node_override.get("time_limit_days") or tn.time_limit_days
-        approvers = node_override.get("approvers") or tn.approvers
-        checkers = node_override.get("checkers") or tn.checkers
+        # 注意：不能用 `or`，因为 0/[]/False 是合法值，会被 or 吞掉
+        assignee_id = node_override.get("assignee_id") or tn.assignee_id  # assignee_id 无 falsy 合法值，安全
+        time_limit_days = node_override["time_limit_days"] if "time_limit_days" in node_override else tn.time_limit_days
+        approvers = node_override["approvers"] if "approvers" in node_override else tn.approvers
+        checkers = node_override["checkers"] if "checkers" in node_override else tn.checkers
         # 签批字段：发起覆盖 > 模板默认值
         require_assignee_signature = node_override.get("require_assignee_signature")
         if require_assignee_signature is None:
@@ -134,7 +135,7 @@ async def create_instance(
         if require_approver_signature is None:
             require_approver_signature = tn.require_approver_signature
         # 批准人：发起覆盖 > 模板默认值（仅难度4时生效）
-        endorser_id = node_override.get("endorser_id") or (tn.endorser_id if hasattr(tn, 'endorser_id') else None)
+        endorser_id = node_override["endorser_id"] if "endorser_id" in node_override else (tn.endorser_id if hasattr(tn, 'endorser_id') else None)
         require_endorser_signature = node_override.get("require_endorser_signature")
         if require_endorser_signature is None:
             require_endorser_signature = tn.require_endorser_signature if hasattr(tn, 'require_endorser_signature') else True

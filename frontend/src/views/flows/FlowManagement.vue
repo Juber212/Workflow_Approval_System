@@ -340,7 +340,7 @@ async function searchInitiators(query: string) {
   if (!query) { initiatorOptions.value = []; return }
   if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
   initiatorSearchTimer = setTimeout(async () => {
-    try { initiatorOptions.value = await searchUsers({ keyword: query, page_size: 20 }) } catch { /* ignore */ }
+    try { initiatorOptions.value = await searchUsers(query, 20) } catch { /* ignore */ }
   }, 300)
 }
 

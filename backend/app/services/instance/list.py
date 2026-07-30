@@ -49,8 +49,8 @@ async def list_instances(
             Initiator.real_name.label("initiator_name"),
             Org.name.label("organization_name"),
         )
-        .join(Initiator, FlowInstance.initiator_id == Initiator.id)
-        .join(Org, FlowInstance.organization_id == Org.id)
+        .join(Initiator, FlowInstance.initiator_id == Initiator.id, isouter=True)  # LEFT JOIN：用户删除后实例依然可见
+        .join(Org, FlowInstance.organization_id == Org.id, isouter=True)  # LEFT JOIN：组织删除后实例依然可见
         .join(FlowTemplate, FlowInstance.template_id == FlowTemplate.id, isouter=True)  # LEFT JOIN：模板删除后实例依然可见
     )
 

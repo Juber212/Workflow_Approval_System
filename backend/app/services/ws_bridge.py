@@ -96,4 +96,11 @@ async def _listen_loop() -> None:
             break
         except Exception:
             logger.error("WebSocket 桥接器异常，5 秒后重连", exc_info=True)
+            # 清理旧的 pubsub/redis 连接，避免连接泄漏
+            try:
+                await pubsub.punsubscribe()
+                await pubsub.close()
+                await redis.close()
+            except Exception:
+                pass
             await asyncio.sleep(5)

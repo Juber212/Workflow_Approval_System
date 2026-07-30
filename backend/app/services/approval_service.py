@@ -489,6 +489,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             update(Approval)
             .where(
                 Approval.node_id == a.node_id,
+                Approval.task_id == a.task_id,  # 限定当前任务轮次
                 Approval.status == ApprovalStatus.PENDING,
                 Approval.id != approval_id,
             )
@@ -772,7 +773,7 @@ async def reject(
             # 终止当前节点其他 pending 审批
             await db.execute(
                 update(Approval)
-                .where(Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
+                .where(Approval.node_id == a.node_id, Approval.task_id == a.task_id, Approval.status == ApprovalStatus.PENDING)  # task_id 限定当前轮次
                 .values(status=ApprovalStatus.TERMINATED, decided_at=now)
             )
             # 终止当前节点 pending 校验
@@ -882,7 +883,7 @@ async def reject(
         # 其余 pending Approval → terminated
         await db.execute(
             update(Approval)
-            .where(Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
+            .where(Approval.node_id == a.node_id, Approval.task_id == a.task_id, Approval.status == ApprovalStatus.PENDING)  # task_id 限定当前轮次
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
 

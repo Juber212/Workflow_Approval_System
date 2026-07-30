@@ -573,7 +573,7 @@ async function searchInitiators(query: string) {
   if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
   initiatorSearchTimer = setTimeout(async () => {
     try {
-      initiatorOptions.value = await searchUsers({ keyword: query, page_size: 20 })
+      initiatorOptions.value = await searchUsers(query, 20)
     } catch { /* ignore */ }
   }, 300)
 }
@@ -638,6 +638,13 @@ async function handleSave() {
 }
 
 async function handleDelete(id: number) {
+  try {
+    await ElMessageBox.confirm('删除模板将同时删除模板设计数据，确定删除？', '删除确认', {
+      type: 'warning',
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+    })
+  } catch { return }
   await deleteTemplate(id)
   ElMessage.success('模板已删除')
   fetchTemplates()

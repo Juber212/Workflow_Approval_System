@@ -84,13 +84,18 @@ async def propagate_from_node(
     _end_approvals: list[tuple] = []  # 收集终审审批记录（结束节点）用于通知：([user_id], instance_name)
 
     for node_id in target_ids:
-        # 原子递增 arrived_count，避免并发丢失更新导致 fork-join 死锁
+        # ===== Fork-Join 防竞态（三步原子操作）=====
+        # 1. SELECT ... FOR UPDATE 锁定目标行，序列化并发访问
+        await db.execute(
+            select(InstanceNode).where(InstanceNode.id == node_id).with_for_update()
+        )
+        # 2. 持有行锁时原子递增 arrived_count
         await db.execute(
             update(InstanceNode)
             .where(InstanceNode.id == node_id)
             .values(arrived_count=InstanceNode.arrived_count + 1)
         )
-        # 重新 fetch 获取最新值用于后续判断
+        # 3. 读取最新值（仍在行锁保护下，无竞态窗口）
         node = (
             await db.execute(
                 select(InstanceNode).where(InstanceNode.id == node_id)

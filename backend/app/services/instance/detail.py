@@ -39,8 +39,8 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
             User.real_name.label("initiator_name"),
             Organization.name.label("organization_name"),
         )
-        .join(User, FlowInstance.initiator_id == User.id)
-        .join(Organization, FlowInstance.organization_id == Organization.id)
+        .join(User, FlowInstance.initiator_id == User.id, isouter=True)  # LEFT JOIN：用户删除后实例依然可见
+        .join(Organization, FlowInstance.organization_id == Organization.id, isouter=True)  # LEFT JOIN：组织删除后实例依然可见
         .where(FlowInstance.id == instance_id)
     )
     result = await db.execute(stmt)

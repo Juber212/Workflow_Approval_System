@@ -39,11 +39,13 @@ async def check_instance_name(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_active_user),
 ):
-    """检测项目名称是否已被使用"""
+    """检测项目名称是否已被使用（仅限本组织范围内，防跨组织信息泄露）"""
     from app.models import FlowInstance
-    existing = (await db.execute(
-        select(FlowInstance.id).where(FlowInstance.name == name.strip())
-    )).scalar_one_or_none()
+    stmt = select(FlowInstance.id).where(FlowInstance.name == name.strip())
+    # 非管理员仅检查本组织内的重名
+    if "system_admin" not in current_user.roles:
+        stmt = stmt.where(FlowInstance.organization_id == current_user.organization_id)
+    existing = (await db.execute(stmt)).scalar_one_or_none()
     return ApiResponse.ok({"exists": existing is not None})
 
 

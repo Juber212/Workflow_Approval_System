@@ -21,6 +21,7 @@ class TemplateListItem(BaseModel):
     """模板列表项"""
     id: int
     name: str
+    type: str = "project"  # 模板类型: project / proposal
     description: str | None = None
     organization_id: int
     organization_name: str | None = None
@@ -38,6 +39,7 @@ class TemplateDetail(BaseModel):
     """模板详情（含节点/连线）"""
     id: int
     name: str
+    type: str = "project"  # 模板类型: project / proposal
     description: str | None = None
     organization_id: int
     organization_name: str | None = None

@@ -330,6 +330,7 @@ export async function changePersonnel(
     assignee_id?: number | null
     checkers?: { user_id: number }[]
     approvers?: { user_id: number }[]
+    endorser_id?: number | null  // 批准人（仅难度4级时有效）
   }
 ): Promise<{
   id: number
@@ -337,6 +338,7 @@ export async function changePersonnel(
   assignee_id: number | null
   checkers: { user_id: number }[] | null
   approvers: { user_id: number }[] | null
+  endorser_id: number | null  // 批准人（仅难度4级时有效）
   changes: string[]
 }> {
   const res = await request.put(`/instances/${instanceId}/nodes/${nodeId}/personnel`, data)

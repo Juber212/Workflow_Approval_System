@@ -55,6 +55,7 @@ class EndorsementDetail(BaseModel):
     total_nodes: int = 0
     nodes: list[dict] = []      # 节点简要列表（进度链）
     files: list[dict] = []      # 当前轮次文件
+    node_files: list[dict] = []  # 仅本节点文件（签批预览用，后端过滤）
     checks: list[dict] = []     # 校验记录
     approvals: list[dict] = []  # 审批记录
     decided_at: datetime | None = None
