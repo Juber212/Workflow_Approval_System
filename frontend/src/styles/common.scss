@@ -203,7 +203,8 @@
 
 // 表格：覆盖斑马纹为纯白底 + 行底细分割线
 .el-table--striped .el-table__body tr.el-table__row--striped td {
-  background: #fff !important;
+  // 不带 !important，否则覆盖 r--red/green/yel/gray 等行标色
+  background: #fff;
 }
 .el-table__body tr {
   border-bottom: 1px solid #f0f0f0;
