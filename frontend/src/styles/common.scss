@@ -201,7 +201,11 @@
 
 // ========== 全局 Element Plus 风格微调（飞书方向） ==========
 
-// 表格：覆盖斑马纹为纯白底 + 行底细分割线
+// 表格：禁用斑马纹 + 行底细分割线
+// 注意：不带 !important，让行标色(r--green/r--red等)的 !important 能精准覆盖
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: transparent;
+}
 .el-table__body tr {
   border-bottom: 1px solid #f0f0f0;
 }
