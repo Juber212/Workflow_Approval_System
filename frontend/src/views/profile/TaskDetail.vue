@@ -264,7 +264,7 @@
 
 <script setup lang="ts">
 /** 任务处理页 —— 上传文件 + 提交/保存草稿，支持文件夹分组上传 */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
@@ -415,7 +415,8 @@ function getFolderWarning(folder: FileFolderConfig): string {
   return ''
 }
 
-onMounted(async () => {
+/** 加载任务详情数据（onMounted + watch 共用） */
+async function loadTaskData() {
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
     { label: '个人中心', to: '/profile' },
@@ -427,10 +428,14 @@ onMounted(async () => {
   try {
     detail.value = await getTaskDetail(id)
     assigneeNote.value = detail.value.assignee_note || ''
-    // 加载可用文件模板
     await loadDocTemplates()
   } finally { loading.value = false }
-})
+}
+
+onMounted(loadTaskData)
+
+// 同页面内切换任务（如点击通知跳转），监听路由参数变化重新加载
+watch(() => route.params.id, loadTaskData)
 
 // 离开页面时清理转换轮询定时器
 onUnmounted(() => {

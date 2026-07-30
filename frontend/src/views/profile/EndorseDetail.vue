@@ -178,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -253,7 +253,8 @@ const pdfFiles = computed(() => {
 /** PDF 文件预览 URL */
 const pdfPreviewUrls = computed(() => pdfFiles.value.map(f => f.url))
 
-onMounted(async () => {
+/** 加载批准详情数据 */
+async function loadEndorseData() {
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
     { label: '个人中心', to: '/profile' },
@@ -263,7 +264,10 @@ onMounted(async () => {
   if (!id) return
   loading.value = true
   try { detail.value = await getEndorsementDetail(id) } finally { loading.value = false }
-})
+}
+
+onMounted(loadEndorseData)
+watch(() => route.params.id, loadEndorseData)
 
 /** 批准通过 —— 如需签名先弹出签批预览 */
 async function handleApprove() {

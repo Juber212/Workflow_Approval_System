@@ -166,7 +166,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -231,7 +231,8 @@ const pdfFiles = computed(() => {
     }))
 })
 
-onMounted(async () => {
+/** 加载校验详情数据 */
+async function loadCheckData() {
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
     { label: '个人中心', to: '/profile' },
@@ -241,7 +242,10 @@ onMounted(async () => {
   if (!id) return
   loading.value = true
   try { detail.value = await getCheckDetail(id) } finally { loading.value = false }
-})
+}
+
+onMounted(loadCheckData)
+watch(() => route.params.id, loadCheckData)
 
 async function handlePass() {
   if (!detail.value) return

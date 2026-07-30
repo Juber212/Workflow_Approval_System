@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -259,7 +259,8 @@ const historyFileGroups = computed(() => {
 })
 const historyFileTotal = computed(() => historyFileGroups.value.reduce((s, g) => s + g.files.length, 0))
 
-onMounted(async () => {
+/** 加载审批详情数据 */
+async function loadApprovalData() {
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
     { label: '个人中心', to: '/profile' },
@@ -272,7 +273,10 @@ onMounted(async () => {
     detail.value = await getApprovalDetail(id)
     if (detail.value?.is_end_node) showHistoryFiles.value = true  // 终审默认展开历史文件
   } finally { loading.value = false }
-})
+}
+
+onMounted(loadApprovalData)
+watch(() => route.params.id, loadApprovalData)
 
 async function handleApprove() {
   if (!detail.value) return
