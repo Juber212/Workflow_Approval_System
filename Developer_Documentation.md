@@ -25,8 +25,12 @@ Workflow_Approval_System/
 │   │   ├── models/             # 24 个 SQLAlchemy 模型（24 张表）
 │   │   ├── schemas/            # Pydantic 请求/响应 Schema
 │   │   ├── services/           # 业务逻辑层
-│   │   ├── core/               # 配置/安全/数据库/种子数据/限流/异常
-│   │   └── middleware/         # 中间件（CORS 等）
+│   │   ├── core/               # 配置/安全/数据库/种子数据/限流/异常/中间件
+│   │   │   ├── auth_middleware.py   # MustChangePasswordMiddleware（强制改密码拦截）
+│   │   │   ├── token_blacklist.py   # TokenBlacklistMiddleware（JWT 黑名单，Redis DB 2）
+│   │   │   ├── rate_limit.py        # RateLimitMiddleware（API 三层限流）
+│   │   │   ├── redis.py             # Redis 连接管理（DB 0 ARQ / DB 1 PubSub / DB 2 黑名单）
+│   │   │   └── ...
 │   ├── alembic/                # 数据库迁移（versions/ 下 20+ 个迁移文件）
 │   ├── tests/                  # 190 条测试（unit / integration / mysql）
 │   ├── storage/archive/        # 文件存储根目录
