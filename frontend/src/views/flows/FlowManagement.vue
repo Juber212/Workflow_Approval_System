@@ -290,6 +290,8 @@ function instanceRowClass({ row }: { row: InstanceListItem }) {
 
 /** 逾期/临期行标色 */
 function deadlineRowClass({ row }: any): string {
+  if (row?.status === 'completed') return 'r--green'
+  if (row?.status === 'terminated') return 'r--gray'
   if (row?.is_overdue) return 'r--red'
   if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
   return ''
@@ -386,7 +388,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
 .bt-progress { display: flex; align-items: center; gap: 8px; padding: 4px 8px; :deep(.el-progress) { flex: 1; min-width: 60px; } :deep(.el-progress-bar__outer) { border-radius: 4px; } }
 .bt-progress__text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; flex-shrink: 0; }
 
-.pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { color: #fff; background: var(--el-color-danger); } &.pri--high { color: #fff; background: var(--el-color-warning); } &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); } &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); } }
+.pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { background: #fde2e2; color: #c0392b; } &.pri--high { background: #fef5e7; color: #d68910; } &.pri--normal { background: #eaf2f8; color: #2471a3; } &.pri--low { background: #f2f3f5; color: #86909c; } }
 
 /* 难度等级 badge */
 .diff-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.diff--1 { color: #1e8449; background: #eafaf1; } &.diff--2 { color: #2471a3; background: #eaf2f8; } &.diff--3 { color: #b87333; background: #fef5e7; } &.diff--4 { color: #fff; background: var(--el-color-danger); } }
@@ -408,7 +410,9 @@ async function handlePermanentDelete(row: InstanceListItem) {
 .row--priority-urgent td { background: #fde8e8 !important; }
 .row--priority-high td { background: #fef3e2 !important; }
 
-/* 逾期/临期行背景色 */
-.r--red td { background: #fef0f0 !important; }
-.r--yel td { background: #fffaf0 !important; }
+/* 状态行背景色 */
+.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
+.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
+.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
+.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
 </style>

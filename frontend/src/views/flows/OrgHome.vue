@@ -526,12 +526,14 @@ function instanceRowClass({ row }: { row: InstanceListItem }) {
 
 /** 逾期/临期行标色 */
 function deadlineRowClass({ row }: any): string {
+  if (row?.status === 'completed') return 'r--green'
+  if (row?.status === 'terminated') return 'r--gray'
   if (row?.is_overdue) return 'r--red'
   if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
   return ''
 }
 
-/** 合并优先级行色 + 逾期/临期行色 */
+/** 合并优先级行色 + 状态行色 */
 function combinedRowClass(data: { row: InstanceListItem }) {
   const pri = instanceRowClass(data)
   const dl = deadlineRowClass(data)
@@ -681,10 +683,10 @@ async function handleDelete(id: number) {
 
 .pri-badge {
   font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px;
-  &.pri--urgent { color: #fff; background: var(--el-color-danger); }
-  &.pri--high   { color: #fff; background: var(--el-color-warning); }
-  &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
-  &.pri--low    { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+  &.pri--urgent  { background: #fde2e2; color: #c0392b; }  // 紧急=红
+  &.pri--high    { background: #fef5e7; color: #d68910; }  // 高=黄
+  &.pri--normal  { background: #eaf2f8; color: #2471a3; }  // 普通=蓝
+  &.pri--low     { background: #f2f3f5; color: #86909c; }  // 低=灰
 }
 
 /* 难度等级 badge */
@@ -738,7 +740,9 @@ async function handleDelete(id: number) {
 .row--priority-urgent td { background: #fde8e8 !important; }
 .row--priority-high td { background: #fef3e2 !important; }
 
-/* 逾期/临期行背景色 */
-.r--red td { background: #fef0f0 !important; }
-.r--yel td { background: #fffaf0 !important; }
+/* 状态行背景色 */
+.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
+.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
+.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
+.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
 </style>

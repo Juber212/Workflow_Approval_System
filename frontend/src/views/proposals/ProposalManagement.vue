@@ -134,6 +134,8 @@ const isAdmin = computed(() => userStore.isAdmin)
 
 /** 逾期/临期行标色 */
 function deadlineRowClass({ row }: any): string {
+  if (row?.status === 'completed') return 'r--green'
+  if (row?.status === 'terminated') return 'r--gray'
   if (row?.is_overdue) return 'r--red'
   if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
   return ''
@@ -347,6 +349,9 @@ async function handlePermanentDelete(row: ProposalListItem) {
 
 <style lang="scss">
 /* 逾期/临期行背景色（非 scoped 才能覆盖 el-table） */
-.r--red td { background: #fef0f0 !important; }
-.r--yel td { background: #fffaf0 !important; }
+/* 状态行背景色 */
+.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
+.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
+.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
+.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
 </style>
