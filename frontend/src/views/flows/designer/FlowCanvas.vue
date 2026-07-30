@@ -33,7 +33,15 @@ const DEFAULT_CONFIG = {
   history: true,
   adjustEdge: true,
   adjustEdgeStartAndEnd: true, // 允许拖动边的端点重新连接到其他节点
-  edgeType: 'polyline' as const, // 正交折线，支持端点拖拽重连
+  edgeType: 'bezier' as const, // 贝塞尔曲线，比正交折线更平滑优雅
+  /** 边默认样式 */
+  style: {
+    edge: {
+      stroke: '#b0b4c0',    // 默认线条颜色（柔和灰）
+      strokeWidth: 1.5,     // 线条粗细
+      hoverStroke: '#409eff', // 悬停高亮色（主题蓝）
+    },
+  },
   /** 守卫：拦截非法操作 */
   guards: {
     beforeDelete: (data: any) => {
@@ -216,6 +224,21 @@ defineExpose({ getLf, lf, addWorkNode, deleteSelected })
   width: 100%;
   height: 100%;
   outline: none;
+
+  /* ===== 边样式美化 ===== */
+  :deep(.lf-edge) {
+    cursor: pointer;
+  }
+
+  /* SVG 路径过渡动画 */
+  :deep(.lf-edge-path) {
+    transition: stroke 0.2s ease;
+  }
+
+  /* 箭头颜色跟随线条 */
+  :deep(.lf-edge-arrow) {
+    transition: fill 0.2s ease;
+  }
 }
 
 /* 缩放比例徽章 —— 左下角 */

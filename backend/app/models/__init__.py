@@ -23,7 +23,7 @@ from app.models.operation_log import OperationLog
 from app.models.node_preset import NodePreset
 from app.models.signature import Signature
 from app.models.endorsement import Endorsement
-from app.models.document_template import DocumentTemplate, TemplateDocumentLink
+from app.models.document_template import DocumentTemplate, TemplateCategory, TemplateCategoryDocument, TemplateDocumentLink
 from app.models.notification import Notification
 
 __all__ = [
@@ -33,6 +33,6 @@ __all__ = [
     "FlowTemplate", "TemplateNode", "TemplateEdge",
     "FlowInstance", "InstanceNode", "InstanceEdge",
     "Task", "CheckRecord", "Approval", "Endorsement", "File", "OperationLog", "NodePreset",
-    "Signature", "DocumentTemplate", "TemplateDocumentLink",
+    "Signature", "DocumentTemplate", "TemplateCategory", "TemplateCategoryDocument", "TemplateDocumentLink",
     "Notification",
 ]

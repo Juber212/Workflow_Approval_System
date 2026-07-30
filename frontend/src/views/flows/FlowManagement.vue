@@ -64,7 +64,7 @@
     <div class="card">
       <div class="card__body" style="padding:0">
         <el-table :data="instances" stripe border v-loading="instanceLoading"
-          :row-class-name="instanceRowClass"
+          :row-class-name="combinedRowClass"
           @row-click="handleInstanceRowClick" style="cursor:pointer"
         >
           <!-- ===== 弹性列（按内容自适配） ===== -->
@@ -81,7 +81,7 @@
             </template>
           </el-table-column>
           <!-- 3. 所属组织 -->
-          <el-table-column prop="organization_name" label="所属组织" show-overflow-tooltip />
+          <el-table-column prop="organization_name" label="所属组织" width="90" show-overflow-tooltip />
           <!-- 4. 进度（进度条） -->
           <el-table-column label="进度" min-width="120">
             <template #default="{ row }">
@@ -123,12 +123,18 @@
             </template>
           </el-table-column>
           <!-- 9. 发起时间 -->
-          <el-table-column prop="initiated_at" label="发起时间" width="150">
+          <el-table-column prop="initiated_at" label="发起时间" width="135">
             <template #default="{ row }">
               <span class="num">{{ formatTime(row.initiated_at) }}</span>
             </template>
           </el-table-column>
-          <!-- 10. 操作 -->
+          <!-- 10. 流程截止 -->
+          <el-table-column label="截止时间" width="135">
+            <template #default="{ row }">
+              <span class="num">{{ row.flow_deadline ? formatTime(row.flow_deadline) : '-' }}</span>
+            </template>
+          </el-table-column>
+          <!-- 11. 操作 -->
           <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
           <el-table-column label="操作" :width="isAdmin ? 160 : 140" fixed="right">
             <template #default="{ row }">
@@ -282,6 +288,20 @@ function instanceRowClass({ row }: { row: InstanceListItem }) {
   return ''
 }
 
+/** 逾期/临期行标色 */
+function deadlineRowClass({ row }: any): string {
+  if (row?.is_overdue) return 'r--red'
+  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
+  return ''
+}
+
+/** 合并优先级行色 + 逾期/临期行色 */
+function combinedRowClass(data: { row: InstanceListItem }) {
+  const pri = instanceRowClass(data)
+  const dl = deadlineRowClass(data)
+  return [pri, dl].filter(Boolean).join(' ')
+}
+
 function handleInstanceFilter(status: string) {
   instanceStatusFilter.value = status
   instancePage.value = 1
@@ -387,4 +407,8 @@ async function handlePermanentDelete(row: InstanceListItem) {
 /* 优先级行高亮（仅运行中实例） */
 .row--priority-urgent td { background: #fde8e8 !important; }
 .row--priority-high td { background: #fef3e2 !important; }
+
+/* 逾期/临期行背景色 */
+.r--red td { background: #fef0f0 !important; }
+.r--yel td { background: #fffaf0 !important; }
 </style>

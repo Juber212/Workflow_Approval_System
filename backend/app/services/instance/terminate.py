@@ -55,7 +55,48 @@ async def terminate_instance(
 
     now = datetime.now()
 
-    # ========== 4. 物理删除文件 + 删除 files 记录 ==========
+    # ========== 4. 先收集待通知人员（必须在状态 UPDATE 之前！） ==========
+    # 如果先 UPDATE 再 SELECT，所有 pending 记录已变为 terminated，通知查询永远为空
+    notified: set[int] = set()  # 已通知用户去重
+    notify_users: list[tuple[int, str]] = []  # [(user_id, clear_type), ...]
+
+    # 待处理 task 的负责人
+    pre_pending_tasks = (await db.execute(
+        select(Task).where(Task.instance_id == instance_id, Task.status.in_(["pending", "processing"]))
+    )).scalars().all()
+    for t in pre_pending_tasks:
+        if t.assignee_id and t.assignee_id not in notified:
+            notified.add(t.assignee_id)
+            notify_users.append((t.assignee_id, "task_assigned"))
+
+    # 待处理校验的校验人
+    pre_pending_checks = (await db.execute(
+        select(CheckRecord).where(CheckRecord.instance_id == instance_id, CheckRecord.status == "pending")
+    )).scalars().all()
+    for c in pre_pending_checks:
+        if c.checker_id and c.checker_id not in notified:
+            notified.add(c.checker_id)
+            notify_users.append((c.checker_id, "check_assigned"))
+
+    # 待处理审批的审批人
+    pre_pending_approvals = (await db.execute(
+        select(Approval).where(Approval.instance_id == instance_id, Approval.status == "pending")
+    )).scalars().all()
+    for a in pre_pending_approvals:
+        if a.approver_id and a.approver_id not in notified:
+            notified.add(a.approver_id)
+            notify_users.append((a.approver_id, "approval_assigned"))
+
+    # 待处理批准的批准人
+    pre_pending_endorsements = (await db.execute(
+        select(Endorsement).where(Endorsement.instance_id == instance_id, Endorsement.status == "pending")
+    )).scalars().all()
+    for e in pre_pending_endorsements:
+        if e.endorser_id and e.endorser_id not in notified:
+            notified.add(e.endorser_id)
+            notify_users.append((e.endorser_id, "endorsement_assigned"))
+
+    # ========== 5. 物理删除文件 + 删除 files 记录 ==========
     file_stmt = select(File).where(File.instance_id == instance_id)
     file_result = await db.execute(file_stmt)
     files = file_result.scalars().all()
@@ -64,7 +105,7 @@ async def terminate_instance(
     if files:
         await batch_delete_files_with_physical(db, list(files))
 
-    # ========== 5. 关闭非终态 instance_nodes ==========
+    # ========== 6. 关闭非终态 instance_nodes ==========
     non_terminal_statuses = ["finished", "terminated"]
     await db.execute(
         sql_update(InstanceNode)
@@ -75,7 +116,7 @@ async def terminate_instance(
         .values(status="terminated", completed_at=now)
     )
 
-    # ========== 6. 关闭非终态 tasks ==========
+    # ========== 7. 关闭非终态 tasks ==========
     task_terminal = ["completed", "terminated"]
     await db.execute(
         sql_update(Task)
@@ -86,7 +127,7 @@ async def terminate_instance(
         .values(status="terminated", completed_at=now)
     )
 
-    # ========== 7. 关闭 pending check_records ==========
+    # ========== 8. 关闭 pending check_records ==========
     await db.execute(
         sql_update(CheckRecord)
         .where(
@@ -96,7 +137,7 @@ async def terminate_instance(
         .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
 
-    # ========== 8. 关闭 pending approvals ==========
+    # ========== 9. 关闭 pending approvals ==========
     await db.execute(
         sql_update(Approval)
         .where(
@@ -106,7 +147,7 @@ async def terminate_instance(
         .values(status=ApprovalStatus.TERMINATED, decided_at=now)
     )
 
-    # ========== 8b. 关闭 pending endorsements ==========
+    # ========== 9b. 关闭 pending endorsements ==========
     await db.execute(
         sql_update(Endorsement)
         .where(
@@ -116,12 +157,12 @@ async def terminate_instance(
         .values(status=EndorsementStatus.TERMINATED, decided_at=now)
     )
 
-    # ========== 9. 更新实例状态 ==========
+    # ========== 10. 更新实例状态 ==========
     instance.status = "terminated"
     instance.termination_reason = reason
     instance.terminated_at = now
 
-    # ========== 10. 记录操作日志 ==========
+    # ========== 11. 记录操作日志 ==========
     term_type_label = await _get_type_label(db, instance.template_id)
     log = OperationLog(
         instance_id=instance_id,
@@ -133,54 +174,11 @@ async def terminate_instance(
     )
     db.add(log)
 
-    # ---- 通知+清除：所有待处理人员收到终止通知，并清除相关待办通知 ----
-
-
-    notified: set[int] = set()  # 已通知用户去重
-
-    # 待处理 task 的负责人
-    pending_tasks = (await db.execute(
-        select(Task).where(Task.instance_id == instance_id, Task.status.in_(["pending", "processing"]))
-    )).scalars().all()
-    for t in pending_tasks:
-        if t.assignee_id and t.assignee_id not in notified:
-            notified.add(t.assignee_id)
-            await clear_related(db, user_id=t.assignee_id, types=["task_assigned"])
-            await create_notification(db, user_id=t.assignee_id, type="instance_terminated",
-                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
-
-    # 待处理校验的校验人
-    pending_checks = (await db.execute(
-        select(CheckRecord).where(CheckRecord.instance_id == instance_id, CheckRecord.status == "pending")
-    )).scalars().all()
-    for c in pending_checks:
-        if c.checker_id and c.checker_id not in notified:
-            notified.add(c.checker_id)
-            await clear_related(db, user_id=c.checker_id, types=["check_assigned"])
-            await create_notification(db, user_id=c.checker_id, type="instance_terminated",
-                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
-
-    # 待处理审批的审批人
-    pending_approvals = (await db.execute(
-        select(Approval).where(Approval.instance_id == instance_id, Approval.status == "pending")
-    )).scalars().all()
-    for a in pending_approvals:
-        if a.approver_id and a.approver_id not in notified:
-            notified.add(a.approver_id)
-            await clear_related(db, user_id=a.approver_id, types=["approval_assigned"])
-            await create_notification(db, user_id=a.approver_id, type="instance_terminated",
-                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
-
-    # 待处理批准的批准人
-    pending_endorsements = (await db.execute(
-        select(Endorsement).where(Endorsement.instance_id == instance_id, Endorsement.status == "pending")
-    )).scalars().all()
-    for e in pending_endorsements:
-        if e.endorser_id and e.endorser_id not in notified:
-            notified.add(e.endorser_id)
-            await clear_related(db, user_id=e.endorser_id, types=["endorsement_assigned"])
-            await create_notification(db, user_id=e.endorser_id, type="instance_terminated",
-                title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+    # ========== 12. 发送终止通知 + 清除待办（使用步骤4预先收集的用户列表） ==========
+    for user_id, clear_type in notify_users:
+        await clear_related(db, user_id=user_id, types=[clear_type])
+        await create_notification(db, user_id=user_id, type="instance_terminated",
+            title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
 
     return {
         "id": instance.id,

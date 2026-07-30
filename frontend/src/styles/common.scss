@@ -194,6 +194,10 @@
 .el-table__body .el-button {
   justify-content: flex-start;
 }
+/* 文本按钮去左内边距，文字与列头完全左对齐 */
+.el-table__body .el-button--small.is-text {
+  padding-left: 0;
+}
 
 // ========== 全局 Element Plus 风格微调（飞书方向） ==========
 
@@ -210,11 +214,7 @@
   box-shadow: none !important;
 }
 
-// 输入框/下拉框：focus 去外发光，仅 1px 蓝边
-.el-input__wrapper,
-.el-select__wrapper {
-  box-shadow: none !important;
-}
+// 输入框/下拉框：focus 细蓝边
 .el-input.is-focus .el-input__wrapper,
 .el-select.is-focus .el-input__wrapper {
   box-shadow: 0 0 0 1px var(--el-color-primary) inset !important;

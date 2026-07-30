@@ -14,7 +14,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, comment="登录用户名")
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False, comment="加密密码")
     real_name: Mapped[str] = mapped_column(String(20), nullable=False, comment="真实姓名")
-    organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, comment="所属组织")
+    organization_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=True, comment="所属组织（管理员可选空）")
     email: Mapped[str | None] = mapped_column(String(100), comment="邮箱")
     phone: Mapped[str | None] = mapped_column(String(20), comment="手机号")
     signature_image: Mapped[str | None] = mapped_column(String(500), comment="签名图片路径")

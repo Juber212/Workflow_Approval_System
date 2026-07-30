@@ -12,6 +12,7 @@
         @supplement="handleSupplement"
         @change-priority="handleChangePriority"
         @terminate="handleTerminate"
+        @node-click="handleNodeClick"
       />
 
       <!-- ===== 方案：卡片平铺布局 ===== -->
@@ -26,7 +27,7 @@
               <div class="proposal-block">
                 <template v-if="getNodeFolderGroups(node).length > 0">
                   <div v-for="group in getNodeFolderGroups(node)" :key="group.name" class="proposal-folder">
-                    <div class="proposal-folder__name">📁 {{ group.name }}（{{ group.files.length }}）</div>
+                    <div class="proposal-folder__name"><el-icon :size="14"><Folder /></el-icon> {{ group.name }}（{{ group.files.length }}）</div>
                     <div v-if="group.files.length === 0" class="proposal-empty">暂未上传文件</div>
                     <div v-else class="proposal-file-list">
                       <div v-for="f in group.files" :key="f.id" class="proposal-file-row">
@@ -45,7 +46,7 @@
 
               <!-- 审批记录 -->
               <div class="proposal-block">
-                <div class="proposal-block__title">📝 审批记录（{{ node.approvals.length }}）</div>
+                <div class="proposal-block__title"><el-icon :size="14"><EditPen /></el-icon> 审批记录（{{ node.approvals.length }}）</div>
                 <div v-if="node.approvals.length === 0" class="proposal-empty">暂无</div>
                 <div v-else class="proposal-record-list">
                   <div
@@ -59,7 +60,6 @@
                       {{ a.status === 'approved' ? '已通过' : a.status === 'rejected' ? '已驳回' : a.status }}
                     </span>
                     <span v-if="a.round > 1" class="proposal-record-round">#{{ a.round }}</span>
-                    <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
                     <span v-if="a.opinion" class="proposal-record-opinion">「{{ a.opinion }}」</span>
                     <span v-if="a.decided_at" class="proposal-record-time">{{ formatTime(a.decided_at) }}</span>
                   </div>
@@ -81,6 +81,7 @@
           :is-initiator="isInitiator"
           :instance-status="detail.status"
           :force-expand="expandAll"
+          :highlight-node-id="highlightNodeId"
           @change-personnel="handleChangePersonnel"
           @supplement="handleSupplement"
         />
@@ -155,7 +156,7 @@ import { previewFile, downloadFile } from '@/api/task'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, formatFileSize } from '@/utils/format'
-import { Document } from '@element-plus/icons-vue'
+import { Document, Folder, EditPen } from '@element-plus/icons-vue'
 import InstanceInfo from './components/InstanceInfo.vue'
 import NodeCard from './components/NodeCard.vue'
 import OperationTimeline from './components/OperationTimeline.vue'
@@ -181,6 +182,14 @@ const showPersonnelDialog = ref(false)
 const showSupplementDialog = ref(false)
 const supplementPreselectedNodeId = ref<number | undefined>(undefined)
 const selectedNode = ref<DetailNodeInfo | null>(null)
+
+/** 进度条点击联动 —— 高亮节点 ID，传给 NodeCard 触发展开+滚动 */
+const highlightNodeId = ref<number | null>(null)
+
+/** 进度条节点圆圈点击 → 展开对应节点卡片 */
+function handleNodeClick(node: DetailNodeInfo) {
+  highlightNodeId.value = node.id
+}
 
 /** 当前用户是否为发起人 */
 const isInitiator = computed(() => {
@@ -391,6 +400,7 @@ function handleDownload(fileId: number) {
   margin-bottom: 14px;
 
   &__title {
+    display: flex; align-items: center; gap: 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--el-text-color-secondary);
@@ -405,6 +415,7 @@ function handleDownload(fileId: number) {
   margin-bottom: 8px;
 
   &__name {
+    display: flex; align-items: center; gap: 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--el-text-color-secondary);

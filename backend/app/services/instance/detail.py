@@ -311,6 +311,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
         sales_manager=instance.sales_manager,
         proposal_id=instance.proposal_id,
         proposal_name=proposal_name,
+        template_id=instance.template_id,
         template_type=template_type,
         current_node_index=processed_count,
         total_nodes=total_nodes,

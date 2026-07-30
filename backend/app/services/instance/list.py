@@ -1,6 +1,6 @@
 """实例列表查询服务"""
 
-from ._helpers import _batch_get_node_stats, _batch_get_active_node_info, format_current_handlers, enrich_handler_info_with_names
+from ._helpers import _batch_get_node_stats, _batch_get_active_node_info, _batch_get_active_deadlines, _batch_get_flow_deadlines, format_current_handlers, enrich_handler_info_with_names, compute_deadline_info
 
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -164,6 +164,12 @@ async def list_instances(
         )
         proposal_name_map = {pid: pname for pid, pname in prop_result.all()}
 
+    # ========== 批量查活跃节点截止时间 ==========
+    deadline_map = await _batch_get_active_deadlines(db, instance_ids)
+
+    # ========== 批量查流程截止时间（最后一个工作节点的 deadline） ==========
+    flow_deadline_map = await _batch_get_flow_deadlines(db, instance_ids)
+
     # ========== 组装结果 ==========
     items: list[InstanceListItem] = []
     for row in rows:
@@ -172,6 +178,9 @@ async def list_instances(
         org_name = row[2]
 
         node_stats = node_stats_map.get(instance.id, {"total": 0, "processed": 0})
+        node_deadline = deadline_map.get(instance.id)
+        is_overdue, days_remaining = compute_deadline_info(node_deadline)
+        flow_deadline = flow_deadline_map.get(instance.id)
 
         items.append(InstanceListItem(
             id=instance.id,
@@ -187,6 +196,10 @@ async def list_instances(
             total_nodes=node_stats["total"],
             current_handlers=handler_map.get(instance.id, "—"),
             proposal_name=proposal_name_map.get(instance.proposal_id) if instance.proposal_id else None,
+            deadline=node_deadline.isoformat() if node_deadline else None,
+            flow_deadline=flow_deadline.isoformat() if flow_deadline else None,
+            is_overdue=is_overdue,
+            days_remaining=days_remaining,
             initiated_at=instance.initiated_at,
             completed_at=instance.completed_at,
             terminated_at=instance.terminated_at,

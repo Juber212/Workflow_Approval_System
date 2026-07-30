@@ -47,7 +47,11 @@ class _SlidingWindow:
             timestamps = self._buckets[key]
             # 惰性清理：只保留窗口内的记录
             if timestamps and timestamps[0] <= cutoff:
-                self._buckets[key] = [t for t in timestamps if t > cutoff]
+                cleaned = [t for t in timestamps if t > cutoff]
+                if cleaned:
+                    self._buckets[key] = cleaned
+                else:
+                    del self._buckets[key]  # 过期后删除 key，防止长期内存泄漏
             if len(self._buckets[key]) >= max_requests:
                 return False
             self._buckets[key].append(now)

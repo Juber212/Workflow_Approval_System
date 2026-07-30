@@ -11,6 +11,10 @@ export interface ProposalListItem {
   initiator_id: number
   initiator_name: string
   status: string
+  deadline: string | null       // 当前活跃节点截止时间
+  flow_deadline: string | null  // 流程截止时间（最后一个工作节点的截止时间）
+  is_overdue: boolean         // 是否逾期
+  days_remaining: number | null  // 剩余天数
   created_at: string | null
 }
 

@@ -336,6 +336,7 @@ const autoExpandedFiles = new Set<number>()
 // ========== 签名图片 Blob URL（解决 <img> 标签不带 Bearer Token 的问题）==========
 
 const sigBlobUrl = ref<string | null>(null)
+const initTimer = ref<ReturnType<typeof setTimeout> | null>(null)  // 弹窗初始化延迟计时器
 
 /** 释放之前的 blob URL 避免内存泄漏 */
 function revokeSigBlob() {
@@ -371,8 +372,11 @@ async function loadSigBlob(url: string | null | undefined) {
 // 监听 sigUrl 变化，自动加载
 watch(() => props.sigUrl, loadSigBlob, { immediate: true })
 
-// 组件卸载时释放 blob URL
-onBeforeUnmount(revokeSigBlob)
+// 组件卸载时释放 blob URL + 清理延迟计时器
+onBeforeUnmount(() => {
+  revokeSigBlob()
+  if (initTimer.value) { clearTimeout(initTimer.value); initTimer.value = null }
+})
 
 // ========== 计算属性 ==========
 
@@ -422,7 +426,9 @@ watch(
     currentSigY.value = props.defaultY
     currentPage.value = props.defaultPage < 0 ? 1 : props.defaultPage
     // 短暂延迟确保 DOM 就绪后加载第一个文件
-    setTimeout(() => {
+    if (initTimer.value) clearTimeout(initTimer.value)
+    initTimer.value = setTimeout(() => {
+      initTimer.value = null
       initializing.value = false
       if (files.value.length > 0) {
         selectFile(files.value[0].file_id)

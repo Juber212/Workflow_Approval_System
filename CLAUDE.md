@@ -35,7 +35,7 @@
 
 ## 核心对象
 
-Organization → User → Flow Template → Flow Version → Flow Instance（含 priority 优先级属性，默认 normal，发起人可随时修改）→ Work Node → Task → Approval → File → Operation Log
+Organization → User → Flow Template → Flow Instance（含 priority 优先级属性 + difficulty 难度等级 1-4，默认 normal/1，发起人可随时修改）→ Instance Node → Task → Check → Approval → Endorsement → File → Signature → Operation Log → Notification
 
 ## 节点模型（关键！）
 
@@ -44,7 +44,7 @@ Organization → User → Flow Template → Flow Version → Flow Instance（含
 | 位置 | 行为 |
 |------|------|
 | 第一个（开始） | 系统默认生成，显示发起人姓名，无配置，发起后自动跳过，不生成 Task |
-| 中间（工作） | 负责人执行 → 上传文件 → 自动转PDF → 提交 → 校验人并行校验 → 全部通过 → 审批人并行审批 → 全部通过后签名上PDF → 下一节点 |
+| 中间（工作） | 负责人执行 → 上传文件 → 自动转PDF → 提交 → 校验人校验 → 审批人审批 → (难度4) 批准人签阅 → 全部通过后签名上PDF → 下一节点 |
 | 最后一个（结束） | 发起人终审：查看全部文件 → 通过则归档；驳回则选择目标节点。不生成 Task |
 
 ## 每个节点的标准流程
@@ -53,15 +53,19 @@ Organization → User → Flow Template → Flow Version → Flow Instance（含
 负责人收到 Task
   → 上传文件（Word/Excel/图片/PDF）
   → 提交时系统自动将非 PDF 转为 PDF（LibreOffice 无头模式）
-  → 所有校验人并行校验
-  → 全部校验通过 → 所有审批人并行收到审批
-  → 全部审批通过（All Approve）→ 签名自动插入 PDF 固定位置（pypdf 库）
+  → 校验人校验
+  → 校验通过 → 审批人收到审批
+  → 审批通过（支持 all_approve / single_approve 两种策略）
+  → [难度4] 批准人签阅（Endorse）
+  → 签名自动插入 PDF 固定位置（pypdf 库）
   → 进入下一节点
 ```
 
 - 驳回时审批人从之前的节点列表中选择目标 → 旧文件删除 → 重新生成 Task
 - 负责人和审批人可为同一人，系统不拦截
-- 审批策略第一版固定"全部通过"
+- 审批策略支持"全部通过"（all_approve）和"一人通过"（single_approve）两种模式
+- 校验人/审批人前端 UI 简化为单选（一人），后端存储仍为数组，兼容历史多选数据
+- 审批驳回时可选择驳回到已完成的历史节点（中间节点驳回也能指定目标节点，复用终审驳回逻辑）
 
 ## PDF 签名机制
 
@@ -95,7 +99,8 @@ storage/archive/{实例名称}/
 
 ```
 ├── Dashboard（首页看板）
-├── 流程管理（含流程设计器，内部页面导航）
+├── 项目管理（含流程设计器 + 组织卡片，内部页面导航，方案通过 Tab 切换）
+├── 方案管理（同项目管理模型，独立菜单入口）
 ├── 个人中心（卡片分区，一页展示；个人信息/密码在右上角下拉；系统管理员不显示此菜单）
 └── 系统管理（Tab 切换，仅管理员可见）
 ```
@@ -104,8 +109,8 @@ storage/archive/{实例名称}/
 
 ## 关键业务规则
 
-1. 一个流程模板 → 多个版本 → 多个实例（模板与实例分离）
-2. 已发布模板：软修改（审批人/时限/描述）即时生效不产生新版本；硬修改（节点/连线变更）自动生成新版本。运行中实例不受影响
+1. 一个流程模板 → 多个实例（模板与实例完全分离，实例发起时配置快照）
+2. 模板修改直接生效（模板与实例解耦，运行中实例不受影响）
 3. 实例发起时可逐节点调整审批人/负责人/截止日期，发起后生成配置快照，与模板解耦
 4. 开始和结束节点由系统默认生成，不可删除
 5. 发布校验：至少3个节点 + 中间节点完整配置 + 全部连通
@@ -120,20 +125,29 @@ storage/archive/{实例名称}/
 14. 通知系统：WebSocket 推送 + 个人中心 30s 轮询兜底。侧边栏角标、个人中心 Tab 页签、首页红点均实时刷新
 15. 节点可配置文件提交分类（文件夹模式）：多个命名文件夹，各自可设必填/可选 + 精确数量限制
 16. 补交文件：已完成实例的已完成节点可追加文件，节点有文件夹配置时必选目标文件夹
-17. 文件模板（.docx/.xlsx）：管理员上传，下载时自动替换 15 个占位符（如 {{项目名称}}、{{发起日期}} 等）
+17. 文件模板（.docx/.xlsx）：管理员上传，下载时自动替换 15 个占位符（如 {{项目名称}}、{{发起日期}} 等）；支持模板分类（包），包内多模板可一键打包 ZIP 下载
 18. 方案（Proposal）：与项目并列的流程类型，相同节点模型
 
 ## 当前进度
 
 - ✅ Blueprint (00_Project_Blueprint.md) — 技术栈、FlowEngine设计、LogicFlow选型、分区表
 - ✅ PRD (01_PRD.md) — 轮次日志、连通性校验算法
-- ✅ Database Design (02_Database_Design.md) — 17 表 + 完整SQL含分区（实际已扩展至 20+ 表）
-- ✅ API Design (03_API_Design.md) — 45+ 端点 + 批量保存 + 并发安全 + 错误码
+- ✅ Database Design (02_Database_Design.md) — 24 表 + 完整SQL含分区
+- ✅ API Design (03_API_Design.md) — 99 端点 + 批量保存 + 并发安全 + 错误码
 - ✅ Frontend (Vue3 + LogicFlow + Element Plus) — 全部页面完成
 - ✅ Backend (FastAPI + SQLAlchemy + JWT) — 全部模块完成
 - ✅ Flow Engine (FlowEngine 类 → API 层调用) — BFS 激活/传播/fork-join 汇合
-- ✅ 自动化测试 187 条（158 mock 单元 + 10 mock 集成 + 19 MySQL 真实服务调用），零业务逻辑 bug
+- ✅ 自动化测试 190 条（158 mock 单元 + 10 mock 集成 + 19 MySQL 真实服务调用 + 3 其他），零业务逻辑 bug
 - ✅ 首页柱状图重写、签批预览、通知系统（WebSocket + 30s 轮询兜底）
+- ✅ 批准人（Endorser）+ 难度等级、方案（Proposal）模块、文件模板、节点预设
+- ✅ 截止时间逾期/临期行标色（全部列表页）
+- ✅ 管理员可不归属组织（organization_id 改可空）
+- ✅ UI 简化：校验人/审批人改为单选 + 中间节点支持驳回到历史节点 + 安全加固
+- ✅ 第三轮全量审计修复：致命 5 + 高危 4 + 中危 13，共 22 项（Phase 11-14）
+- ✅ 第四轮全栈深度审计：5 代理并行扫描 100+ 文件，修复致命 6 + 高危 10 + 中危 15，共 31 项（Phase 15）
+- ✅ 数据库隔离级别加固：READ COMMITTED 防 fork-join 并发竞态
+- ✅ 前后端字段对齐：NodeOverride 签名字段 / template type / endorsements 等
+- - [ ] 剩余低危 11 项按需修复
 
 **状态：可部署上线**
 
@@ -144,7 +158,7 @@ storage/archive/{实例名称}/
 | Mock 单元测试 | 158 | `tests/unit/` | 内存运行，毫秒级 |
 | Mock 集成测试 | 10 | `tests/integration/` | TestClient + mock_db |
 | MySQL 真实测试 | 19 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
-| **合计** | **187** | | **0 业务逻辑 bug** |
+| **合计** | **190** | | **0 业务逻辑 bug** |
 
 运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
 
@@ -154,6 +168,7 @@ storage/archive/{实例名称}/
 2. 文件模板占位符共 15 个，日期格式统一为「YYYY年MM月DD日」
 3. 表格分页统一右下角（`justify-content: flex-end`）
 4. 表格操作列按钮左对齐（`justify-content: flex-start`，保留正常内边距）
+5. 模板保存时自动校验结构合法性（≥3节点 + 中间节点必须配置校验人和审批人 + 全连通），不合法设计拒绝保存
 
 每次沟通结尾都加一句"喵"
 

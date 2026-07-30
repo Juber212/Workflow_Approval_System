@@ -303,7 +303,7 @@ async def apply_signatures_to_node_pdfs(
             signed_count += 1
         except Exception as e:
             # 安全网：PDF 签名插入涉及文件 I/O + pypdf 多类型异常
-            logger.warning(f"[签名] 文件 {file_record.id} 签名失败: {e}")
+            logger.warning(f"[签名] 文件 {file_record.id} 签名失败: {e}", exc_info=True)
             continue
 
     # 标记该节点所有 Signature 记录为已应用
@@ -430,7 +430,7 @@ async def apply_signatures_to_files(
             )
         except Exception as e:
             # 安全网：DB 更新失败不中断其他文件的签名标记
-            logger.warning(f"[签名] 文件 {file_id} 签名写入失败: {e}")
+            logger.warning(f"[签名] 文件 {file_id} 签名写入失败: {e}", exc_info=True)
             continue
 
     return signed_count

@@ -77,7 +77,7 @@
     </div>
 
     <!-- 第三行：流程进度条 -->
-    <ProgressBar v-if="!isProposal && detail.nodes.length > 0" :nodes="detail.nodes" />
+    <ProgressBar v-if="!isProposal && detail.nodes.length > 0" :nodes="detail.nodes" @node-click="(node: any) => $emit('node-click', node)" />
   </div>
 </template>
 
@@ -97,6 +97,7 @@ defineEmits<{
   supplement: []
   changePriority: []
   terminate: []
+  'node-click': [node: any]
 }>()
 
 /** 是否为方案实例 */

@@ -99,7 +99,7 @@
 
 <script setup lang="ts">
 /** 应用布局 —— 侧边栏 + 内容区（飞书风格） */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getToken } from '@/api/request'
@@ -306,6 +306,14 @@ async function handleSignatureUpload(file: File): Promise<boolean> {
   } finally { uploadingSignature.value = false }
   return false
 }
+
+// 组件卸载时释放 blob URL，防止内存泄漏
+onBeforeUnmount(() => {
+  if (signatureBlobUrl.value) {
+    URL.revokeObjectURL(signatureBlobUrl.value)
+    signatureBlobUrl.value = ''
+  }
+})
 </script>
 
 <style lang="scss" scoped>

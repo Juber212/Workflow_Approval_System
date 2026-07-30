@@ -27,6 +27,7 @@ from app.models.enums import (
 from app.schemas.common import PaginatedData
 from app.schemas.proposal import ProposalCreateRequest, ProposalListItem
 from app.api.deps import CurrentUser
+from app.services.instance._helpers import compute_deadline_info, _batch_get_active_deadlines, _batch_get_flow_deadlines
 
 
 # 方案内置模板固定名称
@@ -111,9 +112,18 @@ async def create_proposal(
         select(TemplateNode).where(TemplateNode.template_id == tpl.id).order_by(TemplateNode.sort_order)
     )).scalars().all()
 
+    # 方案名称校验：禁止路径遍历字符
+    proposal_name = body.name.strip()
+    _illegal_chars = {"../", "..\\", "/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+    if not proposal_name or any(c in proposal_name for c in _illegal_chars):
+        raise AppException(
+            ErrorCode.BAD_REQUEST,
+            f"方案名称不能为空或包含特殊字符（{' '.join(sorted(_illegal_chars))}）",
+        )
+
     # 创建方案实例
     instance = FlowInstance(
-        name=body.name.strip(),
+        name=proposal_name,
         description=body.description,
         template_id=tpl.id,
         template_name=tpl.name,
@@ -296,8 +306,17 @@ async def list_proposals(
         orgs_result = await db.execute(select(Organization).where(Organization.id.in_(org_ids)))
         orgs_map = {o.id: o.name for o in orgs_result.scalars().all()}
 
-    items = [
-        ProposalListItem(
+    # 批量查活跃节点截止时间（专用 helper）
+    inst_ids = [inst.id for inst in instances]
+    deadline_map = await _batch_get_active_deadlines(db, inst_ids) if inst_ids else {}
+    flow_deadline_map = await _batch_get_flow_deadlines(db, inst_ids) if inst_ids else {}
+
+    items = []
+    for inst in instances:
+        d = deadline_map.get(inst.id)
+        is_overdue, days_remaining = compute_deadline_info(d)
+        fd = flow_deadline_map.get(inst.id)
+        items.append(ProposalListItem(
             id=inst.id,
             name=inst.name,
             description=inst.description,
@@ -306,8 +325,10 @@ async def list_proposals(
             initiator_id=inst.initiator_id,
             initiator_name=users_map.get(inst.initiator_id, ""),
             status=inst.status,
+            deadline=d.isoformat() if d else None,
+            flow_deadline=fd.isoformat() if fd else None,
+            is_overdue=is_overdue,
+            days_remaining=days_remaining,
             created_at=inst.created_at,
-        )
-        for inst in instances
-    ]
+        ))
     return PaginatedData(items=items, total=total, page=page, page_size=page_size)

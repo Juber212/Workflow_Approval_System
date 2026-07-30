@@ -35,14 +35,15 @@ class TestSaveDesignData:
 
     @pytest.mark.asyncio
     async def test_save_new_nodes_and_edges(self, mock_db, mocker):
-        """全新保存 → 创建节点和连线"""
+        """全新保存 → 创建节点和连线（校验逻辑另测）"""
         mocker.patch("app.services.designer_service._topological_sort", new=AsyncMock())
+        mocker.patch("app.services.validation_service.validate_template_for_publish", new=AsyncMock(return_value=[]))
         tpl = FlowTemplate(id=1, name="测试模板", type="project", organization_id=1)
 
         nodes_data = [
             {"id": "node_1", "type": "start", "name": "开始", "is_start": True, "is_end": False, "position_x": 0, "position_y": 0},
             {"id": "node_2", "type": "work", "name": "审批", "is_start": False, "is_end": False, "position_x": 200, "position_y": 0,
-             "assignee_id": 2, "approvers": [{"user_id": 3}], "checkers": []},
+             "assignee_id": 2, "approvers": [{"user_id": 3}], "checkers": [{"user_id": 4}], "time_limit_days": 3},
             {"id": "node_3", "type": "end", "name": "结束", "is_start": False, "is_end": True, "position_x": 400, "position_y": 0},
         ]
         edges_data = [{"id": "edge_1", "source_node_id": "node_1", "target_node_id": "node_2"},

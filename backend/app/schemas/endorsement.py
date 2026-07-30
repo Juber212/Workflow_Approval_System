@@ -15,6 +15,9 @@ class EndorsementListItem(BaseModel):
     status: str
     is_end_node: bool = False
     round: int = 1
+    deadline: str | None = None       # 截止时间（ISO 格式）
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期）
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -32,7 +35,10 @@ class EndorsementDetail(BaseModel):
     difficulty: str = "1"
     node_id: int
     node_name: str
+    node_description: str = ""  # 节点说明
     node_status: str
+    time_limit_days: int | None = None  # 完成时限
+    deadline: datetime | None = None  # 截止时间
     task_id: int | None = None
     endorser_id: int
     endorser_name: str = ""

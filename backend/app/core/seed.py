@@ -100,14 +100,12 @@ async def seed():
             admin_role = await session.run_sync(
                 lambda s: s.query(Role).filter_by(code="system_admin").first()
             )
-            general_org = await session.run_sync(
-                lambda s: s.query(Organization).filter_by(name="通用所").first()
-            )
+            # 默认管理员不归属任何组织
             admin_user = User(
                 username=DEFAULT_ADMIN["username"],
                 password_hash=hash_password(DEFAULT_ADMIN["password"]),
                 real_name=DEFAULT_ADMIN["real_name"],
-                organization_id=general_org.id,
+                organization_id=None,
             )
             session.add(admin_user)
             await session.flush()

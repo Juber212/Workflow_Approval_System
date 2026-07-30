@@ -14,6 +14,9 @@ export interface ApprovalListItem {
   status: string
   is_end_node: boolean
   round: number
+  deadline: string | null       // 截止时间（ISO 格式）
+  is_overdue: boolean            // 是否逾期
+  days_remaining: number | null  // 剩余天数（负数=已逾期）
   created_at: string | null
 }
 
@@ -25,6 +28,7 @@ export interface ApprovalDetail {
   initiator_id: number
   initiator_name: string
   priority: string
+  difficulty: string  // 难度等级（1-4）
   node_id: number
   node_name: string
   node_description: string | null
@@ -34,10 +38,14 @@ export interface ApprovalDetail {
   status: string
   opinion: string | null
   is_end_node: boolean
+  time_limit_days: number | null  // 完成时限（工作日）
+  deadline: string | null         // 截止时间
+  round: number                   // 当前轮次
   total_nodes: number
   current_node_index: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string; sort_order: number }[]
   files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; node_id: number | null; node_name: string; uploader_name: string; upload_type: string; round: number; created_at: string | null }[]
+  node_files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; round: number }[]  // 仅本节点文件（签批用，后端过滤）
   check_progress: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; round: number; decided_at: string | null }[]
   approval_progress: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; round: number; decided_at: string | null }[]
   reject_target_nodes: { id: number; name: string; sort_order: number; status: string }[]

@@ -27,29 +27,29 @@
         />
       </div>
 
-      <!-- 校验人（多选） -->
+      <!-- 校验人 -->
       <div class="personnel-edit__row">
         <label class="personnel-edit__label">校验人</label>
         <UserSelector
-          :model-value="form.checker_ids"
-          @update:model-value="(v: number | number[] | undefined) => form.checker_ids = (v as number[]) || []"
+          :model-value="form.checker_id"
+          @update:model-value="(v: number | undefined) => form.checker_id = v"
           :initial-options="checkerInitialOptions"
-          :multiple="true"
-          :placeholder="'选择校验人（可多选）'"
+          :multiple="false"
+          :placeholder="'选择校验人'"
           org-members
           style="width: 320px"
         />
       </div>
 
-      <!-- 审批人（多选） -->
+      <!-- 审批人 -->
       <div class="personnel-edit__row">
         <label class="personnel-edit__label">审批人</label>
         <UserSelector
-          :model-value="form.approver_ids"
-          @update:model-value="(v: number | number[] | undefined) => form.approver_ids = (v as number[]) || []"
+          :model-value="form.approver_id"
+          @update:model-value="(v: number | undefined) => form.approver_id = v"
           :initial-options="approverInitialOptions"
-          :multiple="true"
-          :placeholder="'选择审批人（可多选）'"
+          :multiple="false"
+          :placeholder="'选择审批人'"
           org-members
           style="width: 320px"
         />
@@ -95,12 +95,12 @@ const submitting = ref(false)
 /** 表单数据：只传有修改的字段，null/undefined 表示不修改 */
 const form = reactive<{
   assignee_id: number | undefined
-  checker_ids: number[]
-  approver_ids: number[]
+  checker_id: number | undefined
+  approver_id: number | undefined
 }>({
   assignee_id: undefined,
-  checker_ids: [],
-  approver_ids: [],
+  checker_id: undefined,
+  approver_id: undefined,
 })
 
 /** 负责人初始选项 —— 预填当前负责人姓名，避免 UserSelector 远程模式显示裸 ID */
@@ -117,34 +117,24 @@ const assigneeInitialOptions = computed<UserSearchItem[]>(() => {
 
 /** 校验人初始选项 —— 预填当前校验人姓名 */
 const checkerInitialOptions = computed<UserSearchItem[]>(() => {
-  if (!props.node?.checkers) return []
-  return props.node.checkers.map(c => ({
-    id: c.user_id,
-    real_name: (c as any).user_name || '',
-    username: '',
-    organization_id: null,
-    organization_name: null,
-  }))
+  if (!props.node?.checkers?.length) return []
+  const c = props.node.checkers[0]
+  return [{ id: c.user_id, real_name: (c as any).user_name || '', username: '', organization_id: null, organization_name: null }]
 })
 
 /** 审批人初始选项 —— 预填当前审批人姓名 */
 const approverInitialOptions = computed<UserSearchItem[]>(() => {
-  if (!props.node?.approvers) return []
-  return props.node.approvers.map(a => ({
-    id: a.user_id,
-    real_name: (a as any).user_name || '',
-    username: '',
-    organization_id: null,
-    organization_name: null,
-  }))
+  if (!props.node?.approvers?.length) return []
+  const a = props.node.approvers[0]
+  return [{ id: a.user_id, real_name: (a as any).user_name || '', username: '', organization_id: null, organization_name: null }]
 })
 
 // 弹窗打开时预填当前节点的人员配置
 watch(() => props.modelValue, (val) => {
   if (val && props.node) {
     form.assignee_id = props.node.assignee_id ?? undefined
-    form.checker_ids = (props.node.checkers || []).map(c => c.user_id).filter(Boolean)
-    form.approver_ids = (props.node.approvers || []).map(a => a.user_id).filter(Boolean)
+    form.checker_id = (props.node.checkers || []).map(c => c.user_id).filter(Boolean)[0] ?? undefined
+    form.approver_id = (props.node.approvers || []).map(a => a.user_id).filter(Boolean)[0] ?? undefined
   }
 })
 
@@ -156,16 +146,16 @@ async function handleSave() {
 
     // 只传有变化的字段
     if (props.node) {
-      const oldCheckerIds = (props.node.checkers || []).map(c => c.user_id).filter(Boolean).sort()
-      const newCheckerIds = [...form.checker_ids].sort()
-      if (JSON.stringify(oldCheckerIds) !== JSON.stringify(newCheckerIds)) {
-        data.checkers = form.checker_ids.map(id => ({ user_id: id }))
+      const oldCheckerIds = (props.node.checkers || []).map(c => c.user_id).filter(Boolean)
+      const newCheckerId = form.checker_id
+      if (JSON.stringify(oldCheckerIds) !== JSON.stringify(newCheckerId != null ? [newCheckerId] : [])) {
+        data.checkers = newCheckerId != null ? [{ user_id: newCheckerId }] : []
       }
 
-      const oldApproverIds = (props.node.approvers || []).map(a => a.user_id).filter(Boolean).sort()
-      const newApproverIds = [...form.approver_ids].sort()
-      if (JSON.stringify(oldApproverIds) !== JSON.stringify(newApproverIds)) {
-        data.approvers = form.approver_ids.map(id => ({ user_id: id }))
+      const oldApproverIds = (props.node.approvers || []).map(a => a.user_id).filter(Boolean)
+      const newApproverId = form.approver_id
+      if (JSON.stringify(oldApproverIds) !== JSON.stringify(newApproverId != null ? [newApproverId] : [])) {
+        data.approvers = newApproverId != null ? [{ user_id: newApproverId }] : []
       }
 
       if ((form.assignee_id ?? null) !== (props.node.assignee_id ?? null)) {
@@ -180,7 +170,7 @@ async function handleSave() {
     }
 
     const result = await changePersonnel(props.instanceId, props.node!.id, data)
-    ElMessage.success(`人员修改成功：${result.changes.join('；')}`)
+    ElMessage.success(`人员修改成功：${result.changes?.join('；') ?? '已修改'}`)
     visible.value = false
     emit('success')
   } catch (err: any) {

@@ -438,3 +438,170 @@
 - **F2**: AppLayout 个人资料保存前增加 email/phone 格式校验
 - **F3**: ConfigManagement 已有 `min="0"` 限制，无需额外改动
 - **验证**: vue-tsc 0 errors ✅
+
+---
+
+## Phase 8 — 批准流程 + 处理页统一（2026-07-29）
+
+> 覆盖批准（Endorsement）流程 bug 修复、四个处理页节点信息/文件展示统一、签批安全加固。
+
+### H1 — 批准列表默认不过滤已处理记录
+- **文件**: `services/endorsement_service.py`
+- **改前**: `list_endorsements` 未传 status 时不过滤，已批准的记录仍显示在「我的批准」
+- **改后**: 默认 `EndorsementStatus.PENDING`（与审批/校验列表行为一致）
+- **影响**: 批准通过后批准记录仍显示在列表
+
+### H2 — 进度条不显示「待批准」状态
+- **文件**: `views/flows/components/ProgressBar.vue`
+- **改前**: `stepClass` 和 `statusText` 未包含 `waiting_endorsement`，节点显示灰色「待处理」
+- **改后**: 加入 `is-current`（蓝色进行中）和「待批准」文本
+
+### H3 — 批准处理页节点信息/文件补全
+- **文件**: `services/endorsement_service.py`, `EndorseDetail.vue`, `endorsement.ts`
+- **节点信息**: 补 `node_description`/`time_limit_days`/`deadline`，4 栏紧凑布局
+- **文件**: 改为全实例文件查询 + `node_name`，拆为本节点文件 + 历史节点文件（默认折叠）
+
+### H4 — 四个处理页统一
+- **后端 Schema**: `task.py`/`check.py`/`approval.py` 各补 `difficulty`/`time_limit_days`/`deadline`/`round`/`node_description`
+- **后端 Service**: 四个 detail 接口补字段；文件查询全改为全实例文件 + `node_id`/`node_name`
+- **前端类型**: `task.ts`/`check.ts`/`approval.ts`/`endorsement.ts` 补字段
+- **前端页面**: `TaskDetail.vue`/`CheckDetail.vue`/`ApprovalDetail.vue` 统一 4 栏节点信息 + 文件拆本节点/历史折叠
+- **TaskDetail**: `currentNodeFiles` 改用后端 `node_files`；上传区引用同步更新；历史文件移至备注说明下方
+
+### H5 — 签批安全加固：后端 `node_files` 字段
+- **文件**: 四个 Service + 四个 Schema + 四个前端类型
+- **改前**: 签批预览 `pdfFiles` 由前端 `files.filter(node_id)` 获取，可被篡改
+- **改后**: 后端新增 `node_files` 字段（`[f for f in files if f.node_id == current_node.id]`），前端 `pdfFiles`/`currentNodeFiles` 统一读 `detail.node_files`
+
+### H6 — 任务状态标签补 `waiting_endorsement`
+- **文件**: `utils/labels.ts`
+- **改前**: `taskStatusLabel` 未映射 `waiting_endorsement`，个人中心显示英文原文
+- **改后**: 映射为「待批准」，`taskStatusClass` 同步补上
+- **验证**: pytest 190/190 ✅
+
+---
+
+## Phase 9 — 难度4节点详情 + 截止时间逾期标色（2026-07-29）
+
+### I1 — NodeCard 阶段进度条适配难度4 + 状态补全
+- **文件**: `views/flows/components/NodeCard.vue`
+- **问题**: 阶段进度写死 4 步，难度4 缺「批准」；`waiting_endorsement` 在状态映射中缺失
+- **改后**: 补全 6 处映射；`stageSteps` 动态 5 步；`currentStep` 重写适配 4/5 步
+
+### I2 — 进度条圆圈点击展开节点卡片
+- **文件**: `ProgressBar.vue`, `NodeCard.vue`, `InstanceInfo.vue`, `InstanceDetail.vue`
+- **改后**: `.progress-step` @click emit → `highlightNodeId` → scrollIntoView
+
+### I3 — 操作日志「endorse」显示英文
+- **文件**: `OperationTimeline.vue`
+- **改后**: 补 `endorse: '批准通过'`/`endorse_reject: '批准驳回'`
+
+### I4 — 批准角标不显示
+- **文件**: `views/profile/index.vue`
+- **改后**: `onMounted` 补 `fetchEndorsements()`
+
+### I5 — Emoji → Element Plus 图标
+- **文件**: `NodeCard.vue`, `InstanceDetail.vue`, `TaskDetail.vue`, `PropertyPanel.vue`
+- **改后**: 📁📝✓📎🔏 → Folder/CircleCheck/EditPen/Upload/Lock，flex 居中
+
+### I6 — 移除"已签名"标签
+- **文件**: `EndorseDetail.vue`, `ApprovalDetail.vue`, `NodeCard.vue`, `InstanceDetail.vue`
+- **改后**: 6 处 `<el-tag>已签名</el-tag>` 移除
+
+### I7 — 截止时间逾期/临期行标色
+- **后端**: `_helpers.py` 新增 `compute_deadline_info()` + `_batch_get_active_deadlines()`；6 个 list API 加 `deadline`/`is_overdue`/`days_remaining`；6 个 Schema 补字段
+- **前端**: `format.ts` + `deadlineRowClass()`；6 个 API 类型同步；6 页面表格 `:row-class-name` + 非 scoped CSS
+- **样式**: 逾期 `#fef0f0` 淡红 / 临期 `#fffaf0` 淡黄（与卡点追踪一致）
+- **验证**: pytest 190/190 ✅, vue-tsc 0 error
+
+---
+
+## Phase 10 — 管理员编辑 500 + 管理员可选组织（2026-07-29）
+
+### J1 — UserUpdate Pydantic 验证器复用导致 500
+- **文件**: `backend/app/schemas/user.py`
+- **问题**: `UserUpdate._validate_email = field_validator("email")(UserCreate.validate_email)` — `UserCreate.validate_email` 是 `@classmethod`，classmethod 描述符解析后 `cls` 预绑定，Pydantic 调用时参数错位，`v` 收到 `ValidationInfo` 对象 → `AttributeError: 'ValidationInfo' object has no attribute 'strip'`
+- **根因**: Pydantic v2 中 classmethod 验证器不可通过 `field_validator("field")(OtherClass.classmethod_validator)` 方式跨类复用
+- **改后**: 验证逻辑抽离为模块级独立函数 `_validate_username`/`_validate_email`/`_validate_phone`，`UserCreate` 和 `UserUpdate` 各自通过 `field_validator("field")(_validate_xxx)` 引用
+- **影响**: 管理员编辑任意用户信息均 500，无用户可编辑
+- **验证**: pytest 190/190 ✅
+
+### J2 — 管理员组织可选（不归属任何所）
+- **需求**: 系统管理员可独立于组织存在，不强制选所；其他角色（manager/user）组织仍为必填
+- **涉及文件**:
+  - `models/user.py`: `organization_id` `nullable=False → True`
+  - `schemas/user.py`: `UserCreate/UserUpdate.organization_id` `int → int | None = None`
+  - `services/user_service.py`: `create_user`/`update_user` 先查角色 → 含 `system_admin` 则组织可选；非管理员空组织 → `VALIDATION_ERROR`
+  - `api/deps.py`: `require_same_org` 加 `organization_id is None` 兜底 guard
+  - `core/seed.py`: 默认管理员不再绑定「通用所」
+  - `alembic/versions/e8f9a0b1c2d3_user_org_nullable.py`: 新增迁移
+  - `frontend/src/api/admin.ts`: `UserCreateData/UserUpdateData.organization_id → number | null`
+  - `frontend/src/views/admin/components/UserFormDialog.vue`: 根据 `role_ids` 动态切换组织必填/可选
+  - `frontend/src/views/admin/UserManagement.vue`: `EditUserData.organization_id → number | null`
+- **安全**: 所有 `current_user.organization_id` 引用点已验证——`templates.py` 含 `is_admin()` 旁路、`tasks.py` 含 `system_admin not in roles` 旁路、`organizations.py` 短路径求值 `None and ... → None`（安全跳过）
+- **验证**: pytest 190/190 ✅, vue-tsc 0 error
+
+---
+
+## Phase 11 — 第三轮全量审计修复（2026-07-30）
+
+> 全量审计日期：2026-07-30。审计范围：后端 Service/API/Engine/Core + 前端关键路径，合并上轮 Round 2 未修项。
+> 发现问题：33 项（致命 5 + 高 6 + 中 13 + 低 9），修复致命/高危/中危共 22 项，低危 9 项按需留待后续。
+
+### 🔴 致命修复（5 项）
+
+#### F1 — validate_template_for_publish 死代码
+- **文件**: `services/validation_service.py:10` → `services/designer_service.py:156-163`
+- **改前**: 函数定义了但全项目无任何 import 或调用，模板发布无结构校验
+- **改后**: 集成到 `save_design_data`：保存后调用校验，发现不合法设计 → 抛 AppException → get_db 自动回滚事务
+- **影响**: 模板现在必须满足「≥3 节点 + 中间节点配置完整(负责人/校验人/审批人/时限) + 全部连通」才能保存
+
+#### F2 — 空审批人节点死锁
+- **文件**: `services/check_service.py:347-398`
+- **改前**: pass_check 在 node.approvers 为空时，仍将 Task/Node 设为 WAITING_APPROVAL 但不创建 Approval → 永久卡死
+- **改后**: 难度 <4 → 跳过审批，直接完成节点并 propagate；难度 =4 且有 endorser → 跳审批直接创建 Endorsement
+
+#### F3 — OperationLog.round 值全错（6 处）
+- **文件**: `check_service.py:310,469` (`round=c.task_id`) + `approval_service.py:477,727,851,924` (`round=a.task_id or 0` / `round=0`)
+- **改后**: 全部改为 `round=c.round` 或 `round=a.round`
+- **影响**: 操作日志轮次追踪从"数值完全错误"恢复为语义正确
+
+#### F4 — scalar_one() 无异常处理 → 500（8 处）
+- **文件**: `api/tasks.py`, `engine/flow_engine.py`, `services/designer_service.py`, `services/file_service.py`, `services/task_service.py`
+- **改后**: 全部改为 `scalar_one_or_none()` + None 检查 → 抛 AppException(NOT_FOUND) 返回 404
+
+#### F5 — FlowEngine 无重入守卫（环形边无限循环）
+- **文件**: `engine/flow_engine.py:106-112`
+- **改前**: propagate 不检查目标节点当前状态，若模板含环形边可无限循环激活
+- **改后**: 加 `if node.status != InstanceNodeStatus.WAITING: continue` 跳过非等待状态节点
+
+### 🟠 高危修复（4 项）
+
+| # | 文件 | 修复 |
+|---|------|------|
+| H1 | `instance/change.py:115` | change_personnel CheckRecord.task_id 从 `0` 改为 `None` |
+| H2 | `endorsement_service.py:439-449` | endorse_reject 终止 PENDING 审批/校验加 `round=e.round` 过滤 |
+| H3 | `check_service.py:430` | `asyncio.gather` 包裹 try/except Exception |
+| H4 | `instance/change.py:213`, `instance/supplement.py:159` | OperationLog 补 `round=node.round` |
+
+### 🟡 中危修复（9 项）
+
+| # | 文件 | 修复 |
+|---|------|------|
+| M1 | `approval_service.py` | reject() target_node 查询加 `.with_for_update()` |
+| M6 | `template_service.py` | delete_template 加运行中实例 COUNT 检查 |
+| M7 | `pdf_signature.py` | 签名异常日志补 `exc_info=True`（2 处） |
+| M3 | `frontend/src/api/request.ts` | `_msgCache` 加 MAX_CACHE_SIZE=100 + LRU 淘汰 |
+| M4 | `frontend/components/NotificationBell.vue` | popupTimer 在 onUnmounted 中清理 |
+| M5 | `frontend/views/flows/components/SignaturePreviewDialog.vue` | setTimeout 存 ref + onBeforeUnmount 清理 |
+| M8 | `api/templates.py` | 移除行内重复 import |
+| M9 | `api/auth.py` | 移除未用 Header import |
+| M10 | `api/endorsements.py` | get_db 改为从 core.database 导入 |
+| M11 | `schemas/user.py` | 删除死 Schema ResetPasswordRequest |
+| M12 | `schemas/auth.py` | email max_length 120→100（与 DB VARCHAR(100) 对齐） |
+
+### 🟢 低危（未修，9 项）
+
+supplement_files 同步 I/O / create 目录事务内创建 / 401 缺 guard flag / PresetEditor+ChangePersonnelDialog 缺卸载守卫 / TaskDetail addEventListener {once:true} / _DEFAULT_MESSAGES 缺条目等 —— 均不影响正常使用，按需后续修复。
+
+- **验证**: pytest 190/190 ✅, vue-tsc 0 errors ✅

@@ -214,7 +214,8 @@ class TestDeleteTemplate:
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=tpl),  # SELECT template
+            MockResult(scalar_one=tpl),  # 0: SELECT template
+            MockResult(scalar_value=0),  # 1: SELECT COUNT(*) active instances → 0
         ]
         mock_db.flush = AsyncMock()
 

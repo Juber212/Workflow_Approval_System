@@ -91,16 +91,18 @@ class TestCreateUser:
 
     @pytest.mark.asyncio
     async def test_org_not_found(self, mock_db):
-        """组织不存在 → 404"""
+        """组织不存在 → 404（非管理员角色，org 必填）"""
+        mock_role = Role(id=1, code="user", name="普通用户")
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=None),  # 0: 用户名查重 → 无
-            MockResult(scalar_one=None),  # 1: 组织查询 → 不存在
+            MockResult(scalar_one=None),                 # 0: 用户名查重 → 无
+            MockResult(scalars_all=[mock_role]),          # 1: 角色查询 → 非管理员角色
+            MockResult(scalar_one=None),                 # 2: 组织查询 → 不存在
         ]
 
         from app.schemas.user import UserCreate
         data = UserCreate(
-            username="newuser", real_name="新用户", password="123456",
+            username="newuser", real_name="新用户",
             organization_id=999, role_ids=[1],
         )
 
@@ -133,14 +135,16 @@ class TestUpdateUser:
 
     @pytest.mark.asyncio
     async def test_org_not_found(self, mock_db):
-        """目标组织不存在 → 404"""
+        """目标组织不存在 → 404（非管理员角色，org 必填）"""
         user = User(id=1, username="test", real_name="测试", password_hash="x",
                     organization_id=1, is_active=True)
+        mock_role = Role(id=1, code="user", name="普通用户")
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=user),   # 0: 查找用户 → 存在
-            MockResult(scalar_one=None),   # 1: 组织查询 → 不存在
+            MockResult(scalar_one=user),               # 0: 查找用户 → 存在
+            MockResult(scalars_all=[mock_role]),        # 1: 角色查询 → 非管理员角色
+            MockResult(scalar_one=None),               # 2: 组织查询 → 不存在
         ]
 
         from app.schemas.user import UserUpdate

@@ -28,18 +28,20 @@
         </div>
       </div>
 
-      <!-- 节点信息 -->
+      <!-- 节点信息 —— 4 栏紧凑布局 -->
       <div class="card">
         <div class="card__header">节点信息</div>
         <div class="card__body">
+          <!-- 节点说明：独占一行 -->
+          <div v-if="detail.node_description" class="node-desc">{{ detail.node_description }}</div>
           <div class="info-grid">
             <div class="info-grid__item">
-              <div class="k">节点说明</div>
-              <div class="v">{{ detail.node_description || '无' }}</div>
+              <div class="k">完成时限</div>
+              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }}</div>
             </div>
             <div class="info-grid__item">
-              <div class="k">完成时限</div>
-              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }} · {{ formatTime(detail.deadline) }}</div>
+              <div class="k">截止时间</div>
+              <div class="v">{{ formatTime(detail.deadline) || '—' }}</div>
             </div>
             <div class="info-grid__item">
               <div class="k">发起人</div>
@@ -50,6 +52,26 @@
               <div class="v">
                 <span class="pri-tag" :class="'pri--' + detail.priority">{{ priLabel(detail.priority) }}</span>
               </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">难度等级</div>
+              <div class="v">
+                <span class="diff-badge" :class="'diff--' + detail.difficulty">{{ detail.difficulty }}级</span>
+              </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">流程状态</div>
+              <div class="v">
+                <span class="status-tag" :class="instStatusClass(detail.instance_status)">{{ instStatusLabel(detail.instance_status) }}</span>
+              </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">节点进度</div>
+              <div class="v">{{ detail.current_node_index }} / {{ detail.total_nodes }}</div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">当前轮次</div>
+              <div class="v">#{{ detail.round }}</div>
             </div>
           </div>
         </div>
@@ -63,15 +85,61 @@
         </div>
       </div>
 
-      <!-- 文件模板下载（可提交状态下显示） -->
-      <div v-if="canSubmit && docTemplates.length > 0" class="card">
+      <!-- 历史节点文件（默认折叠） -->
+      <div class="card" v-if="historyFileGroups.length > 0">
+        <div class="card__header" style="cursor:pointer" @click="showHistoryFiles = !showHistoryFiles">
+          <span style="display:flex;align-items:center;gap:6px">
+            历史节点文件（{{ historyFileTotal }}）
+            <el-icon :size="14" style="transition:transform 0.2s" :style="{ transform: showHistoryFiles ? 'rotate(90deg)' : 'rotate(0deg)' }"><ArrowRight /></el-icon>
+          </span>
+        </div>
+        <div class="card__body" v-show="showHistoryFiles">
+          <div v-for="group in historyFileGroups" :key="group.nodeName" class="file-group">
+            <div class="file-group__header">
+              <span class="file-group__node-name">{{ group.nodeName }}</span>
+              <span class="file-group__count">{{ group.files.length }} 个文件</span>
+            </div>
+            <div v-for="f in group.files" :key="f.id" class="file-row">
+              <span>{{ f.original_name }}</span>
+              <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
+              <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+              <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 文件模板下载（可提交状态下显示：模板包 + 散模板） -->
+      <div v-if="canSubmit && (docCategories.length > 0 || docTemplates.length > 0)" class="card">
         <div class="card__header">
           <span class="card__title">文件模板</span>
           <span class="card__title-hint">（下载后填写，可作为附件上传）</span>
         </div>
         <div class="card__body">
-          <div class="doc-tpl-list">
-            <div v-for="doc in docTemplates" :key="doc.id" class="doc-tpl-item">
+          <!-- 模板包卡片 -->
+          <div v-for="cat in docCategories" :key="'cat-' + cat.id" class="tpl-cat-card">
+            <div class="tpl-cat-card__header" @click="toggleCatExpand(cat.id)">
+              <el-icon :size="14" class="tpl-cat-arrow" :class="{ 'is-expanded': expandedCats.has(cat.id) }"><ArrowRight /></el-icon>
+              <span class="tpl-cat-icon">📦</span>
+              <span class="tpl-cat-name">{{ cat.name }}</span>
+              <span class="tpl-cat-count">（{{ cat.document_count }} 个模板）</span>
+              <el-button size="small" type="primary" plain style="margin-left:auto" @click.stop="handleDownloadCategoryZip(cat.id)">打包下载</el-button>
+            </div>
+            <!-- 展开后显示包内模板 -->
+            <div v-show="expandedCats.has(cat.id)" class="tpl-cat-body">
+              <div v-for="doc in cat.documents" :key="doc.id" class="doc-tpl-item doc-tpl-item--sub">
+                <span class="doc-tpl-item__icon">📄</span>
+                <span class="doc-tpl-item__name">{{ doc.name }}</span>
+                <el-tag size="small" effect="plain" :type="doc.file_type === 'xlsx' ? 'success' : ''">.{{ doc.file_type }}</el-tag>
+                <el-button link type="primary" size="small" @click="handleDownloadTemplate(doc)">下载</el-button>
+              </div>
+              <div v-if="cat.documents.length === 0" class="tpl-empty">该包内暂无模板</div>
+            </div>
+          </div>
+
+          <!-- 散模板（未归包） -->
+          <div v-if="docTemplates.length > 0" class="tpl-solo-section">
+            <div v-for="doc in docTemplates" :key="'doc-' + doc.id" class="doc-tpl-item">
               <span class="doc-tpl-item__icon">📄</span>
               <span class="doc-tpl-item__name">{{ doc.name }}</span>
               <el-tag size="small" effect="plain" :type="doc.file_type === 'xlsx' ? 'success' : ''">.{{ doc.file_type }}</el-tag>
@@ -91,7 +159,7 @@
           :class="{ 'folder--warning': !isFolderSatisfied(folder), 'folder--satisfied': isFolderSatisfied(folder) }"
         >
           <div class="card__header folder-header">
-            <span class="folder-header__icon">📁</span>
+            <span class="folder-header__icon"><el-icon :size="14"><Folder /></el-icon></span>
             <span class="folder-header__name">{{ folder.name }}</span>
             <span class="folder-header__rule">{{ folderStatusLabel(folder) }}</span>
             <span class="folder-header__count">[{{ getFolderFileCount(folder.name) }}/{{ folder.file_count ?? '--' }}]</span>
@@ -126,10 +194,10 @@
       <!-- 无文件夹配置：保持原有简单上传区（向后兼容） -->
       <template v-else-if="canUpload && !hasFileFolders">
       <div class="card">
-        <div class="card__header">上传文件（{{ detail!.files.length }}）</div>
+        <div class="card__header">上传文件（{{ currentNodeFiles.length }}）</div>
         <div class="card__body">
-          <div class="file-list" v-if="detail!.files.length > 0">
-            <div v-for="f in detail!.files" :key="f.id" class="file-row">
+          <div class="file-list" v-if="currentNodeFiles.length > 0">
+            <div v-for="f in currentNodeFiles" :key="f.id" class="file-row">
               <span>{{ f.original_name }}</span>
               <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
               <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
@@ -199,15 +267,15 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowRight, Folder } from '@element-plus/icons-vue'
 import { getToken } from '@/api/request'
-import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, type TaskDetail, type TaskFileItem } from '@/api/task'
+import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, formatFileSize } from '@/utils/format'
-import { priLabel, checkStatusClass, checkStatusLabel } from '@/utils/labels'
-import request from '@/api/request'
+import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
 
@@ -240,24 +308,32 @@ const canSubmit = computed(() => detail.value && ['pending', 'processing'].inclu
 负责人提交前调用 prepareSign 获取已转换的 PDF 文件列表。 */
 const pdfFiles = ref<Array<{ file_id: number; name: string; url: string }>>([])
 
-// ─── 文件模板下载 ────────────────────────────────────────
-const docTemplates = ref<DocTemplateItem[]>([])
+// ─── 文件模板下载（含模板包） ────────────────────────────────────────
+const docTemplates = ref<DocTemplateItem[]>([])             // 未归包的散模板
+const docCategories = ref<TaskTemplateCategory[]>([])       // 模板包列表
+const expandedCats = ref<Set<number>>(new Set())            // 展开的包 ID 集合
 
-/** 加载该任务可用的文件模板列表 */
+/** 加载该任务可用的文件模板列表（含模板包） */
 async function loadDocTemplates() {
   if (!detail.value) return
   try {
-    const res = await request.get(`/tasks/${detail.value.id}/document-templates`)
-    const data = res.data
-    if (data?.items) {
-      docTemplates.value = data.items
-    }
+    const data: TaskDocTemplatesResponse = await getTaskDocTemplates(detail.value.id)
+    docTemplates.value = data.templates || []
+    docCategories.value = data.categories || []
   } catch {
     // 无模板时不报错
   }
 }
 
-/** 下载文件模板（自动替换占位符） */
+/** 切换包展开/折叠 */
+function toggleCatExpand(catId: number) {
+  const next = new Set(expandedCats.value)
+  if (next.has(catId)) next.delete(catId)
+  else next.add(catId)
+  expandedCats.value = next
+}
+
+/** 下载单个文件模板（自动替换占位符） */
 async function handleDownloadTemplate(doc: DocTemplateItem) {
   if (!detail.value) return
   try {
@@ -267,14 +343,47 @@ async function handleDownloadTemplate(doc: DocTemplateItem) {
     ElMessage.error(e?.message || '下载失败')
   }
 }
+
+/** 下载模板包 ZIP（填充占位符后打包） */
+async function handleDownloadCategoryZip(catId: number) {
+  if (!detail.value) return
+  try {
+    await downloadTaskTemplateZip(detail.value.id, catId)
+    ElMessage.success('模板包下载成功')
+  } catch (e: any) {
+    ElMessage.error(e?.message || '下载失败')
+  }
+}
 const hasFileFolders = computed(() => {
   const folders = detail.value?.file_folders
   return folders && Array.isArray(folders) && folders.length > 0
 })
 
-/** 获取指定文件夹的文件列表 */
+/** 本节点文件 */
+/** 本节点文件（后端 node_files 已过滤，直接使用） */
+const currentNodeFiles = computed(() => {
+  if (!detail.value) return [] as TaskFileItem[]
+  return detail.value.node_files as TaskFileItem[]
+})
+
+/** 历史节点文件（按节点分组） */
+const historyFileGroups = computed(() => {
+  if (!detail.value) return []
+  const map = new Map<string, { nodeName: string; files: TaskFileItem[] }>()
+  for (const f of detail.value.files) {
+    if (f.node_id === detail.value!.node_id) continue
+    const key = f.node_id ? String(f.node_id) : '_unknown'
+    if (!map.has(key)) map.set(key, { nodeName: f.node_name || '未知节点', files: [] })
+    map.get(key)!.files.push(f)
+  }
+  return [...map.values()]
+})
+const historyFileTotal = computed(() => historyFileGroups.value.reduce((s, g) => s + g.files.length, 0))
+const showHistoryFiles = ref(false)
+
+/** 获取指定文件夹的文件列表（仅本节点） */
 function getFolderFiles(folderName: string): TaskFileItem[] {
-  return (detail.value?.files || []).filter(f => f.folder_name === folderName)
+  return currentNodeFiles.value.filter(f => f.folder_name === folderName)
 }
 
 /** 获取指定文件夹的文件数量 */
@@ -326,6 +435,11 @@ onMounted(async () => {
 // 离开页面时清理转换轮询定时器
 onUnmounted(() => {
   stopConversionPolling()
+  // 清理未触发的 conversion-all-done 事件监听器，防止泄漏
+  if (_conversionDoneHandler) {
+    window.removeEventListener('conversion-all-done', _conversionDoneHandler)
+    _conversionDoneHandler = null
+  }
 })
 
 function beforeUpload(file: File) {
@@ -346,9 +460,13 @@ async function handleUpload({ file }: { file: File }, folderName?: string) {
 async function handleDeleteFile(fileId: number) {
   if (!detail.value) return
   try { await ElMessageBox.confirm('确认删除此文件？', '确认', { type: 'warning' }) } catch { /* 用户取消或关闭弹窗 */ return }
-  await deleteTaskFile(detail.value.id, fileId)
-  ElMessage.success('已删除')
-  detail.value = await getTaskDetail(detail.value.id)
+  try {
+    await deleteTaskFile(detail.value.id, fileId)
+    ElMessage.success('已删除')
+    detail.value = await getTaskDetail(detail.value.id)
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || '删除失败，请稍后重试')
+  }
 }
 
 async function handleSaveDraft() {
@@ -473,6 +591,9 @@ function stopConversionPolling() {
   }
 }
 
+/** 存储事件监听器引用，用于组件卸载时清理 */
+let _conversionDoneHandler: ((e: Event) => void) | null = null
+
 /** 监听 WebSocket 推送的 conversion_all_done 事件 */
 function listenConversionDone() {
   const currentTaskId = detail.value?.id
@@ -484,6 +605,7 @@ function listenConversionDone() {
     handleConversionComplete(cd)
   }
 
+  _conversionDoneHandler = handler
   window.addEventListener('conversion-all-done', handler, { once: true })
 }
 
@@ -571,11 +693,31 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
   &:hover { text-decoration: underline; }
 }
 
-/* 信息网格 */
+/* 节点说明 */
+.node-desc {
+  font-size: 13px; color: var(--el-text-color-secondary);
+  padding: 8px 12px; background: var(--el-bg-color-page);
+  border-radius: 6px; margin-bottom: 12px; line-height: 1.6;
+}
+
+/* 信息网格 —— 4 栏紧凑布局 */
 .info-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;
-  .k { color: var(--el-text-color-secondary); margin-bottom: 2px; font-size: 12px; }
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px 12px; font-size: 14px;
+  .k { color: var(--el-text-color-secondary); margin-bottom: 4px; font-size: 12px; }
   .v { color: var(--el-text-color-primary); font-weight: 500; }
+}
+
+/* 文件分组 */
+.file-group {
+  margin-bottom: 12px;
+  &:last-child { margin-bottom: 0; }
+  &__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0; margin-bottom: 4px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+  &__node-name { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
+  &__count { font-size: 12px; color: var(--el-text-color-secondary); margin-left: auto; }
 }
 
 /* 文件列表 */
@@ -584,6 +726,15 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
 .file-size { color: var(--el-text-color-secondary); font-size: 12px; flex: 1; }
 .upload-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 6px; }
 .empty-hint { font-size: 13px; color: var(--el-text-color-placeholder); text-align: center; padding: 12px; }
+
+/* 难度 badge */
+.diff-badge {
+  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
+  &.diff--3 { color: #fff; background: var(--el-color-warning); }
+  &.diff--2 { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
+  &.diff--1 { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
 
 /* 文件夹上传卡片 */
 .folder-upload-card {
@@ -614,12 +765,62 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
   &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); }
 }
 
-/* ─── 文件模板下载列表 ─── */
-.doc-tpl-list { display: flex; flex-direction: column; gap: 8px; }
+/* ─── 文件模板（模板包 + 散模板） ─── */
+.card__title-hint { font-size: 12px; color: var(--el-text-color-placeholder); font-weight: 400; margin-left: 4px; }
+
+.tpl-cat-card {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+
+  &__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    background: var(--el-fill-color-lighter);
+    transition: background 0.15s;
+    user-select: none;
+    &:hover { background: var(--el-fill-color-light); }
+  }
+
+  .tpl-cat-body {
+    padding: 0 12px 8px 32px;
+    border-top: 1px solid var(--el-border-color-lighter);
+  }
+}
+
+.tpl-cat-arrow {
+  transition: transform 0.2s;
+  color: var(--el-text-color-secondary);
+  &.is-expanded { transform: rotate(90deg); }
+}
+
+.tpl-cat-icon { font-size: 16px; }
+.tpl-cat-name { font-weight: 600; font-size: 14px; color: var(--el-text-color-primary); }
+.tpl-cat-count { font-size: 12px; color: var(--el-text-color-secondary); }
+
 .doc-tpl-item {
   display: flex; align-items: center; gap: 10px; padding: 6px 0;
   &__icon { font-size: 16px; }
   &__name { flex: 1; font-size: 14px; }
+
+  &--sub {
+    padding: 4px 8px;
+    border-left: 2px solid var(--el-color-primary-light-5);
+    margin-bottom: 2px;
+    border-radius: 0 4px 4px 0;
+    &:hover { background: var(--el-fill-color-lighter); }
+  }
 }
-.card__title-hint { font-size: 12px; color: var(--el-text-color-placeholder); font-weight: 400; margin-left: 4px; }
+
+.tpl-solo-section {
+  border-top: 1px dashed var(--el-border-color-lighter);
+  padding-top: 8px;
+}
+
+.tpl-empty {
+  font-size: 12px; color: var(--el-text-color-placeholder);
+  text-align: center; padding: 12px 0;
+}
 </style>

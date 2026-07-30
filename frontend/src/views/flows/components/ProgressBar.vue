@@ -46,10 +46,11 @@
 
         <!-- ===== 单节点步骤 ===== -->
         <div v-if="group.length === 1" class="progress-step" :class="stepClass(group[0])"
-          :ref="el => { if (el) stepRefs[gIdx] = el as HTMLElement }">
+          :ref="el => { if (el) stepRefs[gIdx] = el as HTMLElement }"
+          @click="$emit('node-click', group[0])">
           <div class="step-dot">
             <el-icon v-if="group[0].status === 'finished'" :size="14"><Check /></el-icon>
-            <span v-else-if="['arrived','running','waiting_check','waiting_approval'].includes(group[0].status)" class="dot-inner" />
+            <span v-else-if="['arrived','running','waiting_check','waiting_approval','waiting_endorsement'].includes(group[0].status)" class="dot-inner" />
           </div>
           <div class="step-label">
             <span class="step-name" :title="group[0].name">{{ group[0].name }}</span>
@@ -60,10 +61,11 @@
         <!-- ===== 并行节点组 ===== -->
         <div v-else class="parallel-group"
           :ref="el => { if (el) parallelRefs[gIdx] = el as HTMLElement }">
-          <div v-for="node in group" :key="node.id" class="progress-step" :class="stepClass(node)">
+          <div v-for="node in group" :key="node.id" class="progress-step" :class="stepClass(node)"
+            @click="$emit('node-click', node)">
             <div class="step-dot">
               <el-icon v-if="node.status === 'finished'" :size="14"><Check /></el-icon>
-              <span v-else-if="['arrived','running','waiting_check','waiting_approval'].includes(node.status)" class="dot-inner" />
+              <span v-else-if="['arrived','running','waiting_check','waiting_approval','waiting_endorsement'].includes(node.status)" class="dot-inner" />
             </div>
             <div class="step-label">
               <span class="step-name" :title="node.name">{{ node.name }}</span>
@@ -83,6 +85,7 @@ import { Check } from '@element-plus/icons-vue'
 import type { DetailNodeInfo } from '@/api/instance'
 
 const props = defineProps<{ nodes: DetailNodeInfo[] }>()
+const emit = defineEmits<{ 'node-click': [node: DetailNodeInfo] }>()
 
 // ========== DOM 引用 ==========
 const trackRef = ref<HTMLElement | null>(null)
@@ -124,13 +127,13 @@ function isJoinActive(gIdx: number): boolean { return isLineActive(gIdx) }
 function stepClass(node: DetailNodeInfo) {
   const s = (node.status || '').toLowerCase()
   if (s === 'finished') return 'is-done'
-  if (['arrived', 'running', 'waiting_check', 'waiting_approval'].includes(s)) return 'is-current'
+  if (['arrived', 'running', 'waiting_check', 'waiting_approval', 'waiting_endorsement'].includes(s)) return 'is-current'
   return 'is-wait'
 }
 
 function statusText(node: DetailNodeInfo) {
   const s = (node.status || '').toLowerCase()
-  const m: Record<string, string> = { finished: '已完成', arrived: '进行中', running: '进行中', waiting_check: '待校验', waiting_approval: '待审批' }
+  const m: Record<string, string> = { finished: '已完成', arrived: '进行中', running: '进行中', waiting_check: '待校验', waiting_approval: '待审批', waiting_endorsement: '待批准' }
   if (m[s]) return m[s]
   if (node.is_start) return '开始'
   if (node.is_end) return '结束'
@@ -267,7 +270,7 @@ function calcJoin(gIdx: number): JoinData | null {
 }
 
 /* 步骤 */
-.progress-step { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.progress-step { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; cursor: pointer; }
 
 .step-dot {
   width: 28px; height: 28px; border-radius: 50%;
@@ -283,7 +286,7 @@ function calcJoin(gIdx: number): JoinData | null {
   .step-name { display: block; font-size: 12px; font-weight: 500; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     .is-wait & { color: var(--el-text-color-placeholder); }
   }
-  .step-status-text { display: block; font-size: 11px; color: var(--el-text-color-secondary); margin-top: 1px;
+  .step-status-text { display: block; font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px;
     .is-current & { color: var(--el-color-primary); font-weight: 500; }
   }
 }

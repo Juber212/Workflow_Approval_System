@@ -31,6 +31,7 @@ class TaskDetail(BaseModel):
     initiator_id: int
     initiator_name: str = ""
     priority: str = "normal"
+    difficulty: str = "1"  # 难度等级（1-4）
     node_id: int
     node_name: str
     node_description: str | None = None
@@ -48,6 +49,7 @@ class TaskDetail(BaseModel):
     current_node_index: int = 0
     nodes: list[dict] = []
     files: list[dict] = []
+    node_files: list[dict] = []  # 仅本节点文件（签批预览用，后端过滤）
     checks: list[dict] = []
     approvals: list[dict] = []
     endorsements: list[dict] = []  # 批准记录（仅难度4时存在）

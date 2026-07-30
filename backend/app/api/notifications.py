@@ -51,7 +51,7 @@ async def mark_read(
 ):
     """标记单条通知为已读"""
     await ns.mark_read(db, notification_id=notification_id, user_id=current_user.id)
-    return {"message": "已标记为已读"}
+    return ApiResponse.ok(message="已标记为已读")
 
 
 @router.get("/notifications/overdue", summary="系统超期项汇总")
@@ -71,4 +71,4 @@ async def mark_all_read(
 ):
     """标记当前用户全部未读通知为已读"""
     await ns.mark_all_read(db, user_id=current_user.id)
-    return {"message": "已全部标记为已读"}
+    return ApiResponse.ok(message="已全部标记为已读")

@@ -38,7 +38,7 @@ export interface UserListData {
 export interface UserCreateData {
   username: string
   real_name: string
-  organization_id: number
+  organization_id: number | null  // 管理员可选空，其他角色必填
   role_ids: number[]
   email?: string | null
   phone?: string | null
@@ -47,7 +47,7 @@ export interface UserCreateData {
 /** 编辑用户参数 */
 export interface UserUpdateData {
   real_name: string
-  organization_id: number
+  organization_id: number | null  // 管理员可选空，其他角色必填
   role_ids: number[]
   email?: string | null
   phone?: string | null

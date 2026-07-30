@@ -86,6 +86,10 @@ export interface InstanceListItem {
   total_nodes: number
   current_handlers: string  // 当前处理人（根据节点状态动态显示：负责人/校验人/审批人/批准人）
   proposal_name: string | null
+  deadline: string | null    // 当前活跃节点截止时间
+  flow_deadline: string | null  // 流程截止时间（最后一个工作节点的截止时间）
+  is_overdue: boolean         // 是否逾期
+  days_remaining: number | null  // 剩余天数
   initiated_at: string | null
   completed_at: string | null
   terminated_at: string | null
@@ -219,6 +223,7 @@ export interface InstanceDetailResponse {
   sales_manager: string | null
   proposal_id: number | null    // 关联的方案 ID
   proposal_name: string | null  // 关联的方案名称
+  template_id: number           // 使用的流程模板 ID
   template_type: string         // 模板类型：project / proposal（面包屑/标题用）
   current_node_index: number
   total_nodes: number

@@ -85,11 +85,14 @@ class TestPropagateFromNode:
         target = make_node(id=6, is_end=False, incoming_count=1, arrived_count=0,
                           status=InstanceNodeStatus.WAITING)
 
+        # 模拟原子 UPDATE SET arrived_count=arrived_count+1 后的重取结果
+        target.arrived_count = 1
+
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MockResult(scalars_all=[target]),   # 1: all nodes (BFS protection)
-            MockResult(scalar_one=target),      # 2: BFS → SELECT target
+            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=target),      # 2: SELECT target（重取）
             MagicMock(),                         # 3: UPDATE node → running
             MagicMock(),                         # 4: add Task
             MagicMock(),                         # 5: flush
@@ -102,17 +105,20 @@ class TestPropagateFromNode:
 
     @pytest.mark.asyncio
     async def test_fork_join_waiting(self, mock_db):
-        """fork-join 汇合：arriving < incoming → 等待不激活"""
+        """fork-join 汇合：arrived < incoming → 等待不激活"""
         from app.models import InstanceEdge
         edge = InstanceEdge(id=1, instance_id=1, source_node_id=5, target_node_id=7)
         target = make_node(id=7, is_end=False, incoming_count=2, arrived_count=0,
                           status=InstanceNodeStatus.WAITING)
 
+        # 模拟 UPDATE 后 arrived_count=1，但 incoming_count=2，仍需等待
+        target.arrived_count = 1
+
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MockResult(scalars_all=[target]),   # 1: all nodes (BFS protection)
-            MockResult(scalar_one=target),      # 2: BFS → SELECT target
+            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=target),      # 2: SELECT target（重取）
         ]
 
         result = await propagate_from_node(mock_db, instance_id=1, finished_node_id=5)
@@ -129,11 +135,14 @@ class TestPropagateFromNode:
         end_node = make_end_node(incoming_count=1, arrived_count=0,
                                 status=InstanceNodeStatus.WAITING)
 
+        # 模拟 UPDATE 后 arrived_count=1，满足 incoming_count
+        end_node.arrived_count = 1
+
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalars_all=[edge]),     # 0: SELECT downstream edges
-            MockResult(scalars_all=[end_node]), # 1: all nodes (BFS protection)
-            MockResult(scalar_one=end_node),    # 2: BFS → SELECT target
+            MagicMock(),                         # 1: UPDATE arrived_count（原子递增）
+            MockResult(scalar_one=end_node),    # 2: SELECT target（重取）
             MagicMock(),                         # 3: add Approval
             MagicMock(),                         # 4: flush
         ]

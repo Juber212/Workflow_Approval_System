@@ -275,4 +275,267 @@
 | Mock 单元测试 | 158 | 内存运行，毫秒级 |
 | Mock 集成测试 | 10 | TestClient + mock_db |
 | MySQL 真实测试 | 19 | 独立引擎，真实 DB 操作 |
-| **合计** | **187** | **0 业务逻辑 bug** |
+| **合计** | **190** | **0 业务逻辑 bug** |
+
+---
+
+## 2026-07-29 — 截止时间逾期标色 + 管理员编辑修复 + 组织可选
+
+### 截止时间逾期/临期行标色（Phase 9）
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 1 | 后端 `_helpers.py` 新增 `compute_deadline_info()` + `_batch_get_active_deadlines()` | `services/instance/_helpers.py` |
+| 2 | 6 个 list API 返回 `deadline`/`is_overdue`/`days_remaining`（task/check/approval/endorsement/instance/proposal） | 6 个 service + 6 个 schema |
+| 3 | 首页 Dashboard API 同步补字段（`MyPendingItem`） | `dashboard_service.py`, `dashboard.py` |
+| 4 | 前端 `format.ts` 新增 `deadlineRowClass()`，7 个页面 `:row-class-name` + 非 scoped CSS | 9 个前端文件 |
+| 5 | 样式：逾期 `#fef0f0` 淡红 / 临期（≤1天）`#fffaf0` 淡黄，与卡点追踪一致 | — |
+
+### 管理员编辑 500 + 组织可选（Phase 10）
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 6 | Pydantic v2 `field_validator` classmethod 跨类复用导致参数错位 → 改为模块级函数 | `schemas/user.py` |
+| 7 | `users.organization_id` 改可空，系统管理员可不归属任何组织 | model + schema + service + deps + seed |
+| 8 | 前端用户表单根据选中角色动态切换组织必填/可选 | `UserFormDialog.vue`, `UserManagement.vue` |
+| 9 | DB 迁移 `e8f9a0b1c2d3`：`ALTER TABLE users MODIFY organization_id INT NULL` | Alembic |
+
+### 错误消息去重
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 10 | 响应拦截器加消息去重（`showErrorOnce`，3 秒内相同消息不重复弹） | `frontend/src/api/request.ts` |
+
+---
+
+## 2026-07-29 — 文件模板包（Phase 11）
+
+### 新增功能
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 1 | 模板分类（包）—— 管理员可按组织创建自定义模板包，作为「模板包」一键下载 ZIP | 全栈 |
+| 2 | 文件模板与包多对多关联：一个模板可归属多个包 | `TemplateCategoryDocument` |
+| 3 | 流程模板可关联单个模板 或 整个包（模板包），互不冲突 | `TemplateDocumentLink` + `category_id` |
+| 4 | 项目详情页展示关联的模板和包，包支持一键下载 ZIP（所有模板填充占位符后打包） | `InstanceDetail.vue`, `category_service.py` |
+| 5 | 管理页按组织分组卡片式布局：每个组织一张卡片，内含包列表和未归包模板区 | `DocTemplateManagement.vue`(重写) |
+| 6 | 包内可直接搜索添加同组织模板 + 未归包模板快速归入包 | 同上 |
+| 7 | FlowDesigner 关联弹窗合并为「已关联」「可关联」双区，分类和模板统一渲染 | `FlowDesigner.vue` |
+
+### 数据库变更
+
+| # | 内容 |
+|---|------|
+| 8 | 新增 `template_categories` 表（按组织隔离的模板包） |
+| 9 | 新增 `template_category_documents` 表（包 ↔ 模板多对多） |
+| 10 | `template_document_links` 新增 `category_id` 字段（可选），`document_id` 改可空 |
+
+### 后端新增端点
+
+| # | 方法 | 路径 | 说明 |
+|---|------|------|------|
+| 11 | GET/POST/PUT/DELETE | `/admin/template-categories` | 管理员分类 CRUD |
+| 12 | GET | `/admin/template-categories/{id}` | 分类详情（含模板列表） |
+| 13 | POST/DELETE | `/admin/template-categories/{id}/documents` | 分类内模板添加/移除 |
+| 14 | GET | `/templates/{id}/download-zip` | 批量填充+打包 ZIP 下载 |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 190 | 全部通过，零回归 |
+
+---
+
+## 2026-07-30 — 任务模板包 + 截止日期 + 终审修复 + 一键应用（Phase 12）
+
+### 新增功能
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 22 | 任务处理页展示模板包 —— 可折叠包卡片，内部模板逐个下载，包整体 ZIP 打包下载 | `tasks.py`, `TaskDetail.vue` |
+| 23 | PropertyPanel 一键应用人员配置 —— 填好一个节点后，一键覆盖所有工作节点 | `PropertyPanel.vue` |
+| 24 | 发起模式截止日期改为单个选择器 —— 选完自动级联更新下游节点 | `PropertyPanel.vue`, `FlowDesigner.vue` |
+| 25 | 列表新增「截止时间」列（流程最后一个工作节点的 deadline，发起时间后） | 全栈 10 文件 |
+| 26 | 任务处理页模板下载不再校验中间表直接关联（包内模板也能下载） | `tasks.py` |
+
+### 修复
+
+| # | 问题 | 文件 |
+|---|------|------|
+| 27 | 任务处理页上传文件后不显示 —— `node_files` 缺少 `folder_name` 等字段 | `task_service.py` |
+| 28 | 模板包内单模板下载报"未关联到此项目" | `tasks.py`（去掉冗余校验） |
+| 29 | 下载的 .docx 上传时报"不支持 application/zip"—— Office 扩展名跳过魔数检测 | `file_service.py` |
+| 30 | 全局输入框无边框 —— 删掉 `box-shadow: none` 覆盖 | `common.scss` |
+| 31 | 一键应用覆盖掉节点原有配置（名称/时限/签批等）—— `setProperties` 未合并现有属性 | `PropertyPanel.vue` |
+| 32 | 终审时首页卡点追踪 + 列表不显示当前节点/处理人 —— 三处 `is_end == False` 排除终审节点 | `_helpers.py` ×2, `dashboard_service.py` |
+| 33 | 终审详情页显示无意义的完成时限/截止时间 | `ApprovalDetail.vue` |
+| 34 | 终审详情页历史文件需默认展开 | `ApprovalDetail.vue` |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 190 | 全部通过，零回归 |
+
+---
+
+## 2026-07-30 — UI 简化：校验人/审批人单选 + 中间节点驳回 + 安全加固（Phase 13）
+
+### UI 简化：校验人/审批人多选 → 单选
+
+> 用户反馈只需一人审批/校验，将全部选择器从多选改为单选以降低操作复杂度。
+> 后端存储不变（仍为 JSON 数组），仅前端 UI 层限制单选，向后兼容旧数据。
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 1 | PropertyPanel 校验人/审批人 `:multiple="true"` → `:multiple="false"`，表单类型 `number[]` → `number \| undefined`，读写节点属性时做单值↔数组转换 | `PropertyPanel.vue` |
+| 2 | NodeOverridePanel 同上，UserSelector 绑定从数组取 `[0]` → 写回时包 `[v]`，宽度 400→280 | `NodeOverridePanel.vue` |
+| 3 | PresetEditor 预设编辑器校验人/审批人也改为单选 | `PresetEditor.vue` |
+| 4 | ChangePersonnelDialog 紧急换人弹窗同步改为单选 | `ChangePersonnelDialog.vue` |
+
+### 新增功能：中间节点审批可驳回到历史节点
+
+| # | 内容 | 涉及文件 |
+|---|------|----------|
+| 5 | `_get_downstream_nodes_by_edges()`：边 BFS 遍历替代旧 sort_order 范围过滤，精确获取下游节点 | `approval_service.py` |
+| 6 | 非终审节点驳回支持可选 `target_node_id`：复用终审驳回逻辑，重置目标节点+下游 → 新建 Task | `approval_service.py` |
+| 7 | 下游节点重置时增加 `arrived_count = 0`（2 处），确保汇合计数归零 | `approval_service.py` |
+| 8 | 驳回目标节点范围：终审=全部已完成节点；中间节点=已完成且 sort_order < 当前节点的历史节点 | `approval_service.py` |
+
+### 修复
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 9 | 终审驳回理由在任务处理页不显示 —— task_id=None 导致查不到 → 新增按 `reject_target_node_id` + `ApprovalStatus.REJECTED` 查询 | `task_service.py` |
+| 10 | flow_engine `arrived_count += 1` 读-改-写竞态 → 改为原子 SQL `UPDATE SET arrived_count = arrived_count + 1` | `flow_engine.py` |
+| 11 | flow_engine 死代码清理：移除 BFS `deque`、`max_iterations`、`all_nodes` 查询 | `flow_engine.py` |
+| 12 | 路径遍历防护：实例名/方案名禁止 `../`、`..\`、`/`、`\` 等危险字符 | `instance/create.py`, `proposal_service.py` |
+| 13 | change_personnel/change_priority/delete 缺 FOR UPDATE 行锁 → 补 `.with_for_update()` | `instance/change.py`, `instance/delete.py` |
+| 14 | 物理文件删除失败静默吞掉 → 加 `logger.error("物理文件删除失败，磁盘残留孤儿文件: ...")` | `file_service.py` |
+| 15 | Dashboard 缺 `import { ElMessage }` → API 失败时 ReferenceError 白屏 | `dashboard/index.vue` |
+
+### UI 微调
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 16 | 项目管理列表列宽调整：所属组织 90、发起时间 135、截止时间 135 | `FlowManagement.vue` |
+| 17 | 全局表格操作列按钮左对齐：`common.scss` 加 `.el-button--small.is-text { padding-left: 0 }` | `common.scss` |
+| 18 | 「终审」标签与「结束」间距太小 → 加 `margin-left: 6px` | `profile/index.vue` |
+
+### 测试适配
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 19 | test_approval_service mock 新增 `InstanceEdge` 查询（`_get_downstream_nodes_by_edges` 新步骤） | `test_approval_service.py` |
+| 20 | test_flow_engine 3 个测试适配原子 UPDATE：移除 `all_nodes` mock，`target.arrived_count = 1` 模拟原子递增结果 | `test_flow_engine.py` |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 190 | 全部通过，零回归 |
+| 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |
+
+---
+
+## 2026-07-30 — 第三轮全量审计修复：致命 5 + 高危 4 + 中危 13（Phase 14）
+
+> 合并上轮未修 + 本轮增量扫描，共计发现 33 项，修复 22 项（致命/高危/中危全部清零）。
+
+### 🔴 致命修复（5 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 1 | **`validate_template_for_publish` 死代码** —— 模板发布零校验 → 集成到 `save_design_data`，保存前调用校验，不合法设计拒绝保存 | `designer_service.py`, `validation_service.py` |
+| 2 | **空审批人死锁** —— pass_check 在 `approvers=[]` 时设 WAITING_APPROVAL 但不创建 Approval → 难度<4 直接完成节点；难度=4 跳审批直接创建 Endorsement | `check_service.py` |
+| 3 | **OperationLog.round 全错** —— 6 处 `round=task_id` 或 `round=0` → 统一改为 `round=c.round` / `round=a.round` | `check_service.py`, `approval_service.py` |
+| 4 | **scalar_one() → 500** —— 8 处无异常处理 → 全部改为 `scalar_one_or_none()` + None 检查返回 404 | `tasks.py`, `flow_engine.py`, `designer_service.py`, `file_service.py`, `task_service.py` |
+| 5 | **FlowEngine 无重入守卫** —— 环形边可无限循环 → 加 `node.status != WAITING` 跳过检查 | `flow_engine.py` |
+
+### 🟠 高危修复（4 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 6 | change_personnel 中 CheckRecord `task_id=0`（幽灵记录）→ 改为 `None`（与 Approval/Endorsement 一致） | `instance/change.py` |
+| 7 | endorse_reject 终止审批/校验缺 round 过滤 → 加 `round=e.round` | `endorsement_service.py` |
+| 8 | check_service `asyncio.gather` 缺 try/except → fail-fast 可致事务回滚 | `check_service.py` |
+| 9 | 5 处 OperationLog 缺 round 参数 → 补 `round=node.round` | `instance/change.py`, `instance/supplement.py` |
+
+### 🟡 中危修复（9 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 10 | reject() target_node 查询缺 FOR UPDATE → 加 `.with_for_update()` | `approval_service.py` |
+| 11 | delete_template 不检查运行中实例 → 加 `COUNT(*)` 活性检查 | `template_service.py` |
+| 12 | pdf_signature 签名异常缺 `exc_info=True`（2 处） | `pdf_signature.py` |
+| 13 | 前端 `_msgCache` 无上限保护 → 加 `MAX_CACHE_SIZE=100` + LRU 淘汰 | `request.ts` |
+| 14 | NotificationBell `popupTimer` 未在 unmount 清理 | `NotificationBell.vue` |
+| 15 | SignaturePreviewDialog 孤儿 `setTimeout` → 存 ref + unmount 清理 | `SignaturePreviewDialog.vue` |
+| 16 | 代码清理：行内重复 import、未用 import、导入不规范、死 Schema、email max_length | `templates.py`, `auth.py`, `endorsements.py`, `user.py`, `auth.py`(schema) |
+
+### 🟢 低危（未修，影响极小）
+
+| 项目 | 说明 |
+|------|------|
+| supplement_files 同步 I/O、create 目录事务内创建、401 缺 guard flag、PresetEditor/ChangePersonnelDialog 缺卸载守卫、TaskDetail 事件监听器、_DEFAULT_MESSAGES 缺条目 | 不影响正常使用，按需修复 |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 190 | 全部通过，零回归 |
+| 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |
+
+---
+
+## 2026-07-30 — 第四轮全栈审计修复：致命 6 + 高危 10 + 中危 15（Phase 15）
+
+> 5 个并行代理全栈扫描 100+ 文件，发现 59 项（含测试缺口 4 项），修复致命/高危/高优中危共 31 项。
+
+### 🔴 致命（6 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 1 | 终止通知完全失效 —— UPDATE 在 SELECT 之前 → 通知收集移前 | `instance/terminate.py` |
+| 2 | 超期预警 500 —— inst.org_name 不存在 → JOIN Organization | `notification_service.py` |
+| 3 | submit_task 空审批人死锁 → 难度<4 完成+传播，难度=4 Endorsement | `task_service.py` |
+| 4 | commit-before-enqueue → 先入队再 commit | `api/tasks.py` |
+| 5 | 无 assignee 节点死锁 → 加守卫跳过激活 | `engine/flow_engine.py` |
+| 6 | 事件监听器泄漏 → 存引用 + onUnmounted 清理 | `TaskDetail.vue` |
+
+### 🟠 高危（10 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 7 | 驳回遗漏 WAITING_ENDORSEMENT（2 处） | `approval_service.py` |
+| 8 | 驳回逐文件 flush → 批量删除（3 处） | `approval_service.py` |
+| 9 | BFS N+1 → 全量加载边内存遍历 | `approval_service.py` |
+| 10 | 补交文件同步 I/O → aiofiles 异步 | `instance/supplement.py` |
+| 11 | REPEATABLE READ 竞态 → READ_COMMITTED | `core/config.py` |
+| 12 | 路径穿越防御 → resolve_file_path+is_safe_path | `api/tasks.py` |
+| 13 | blob URL 未卸载 → onBeforeUnmount revoke | `AppLayout.vue` |
+| 14 | 文件删除无错误处理 | `TaskDetail.vue` |
+| 15 | NodeOverride 签名字段丢弃 → Schema 补字段 | `schemas/instance.py` |
+| 16 | 任务状态标签缺失 overdue/rejected/terminated | `labels.ts` |
+
+### 🟡 中危（15 项）
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 17 | defaultdict 内存泄漏 → 过期删 key | `rate_limit.py` |
+| 18 | int() 无异常处理 | `designer.py` |
+| 19 | 通知已读裸 dict → ApiResponse.ok() | `notifications.py` |
+| 20 | result.changes 缺可选链 | `ChangePersonnelDialog.vue` |
+| 21 | 启禁用无错误处理 | `UserManagement.vue` |
+| 22 | 缺魔数校验 | `instance/supplement.py` |
+| 23 | 校验过严 → 校验/审批至少配一 | `validation_service.py` |
+| 24-26 | 字段补齐：type/endorsements/node_description | `template.ts`, `task.ts`, `schemas/endorsement.py` |
+| 27 | 不支持类型静默回退 → 明确报错 | `document_service.py` |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 145 | 全部通过，零回归 |
+| 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |

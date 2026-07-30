@@ -2,7 +2,8 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_active_user, CurrentUser
+from app.core.database import get_db
+from app.api.deps import get_current_active_user, CurrentUser
 from app.schemas.common import ApiResponse
 from app.schemas.endorsement import EndorseRequest, EndorseRejectRequest
 from app.services.endorsement_service import (

@@ -15,6 +15,9 @@ class ApprovalListItem(BaseModel):
     status: str  # pending/approved/rejected/terminated
     is_end_node: bool = False
     round: int = 1
+    deadline: str | None = None       # 截止时间（ISO 格式）
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期）
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -29,6 +32,7 @@ class ApprovalDetail(BaseModel):
     initiator_id: int
     initiator_name: str = ""
     priority: str = "normal"
+    difficulty: str = "1"  # 难度等级（1-4）
     node_id: int
     node_name: str
     node_description: str | None = None
@@ -38,12 +42,17 @@ class ApprovalDetail(BaseModel):
     status: str
     opinion: str | None = None
     is_end_node: bool = False
+    time_limit_days: int | None = None  # 完成时限（工作日）
+    deadline: datetime | None = None  # 截止时间
+    round: int = 1  # 当前轮次
     # 进度条
     total_nodes: int = 0
     current_node_index: int = 0
     nodes: list[dict] = []
-    # 节点文件
+    # 实例全部文件（展示用）
     files: list[dict] = []
+    # 仅本节点文件（签批预览用，后端过滤）
+    node_files: list[dict] = []
     # 校验进度
     check_progress: list[dict] = []
     # 审批进度

@@ -1,8 +1,8 @@
 # 企业流程审批系统 — API 接口设计
 
-> **版本**：3.0 | **状态**：与代码同步 | **更新**：2026-07-24
+> **版本**：3.1 | **状态**：与代码同步 | **更新**：2026-07-29
 >
-> 72 HTTP 端点 + 1 WebSocket。完整定义见 FastAPI Swagger `/docs`。
+> 90 HTTP 端点 + 1 WebSocket。完整定义见 FastAPI Swagger `/docs`。
 
 ---
 
@@ -630,8 +630,9 @@ body 为文件模板 ID 数组，全量替换关联。
 | POST | `/tasks/{id}/files` | 负责人 | 上传文件 |
 | DELETE | `/tasks/{id}/files/{fid}` | 负责人 | 删除未提交文件 |
 | GET | `/files/{fid}/download` | 用户 | 下载/预览文件 |
-| GET | `/tasks/{id}/document-templates` | 负责人 | 可用文件模板列表 |
+| GET | `/tasks/{id}/document-templates` | 负责人 | 可用文件模板列表（含模板包） |
 | GET | `/tasks/{id}/document-templates/{did}/download` | 负责人 | 下载已填充变量的模板 |
+| GET | `/tasks/{id}/document-templates/download-zip` | 负责人 | 下载模板包 ZIP（参数 category_id） |
 
 #### GET `/tasks`
 
@@ -1095,9 +1096,27 @@ body 为文件模板 ID 数组，全量替换关联。
 - Content-Type: `multipart/form-data`
 - 字段：`file`（.docx/.xlsx，≤10MB）、`name`（模板名称）、`organization_id`
 
+### 2.19 模板分类（包）管理（7 个）— `/api/v1/admin`
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|:--:|------|
+| GET | `/admin/template-categories` | 管理员 | 分类列表（筛选+分页） |
+| POST | `/admin/template-categories` | 管理员 | 创建分类 |
+| GET | `/admin/template-categories/{id}` | 管理员 | 分类详情（含内部模板） |
+| PUT | `/admin/template-categories/{id}` | 管理员 | 更新分类 |
+| DELETE | `/admin/template-categories/{id}` | 管理员 | 删除分类 |
+| POST | `/admin/template-categories/{id}/documents` | 管理员 | 向分类中添加模板 |
+| DELETE | `/admin/template-categories/{id}/documents` | 管理员 | 从分类中移除模板 |
+
+### 2.20 模板批量下载（1 个）— `/api/v1`
+
+| 方法 | 路径 | 认证 | 说明 |
+|------|------|:--:|------|
+| GET | `/templates/{id}/download-zip` | 用户 | 批量填充+打包 ZIP（参数 doc_ids, instance_id） |
+
 ---
 
-### 2.19 工具（1 个）— `/api/v1`
+### 2.21 工具（1 个）— `/api/v1`
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|:--:|------|
@@ -1126,7 +1145,7 @@ body 为文件模板 ID 数组，全量替换关联。
 
 ---
 
-### 2.20 健康检查（1 个）— `/api/v1`
+### 2.22 健康检查（1 个）— `/api/v1`
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|:--:|------|

@@ -85,6 +85,8 @@ class TestListProposals:
             MockResult(scalars_all=[inst]),           # 1: list
             MockResult(scalars_all=[user]),            # 2: users
             MockResult(scalars_all=[org]),             # 3: orgs
+            MockResult(scalars_all=[]),               # 4: active nodes (none)
+            MockResult(scalars_all=[]),               # 5: user names for active nodes
         ]
 
         result = await list_proposals(mock_db)

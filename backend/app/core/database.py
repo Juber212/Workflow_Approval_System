@@ -1,5 +1,6 @@
 """数据库引擎与会话管理"""
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
@@ -15,6 +16,17 @@ engine = create_async_engine(
     pool_recycle=3600,   # 1 小时回收连接，防止 MySQL wait_timeout 后拿到 stale 连接
     connect_args={"charset": "utf8mb4"},
 )
+
+
+# ========== 连接事件：设置事务隔离级别为 READ COMMITTED ==========
+# aiomysql 不支持 URL 参数 / connect_args 方式设置隔离级别，
+# 需要在每个新连接建立后通过 SQL 语句设置，防止 fork-join 并发竞态
+@event.listens_for(engine.sync_engine, "connect")
+def _set_isolation_level(dbapi_connection, connection_record):
+    """每个新连接建立后，设置会话隔离级别为 READ COMMITTED"""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+    cursor.close()
 
 # 异步会话工厂
 async_session_factory = async_sessionmaker(

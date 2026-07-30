@@ -1,4 +1,6 @@
-"""文件模板模型 —— 挂在组织下，通过中间表关联流程模板，下载时自动替换 {{占位符}}"""
+"""文件模板模型 —— 挂在组织下，通过中间表关联流程模板，下载时自动替换 {{占位符}}
+新增模板分类（TemplateCategory）支持按组织自定义分类，作为"模板包"可批量下载 ZIP
+"""
 
 from sqlalchemy import String, Integer, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,15 +29,32 @@ class DocumentTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
-class TemplateDocumentLink(Base):
-    """流程模板 ↔ 文件模板 多对多关联中间表"""
+class TemplateCategory(Base):
+    """模板分类（模板包）—— 按组织隔离，管理员可创建/编辑/删除，作为"模板包"可一键下载 ZIP"""
 
-    __tablename__ = "template_document_links"
+    __tablename__ = "template_categories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    template_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("flow_templates.id", ondelete="CASCADE"),
-        nullable=False, comment="流程模板 ID"
+    organization_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False, comment="所属组织"
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False, comment="分类名称")
+    description: Mapped[str | None] = mapped_column(String(200), nullable=True, comment="分类描述")
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="创建人")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class TemplateCategoryDocument(Base):
+    """分类 ↔ 文件模板 多对多关联中间表"""
+
+    __tablename__ = "template_category_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    category_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("template_categories.id", ondelete="CASCADE"),
+        nullable=False, comment="分类 ID"
     )
     document_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("document_templates.id", ondelete="CASCADE"),
@@ -44,5 +63,34 @@ class TemplateDocumentLink(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     __table_args__ = (
+        UniqueConstraint("category_id", "document_id", name="uq_category_document"),
+    )
+
+
+class TemplateDocumentLink(Base):
+    """流程模板 ↔ 文件模板/分类 关联中间表
+    支持两种关联方式（互斥）：
+      - document_id 有值：关联单个文件模板（旧逻辑兼容）
+      - category_id 有值：关联整个分类（模板包）"""
+
+    __tablename__ = "template_document_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    template_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("flow_templates.id", ondelete="CASCADE"),
+        nullable=False, comment="流程模板 ID"
+    )
+    document_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("document_templates.id", ondelete="CASCADE"),
+        nullable=True, comment="文件模板 ID（单个模板关联）"
+    )
+    category_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("template_categories.id", ondelete="CASCADE"),
+        nullable=True, comment="分类 ID（模板包关联）"
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("template_id", "category_id", name="uq_template_category_link"),
         UniqueConstraint("template_id", "document_id", name="uq_template_document"),
     )

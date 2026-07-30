@@ -256,9 +256,10 @@ def fill_template(file_path: str, file_type: str, replacements: dict[str, str]) 
     """根据文件类型调用对应的填充函数"""
     if file_type == "xlsx":
         return fill_xlsx_template(file_path, replacements)
-    else:
-        # 默认走 docx
+    elif file_type == "docx":
         return fill_docx_template(file_path, replacements)
+    else:
+        raise ValueError(f"不支持的文件模板类型: {file_type}（仅支持 docx 和 xlsx）")
 
 
 def get_doc_template_abs_path(doc: DocumentTemplate) -> str:

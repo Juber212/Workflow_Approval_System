@@ -41,7 +41,7 @@ class ChangePasswordRequest(BaseModel):
 
 class UpdateProfileRequest(BaseModel):
     """用户更新个人资料（邮箱/手机号）"""
-    email: str | None = Field(None, max_length=120, description="邮箱地址")
+    email: str | None = Field(None, max_length=100, description="邮箱地址")  # 与 DB VARCHAR(100) 一致
     phone: str | None = Field(None, max_length=20, description="手机号")
 
     @field_validator("email")

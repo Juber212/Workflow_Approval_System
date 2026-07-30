@@ -40,7 +40,7 @@ async def validate_template_for_publish(db: AsyncSession, template_id: int) -> l
     if not end_nodes:
         errors.append("缺少结束节点")
 
-    # 4. 工作节点配置完整性
+    # 4. 工作节点配置完整性（校验人和审批人都必须配置）
     work_nodes = [n for n in nodes if not n.is_start and not n.is_end]
     for n in work_nodes:
         if not n.name or not n.name.strip():

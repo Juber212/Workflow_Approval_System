@@ -187,6 +187,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  if (popupTimer) { clearTimeout(popupTimer); popupTimer = null }
 })
 </script>
 

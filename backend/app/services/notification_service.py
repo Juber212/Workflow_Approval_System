@@ -236,7 +236,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
     返回各类别超期项列表，含实例名、节点名、负责人、截止时间、优先级。
     """
     from datetime import datetime
-    from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance, InstanceNode, User
+    from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance, InstanceNode, User, Organization
     from sqlalchemy import and_
 
     now = datetime.now()
@@ -260,19 +260,6 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
-    for t, node, inst, user in overdue_tasks:
-        result["tasks"].append({
-            "id": t.id,
-            "type": "task",
-            "instance_id": inst.id,
-            "instance_name": inst.name,
-            "node_name": node.name,
-            "person_name": user.real_name,
-            "person_id": user.id,
-            "deadline": node.deadline.isoformat() if node.deadline else None,
-            "priority": inst.priority,
-            "organization_name": inst.org_name or "",
-        })
 
     # ── 2. 超期校验 ──
     overdue_checks = (await db.execute(
@@ -287,19 +274,6 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
-    for c, node, inst, user in overdue_checks:
-        result["checks"].append({
-            "id": c.id,
-            "type": "check",
-            "instance_id": inst.id,
-            "instance_name": inst.name,
-            "node_name": node.name,
-            "person_name": user.real_name,
-            "person_id": user.id,
-            "deadline": node.deadline.isoformat() if node.deadline else None,
-            "priority": inst.priority,
-            "organization_name": inst.org_name or "",
-        })
 
     # ── 3. 超期审批 ──
     overdue_approvals = (await db.execute(
@@ -314,19 +288,6 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
-    for a, node, inst, user in overdue_approvals:
-        result["approvals"].append({
-            "id": a.id,
-            "type": "approval",
-            "instance_id": inst.id,
-            "instance_name": inst.name,
-            "node_name": node.name,
-            "person_name": user.real_name,
-            "person_id": user.id,
-            "deadline": node.deadline.isoformat() if node.deadline else None,
-            "priority": inst.priority,
-            "organization_name": inst.org_name or "",
-        })
 
     # ── 4. 超期批准 ──
     overdue_endorsements = (await db.execute(
@@ -341,6 +302,64 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
+
+    # ── 批量获取组织名称（FlowInstance 只有 organization_id，需查 Organization 表）──
+    all_org_ids: set[int] = set()
+    for items in [overdue_tasks, overdue_checks, overdue_approvals, overdue_endorsements]:
+        for row in items:
+            inst = row[2]  # FlowInstance 在各查询中都是第3个元素
+            if inst.organization_id:
+                all_org_ids.add(inst.organization_id)
+    org_name_map: dict[int, str] = {}
+    if all_org_ids:
+        org_rows = (await db.execute(
+            select(Organization.id, Organization.name).where(Organization.id.in_(list(all_org_ids)))
+        )).all()
+        org_name_map = {oid: oname for oid, oname in org_rows}
+
+    # ── 组装结果 ──
+    for t, node, inst, user in overdue_tasks:
+        result["tasks"].append({
+            "id": t.id,
+            "type": "task",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
+        })
+
+    for c, node, inst, user in overdue_checks:
+        result["checks"].append({
+            "id": c.id,
+            "type": "check",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
+        })
+
+    for a, node, inst, user in overdue_approvals:
+        result["approvals"].append({
+            "id": a.id,
+            "type": "approval",
+            "instance_id": inst.id,
+            "instance_name": inst.name,
+            "node_name": node.name,
+            "person_name": user.real_name,
+            "person_id": user.id,
+            "deadline": node.deadline.isoformat() if node.deadline else None,
+            "priority": inst.priority,
+            "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
+        })
+
     for e, node, inst, user in overdue_endorsements:
         result["endorsements"].append({
             "id": e.id,
@@ -352,7 +371,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
             "priority": inst.priority,
-            "organization_name": inst.org_name or "",
+            "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
 
     return result

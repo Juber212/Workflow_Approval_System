@@ -23,6 +23,7 @@ export interface OrgCardListResponse {
 export interface TemplateItem {
   id: number
   name: string
+  type: string  // 模板类型: project / proposal
   description: string | null
   organization_id: number
   organization_name: string | null
@@ -37,6 +38,7 @@ export interface TemplateItem {
 export interface TemplateDetail {
   id: number
   name: string
+  type: string  // 模板类型: project / proposal
   description: string | null
   organization_id: number
   organization_name: string | null
@@ -144,28 +146,49 @@ export interface DocTemplateItem {
   created_at: string | null
 }
 
-/** 文件模板列表响应（含已关联 + 未关联） */
-export interface DocTemplateListResponse {
-  linked: DocTemplateItem[]           // 已关联到此流程模板的
-  available: DocTemplateItem[]        // 组织内可用但未关联的
-  available_variables: string[]       // 可用变量列表
+/** 分类（模板包）摘要 */
+export interface TemplateCategorySummary {
+  id: number
+  name: string
+  description: string | null
+  document_count: number  // 分类下文件模板数量
 }
 
-/** 获取模板的文件模板列表（已关联 + 组织内可用） */
+/** 文件模板列表响应（含已关联 + 未关联 + 分类） */
+export interface DocTemplateListResponse {
+  linked: DocTemplateItem[]                 // 已关联的单个模板
+  linked_categories: TemplateCategorySummary[]  // 已关联的分类（模板包）
+  available: DocTemplateItem[]              // 组织内可用但未关联的单个模板
+  available_categories: TemplateCategorySummary[]  // 组织内可用但未关联的分类
+  available_variables: string[]             // 可用变量列表
+}
+
+/** 获取模板的文件模板列表（已关联 + 分类 + 组织内可用） */
 export async function getDocTemplates(templateId: number): Promise<DocTemplateListResponse> {
   const res = await request.get(`/templates/${templateId}/documents`)
   return res.data
 }
 
-/** 关联文件模板到流程模板 */
-export async function linkDocTemplates(templateId: number, docIds: number[]): Promise<{ linked: number }> {
-  const res = await request.post(`/templates/${templateId}/documents/link`, docIds)
+/** 关联文件模板或分类到流程模板 */
+export async function linkDocTemplates(
+  templateId: number,
+  docIds?: number[],
+  categoryIds?: number[],
+): Promise<{ linked_docs: number; linked_categories: number }> {
+  const res = await request.post(`/templates/${templateId}/documents/link`, {
+    doc_ids: docIds || [],
+    category_ids: categoryIds || [],
+  })
   return res.data
 }
 
-/** 取消文件模板与流程模板的关联 */
-export async function unlinkDocTemplate(templateId: number, docId: number): Promise<void> {
-  await request.delete(`/templates/${templateId}/documents/${docId}/link`)
+/** 取消文件模板或分类与流程模板的关联 */
+export async function unlinkDocTemplate(
+  templateId: number,
+  linkType: 'document' | 'category',
+  linkId: number,
+): Promise<void> {
+  await request.delete(`/templates/${templateId}/documents/${linkType}/${linkId}/link`)
 }
 
 /** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
@@ -189,6 +212,35 @@ export async function downloadDocTemplate(taskId: number, docId: number): Promis
   const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
   const raw = starMatch?.[1] || plainMatch?.[1] || `template-${docId}`
   a.download = decodeURIComponent(raw)
+  a.click()
+  URL.revokeObjectURL(blobUrl)
+}
+
+/** 批量下载文件模板 ZIP（填充占位符后打包） */
+export async function downloadTemplatesZip(
+  templateId: number,
+  docIds: number[],
+  instanceId: number,
+  nodeId?: number,
+): Promise<void> {
+  const token = getToken()
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const params = new URLSearchParams()
+  params.set('doc_ids', docIds.join(','))
+  params.set('instance_id', String(instanceId))
+  if (nodeId) params.set('node_id', String(nodeId))
+  const resp = await fetch(`${baseUrl}/templates/${templateId}/download-zip?${params}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}))
+    throw new Error((errData as any).message || '下载失败')
+  }
+  const blob = await resp.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = 'templates.zip'
   a.click()
   URL.revokeObjectURL(blobUrl)
 }
@@ -220,17 +272,19 @@ export async function getAdminDocTemplates(params: {
   return res.data
 }
 
-/** 管理员上传文件模板 */
+/** 管理员上传文件模板（支持选择分类） */
 export async function adminUploadDocTemplate(
   file: File,
   organizationId: number,
   name?: string,
+  categoryIds?: number[],
 ): Promise<{ id: number; name: string; file_type: string; organization_id: number }> {
   const form = new FormData()
   form.append('file', file)
   const params = new URLSearchParams()
   params.set('organization_id', String(organizationId))
   if (name) params.set('name', name)
+  if (categoryIds?.length) params.set('category_ids', categoryIds.join(','))
   const res = await request.post(`/admin/document-templates?${params}`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
@@ -246,4 +300,77 @@ export async function deleteAdminDocTemplate(docId: number): Promise<void> {
 export async function getAdminOrganizations(): Promise<{ id: number; name: string }[]> {
   const res = await request.get('/admin/organizations')
   return res.data.items
+}
+
+// ─── 管理员：模板分类（模板包）管理 ──────────────────────────────
+
+/** 分类列表项 */
+export interface TemplateCategoryItem {
+  id: number
+  organization_id: number
+  organization_name: string | null
+  name: string
+  description: string | null
+  document_count: number
+  created_by: number
+  created_by_name: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** 分类详情（含内部文件模板） */
+export interface TemplateCategoryDetail extends TemplateCategoryItem {
+  documents: DocTemplateItem[]
+}
+
+/** 管理员获取分类列表 */
+export async function getAdminCategories(params: {
+  organization_id?: number
+  keyword?: string
+  page?: number
+  page_size?: number
+} = {}): Promise<PaginatedResponse<TemplateCategoryItem>> {
+  const res = await request.get('/admin/template-categories', { params })
+  return res.data
+}
+
+/** 管理员创建分类 */
+export async function createAdminCategory(data: {
+  name: string
+  description?: string | null
+  organization_id: number
+}): Promise<{ id: number; name: string }> {
+  const res = await request.post('/admin/template-categories', data)
+  return res.data
+}
+
+/** 管理员获取分类详情 */
+export async function getAdminCategoryDetail(categoryId: number): Promise<TemplateCategoryDetail> {
+  const res = await request.get(`/admin/template-categories/${categoryId}`)
+  return res.data
+}
+
+/** 管理员更新分类 */
+export async function updateAdminCategory(
+  categoryId: number,
+  data: { name: string; description?: string | null },
+): Promise<void> {
+  await request.put(`/admin/template-categories/${categoryId}`, data)
+}
+
+/** 管理员删除分类 */
+export async function deleteAdminCategory(categoryId: number): Promise<void> {
+  await request.delete(`/admin/template-categories/${categoryId}`)
+}
+
+/** 管理员将文件模板加入分类 */
+export async function linkDocsToCategory(categoryId: number, docIds: number[]): Promise<{ linked: number }> {
+  const res = await request.post(`/admin/template-categories/${categoryId}/documents`, { doc_ids: docIds })
+  return res.data
+}
+
+/** 管理员从分类中移除文件模板 */
+export async function unlinkDocsFromCategory(categoryId: number, docIds: number[]): Promise<{ removed: number }> {
+  const res = await request.delete(`/admin/template-categories/${categoryId}/documents`, { data: { doc_ids: docIds } })
+  return res.data
 }

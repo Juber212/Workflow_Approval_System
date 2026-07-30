@@ -18,6 +18,9 @@ class NodeOverride(BaseModel):
     require_approver_signature: bool | None = Field(None, description="审批人通过时是否签名")
     endorser_id: int | None = Field(None, description="更换批准人（仅难度4级时生效）")
     require_endorser_signature: bool | None = Field(None, description="批准人通过时是否签名")
+    signature_x: float | None = Field(None, description="签名 X 坐标覆盖")
+    signature_y: float | None = Field(None, description="签名 Y 坐标覆盖")
+    signature_page: int | None = Field(None, description="签名页码覆盖（-1=最后一页）")
 
 
 class CreateInstanceRequest(BaseModel):
@@ -75,6 +78,10 @@ class InstanceListItem(BaseModel):
     total_nodes: int = 0
     current_handlers: str = ""  # 当前处理人（根据节点状态动态显示：负责人/校验人/审批人/批准人）
     proposal_name: str | None = None  # 关联的方案名称
+    deadline: str | None = None       # 当前活跃节点的截止时间
+    flow_deadline: str | None = None  # 流程截止时间（最后一个工作节点的截止时间）
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期，null=无截止）
     initiated_at: datetime | None = None
     completed_at: datetime | None = None
     terminated_at: datetime | None = None
@@ -188,6 +195,7 @@ class InstanceDetailResponse(BaseModel):
     sales_manager: str | None = None
     proposal_id: int | None = None      # 关联的方案 ID
     proposal_name: str | None = None    # 关联的方案名称
+    template_id: int = 0                # 使用的流程模板 ID
     template_type: str = "project"      # 模板类型：project / proposal（前端面包屑/标题用）
     current_node_index: int = 0
     total_nodes: int = 0

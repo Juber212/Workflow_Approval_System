@@ -46,16 +46,16 @@
             <label class="override-label">校验人</label>
             <div>
               <UserSelector
-                :model-value="getOverride(node.id, 'checkers_ids') ?? getCheckerIds(node)"
-                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'checkers_ids', v as number[] | undefined)"
-                :multiple="true"
-                :placeholder="'选择校验人（可多选）'"
+                :model-value="getOverride(node.id, 'checkers_ids')?.[0] ?? getCheckerId(node)"
+                @update:model-value="(v: number | undefined) => setOverride(node.id, 'checkers_ids', v != null ? [v] : undefined)"
+                :multiple="false"
+                :placeholder="'选择校验人'"
                 org-members
-                style="width: 400px"
+                style="width: 280px"
                 @options-loaded="(users: any[]) => cacheNames(users)"
               />
               <p class="override-warn" v-if="isFieldEmpty(node, 'checkers')">
-                ⚠ 校验人不能为空，至少选择 1 人
+                ⚠ 请选择校验人
               </p>
             </div>
           </div>
@@ -65,16 +65,16 @@
             <label class="override-label">审批人</label>
             <div>
               <UserSelector
-                :model-value="getOverride(node.id, 'approvers_ids') ?? getApproverIds(node)"
-                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'approvers_ids', v as number[] | undefined)"
-                :multiple="true"
-                :placeholder="'选择审批人（可多选）'"
+                :model-value="getOverride(node.id, 'approvers_ids')?.[0] ?? getApproverId(node)"
+                @update:model-value="(v: number | undefined) => setOverride(node.id, 'approvers_ids', v != null ? [v] : undefined)"
+                :multiple="false"
+                :placeholder="'选择审批人'"
                 org-members
-                style="width: 400px"
+                style="width: 280px"
                 @options-loaded="(users: any[]) => cacheNames(users)"
               />
               <p class="override-warn" v-if="isFieldEmpty(node, 'approvers')">
-                ⚠ 审批人不能为空，至少选择 1 人
+                ⚠ 请选择审批人
               </p>
             </div>
           </div>
@@ -160,14 +160,26 @@ const workNodes = computed(() =>
 
 // ========== 辅助函数 ==========
 
-/** 获取节点默认校验人ID列表 */
+/** 获取节点默认校验人ID（第一个） */
+function getCheckerId(node: TemplateNodeItem): number | undefined {
+  const ids = getCheckerIds(node)
+  return ids.length > 0 ? ids[0] : undefined
+}
+
+/** 获取节点默认审批人ID（第一个） */
+function getApproverId(node: TemplateNodeItem): number | undefined {
+  const ids = getApproverIds(node)
+  return ids.length > 0 ? ids[0] : undefined
+}
+
+/** 获取节点默认校验人ID列表（保留兼容性） */
 function getCheckerIds(node: TemplateNodeItem): number[] {
   const checkers = node.checkers
   if (Array.isArray(checkers)) return checkers.map((c: any) => c.user_id ?? c.id ?? c)
   return []
 }
 
-/** 获取节点默认审批人ID列表 */
+/** 获取节点默认审批人ID列表（保留兼容性） */
 function getApproverIds(node: TemplateNodeItem): number[] {
   const approvers = node.approvers
   if (Array.isArray(approvers)) return approvers.map((a: any) => a.user_id ?? a.id ?? a)
@@ -230,9 +242,15 @@ function getNodeSummary(node: TemplateNodeItem): string {
     parts.push(userNameCache.value[aId as number])
   }
   const checkerIds = getOverride(node.id, 'checkers_ids') ?? getCheckerIds(node)
-  if (checkerIds && checkerIds.length > 0) parts.push(`${checkerIds.length}位校验人`)
+  if (checkerIds && checkerIds.length > 0) {
+    const cName = userNameCache.value[checkerIds[0] as number]
+    parts.push(cName ? `${cName}（校验）` : `1位校验人`)
+  }
   const approverIds = getOverride(node.id, 'approvers_ids') ?? getApproverIds(node)
-  if (approverIds && approverIds.length > 0) parts.push(`${approverIds.length}位审批人`)
+  if (approverIds && approverIds.length > 0) {
+    const aName = userNameCache.value[approverIds[0] as number]
+    parts.push(aName ? `${aName}（审批）` : `1位审批人`)
+  }
   return parts.join(' · ') || '未配置'
 }
 

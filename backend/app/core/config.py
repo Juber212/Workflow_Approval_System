@@ -93,7 +93,9 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """MySQL 连接 URL（charset 确保中文注释不乱码）"""
+        """MySQL 连接 URL（charset 确保中文注释不乱码；READ COMMITTED 防止 fork-join 并发竞态）"""
+        # 注意：isolation_level 不能放 URL 查询参数（aiomysql 不支持），
+        # 需通过 create_async_engine 的 connect_args 传递
         return (
             f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"

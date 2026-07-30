@@ -14,6 +14,9 @@ class CheckListItem(BaseModel):
     submitter_name: str = ""  # 节点负责人姓名
     status: str  # pending/passed/returned/terminated
     round: int = 1
+    deadline: str | None = None       # 截止时间（ISO 格式）
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期）
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -30,19 +33,26 @@ class CheckDetail(BaseModel):
     submitter_id: int
     submitter_name: str = ""
     priority: str = "normal"
+    difficulty: str = "1"  # 难度等级（1-4）
     node_id: int
     node_name: str
+    node_description: str | None = None  # 节点说明
     task_id: int
     checker_id: int
     checker_name: str = ""
     status: str
     opinion: str | None = None
+    time_limit_days: int | None = None  # 完成时限（工作日）
+    deadline: datetime | None = None  # 截止时间
+    round: int = 1  # 当前轮次
     # 进度条
     total_nodes: int = 0
     current_node_index: int = 0
     nodes: list[dict] = []
-    # 当前节点文件
+    # 实例全部文件（展示用）
     files: list[dict] = []
+    # 仅本节点文件（签批预览用，后端过滤）
+    node_files: list[dict] = []
     # 负责人备注
     assignee_note: str | None = None
     # 并行校验进度

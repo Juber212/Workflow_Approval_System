@@ -25,8 +25,10 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     删除顺序（避免外键约束冲突）：
     approval → check_record → file → task → instance_edge → operation_log → instance_node → flow_instance
     """
-    # 查询实例
-    result = await db.execute(select(FlowInstance).where(FlowInstance.id == instance_id))
+    # 查询实例（加锁防并发删除冲突）
+    result = await db.execute(
+        select(FlowInstance).where(FlowInstance.id == instance_id).with_for_update()
+    )
     instance = result.scalar_one_or_none()
     if instance is None:
         raise AppException(ErrorCode.NOT_FOUND, "实例不存在")

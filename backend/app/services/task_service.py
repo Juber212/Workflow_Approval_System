@@ -28,6 +28,7 @@ from app.models import (
     OperationLog,
 )
 from app.models.enums import TaskStatus, InstanceNodeStatus, CheckStatus, ApprovalStatus
+from app.engine.flow_engine import propagate_from_node
 from app.schemas.common import PaginatedData
 from app.schemas.task import TaskListItem, TaskDetail, TaskSubmit
 
@@ -178,11 +179,20 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     total_nodes, current_node_index, all_nodes = await compute_progress(db, t.instance_id)
 
-    # 文件
+    # 文件 —— 查实例全部文件（负责人需了解完整上下文）
     files_result = await db.execute(
-        select(File).where(File.task_id == t.id, File.round == node.round).order_by(File.id.desc())
+        select(File).where(File.instance_id == t.instance_id).order_by(File.node_id, File.id.desc())
     )
     files = files_result.scalars().all()
+
+    # 批量查询文件所属节点名称
+    file_node_ids = list(set(f.node_id for f in files if f.node_id))
+    file_node_names: dict[int, str] = {}
+    if file_node_ids:
+        fn_result = await db.execute(
+            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
+        )
+        file_node_names = {row[0]: row[1] for row in fn_result.all()}
 
     # 校验进度
     checks_result = await db.execute(
@@ -210,7 +220,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
     rejected_type: str | None = None
     rejected_reason: str | None = None
     if t.submitted_at is None and t.status == TaskStatus.PROCESSING:
-        # 优先查审批退回
+        # 优先查审批退回（通过 task_id 关联的审批退回）
         rejected_appr = (
             await db.execute(
                 select(Approval)
@@ -235,6 +245,22 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             if returned_check:
                 rejected_type = "check"
                 rejected_reason = returned_check.opinion
+            else:
+                # 查终审驳回（终审审批 task_id=None，通过 reject_target_node_id 匹配）
+                final_reject_appr = (
+                    await db.execute(
+                        select(Approval)
+                        .where(
+                            Approval.reject_target_node_id == t.node_id,
+                            Approval.status == ApprovalStatus.REJECTED,
+                        )
+                        .order_by(Approval.decided_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+                if final_reject_appr:
+                    rejected_type = "approval"  # 统一当审批驳回展示
+                    rejected_reason = final_reject_appr.opinion
 
     return TaskDetail(
         id=t.id,
@@ -244,6 +270,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
         initiator_id=inst.initiator_id,
         initiator_name=initiator.real_name if initiator else "",
         priority=(inst.priority or "normal").lower(),
+        difficulty=(inst.difficulty or "1"),  # 难度等级
         node_id=t.node_id,
         node_name=node.name,
         node_description=node.description,
@@ -272,15 +299,34 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
             {
                 "id": f.id,
                 "original_name": f.original_name,
-                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
+                "mime_type": f.mime_type,
                 "file_size": f.file_size,
                 "uploader_name": "",
                 "upload_type": f.upload_type,
-                "folder_name": f.folder_name,  # 所属文件夹名称
+                "folder_name": f.folder_name,
                 "round": f.round,
+                "node_id": f.node_id,
+                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in files
+        ],
+        # 仅本节点文件（签批预览用，后端过滤）—— 字段与 files 保持一致，前端文件夹模式依赖 folder_name
+        node_files=[
+            {
+                "id": f.id,
+                "original_name": f.original_name,
+                "mime_type": f.mime_type,
+                "file_size": f.file_size,
+                "uploader_name": "",
+                "upload_type": f.upload_type,
+                "folder_name": f.folder_name,
+                "round": f.round,
+                "node_id": f.node_id,
+                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            }
+            for f in files if f.node_id == t.node_id
         ],
         checks=[
             {
@@ -352,7 +398,9 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
         raise AppException(ErrorCode.FORBIDDEN, "当前状态不可提交")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # ========== 文件提交校验 ==========
     await _validate_file_submission(node, task_id, db)
@@ -410,22 +458,34 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
             db.add(cr)
             created_checks.append((checker_id, cr))
     else:
-        # 无校验人 → 直接进入等待审批
-        task.status = TaskStatus.WAITING_APPROVAL
-        node.status = InstanceNodeStatus.WAITING_APPROVAL
+        # 无校验人（legacy 数据容错：已发布的老模板可能存在无校验人的节点）
+        # 校验人和审批人在模板发布时都必须配置，此分支仅用于历史数据兼容
         approvers = node.approvers or []
-        for a in approvers:
-            approver_id = a.get("user_id") if isinstance(a, dict) else a
-            ap = Approval(
-                instance_id=task.instance_id,
-                node_id=task.node_id,
-                task_id=task_id,
-                approver_id=approver_id,
-                status=ApprovalStatus.PENDING,
-                round=node.round,
+        if approvers:
+            # 有审批人 → 直接进入等待审批
+            task.status = TaskStatus.WAITING_APPROVAL
+            node.status = InstanceNodeStatus.WAITING_APPROVAL
+            for a in approvers:
+                approver_id = a.get("user_id") if isinstance(a, dict) else a
+                ap = Approval(
+                    instance_id=task.instance_id,
+                    node_id=task.node_id,
+                    task_id=task_id,
+                    approver_id=approver_id,
+                    status=ApprovalStatus.PENDING,
+                    round=node.round,
+                )
+                db.add(ap)
+                created_approvals.append((approver_id, ap))
+        else:
+            # 既无校验人也无审批人（legacy 极端情况）→ 直接完成节点，避免死锁
+            task.status = TaskStatus.COMPLETED
+            node.status = InstanceNodeStatus.FINISHED
+            node.completed_at = datetime.now()
+            logger.warning(
+                "[submit_task] 节点 #%d 无校验人也无审批人（legacy数据容错）→ 直接完成",
+                node.id,
             )
-            db.add(ap)
-            created_approvals.append((approver_id, ap))
 
     # ========== 操作日志 ==========
     db.add(OperationLog(
@@ -440,6 +500,10 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     ))
 
     await db.flush()
+
+    # ---- legacy 兜底：无校验+无审批人时节点已完成，传播到下游 ----
+    if task.status == TaskStatus.COMPLETED:
+        await propagate_from_node(db, task.instance_id, task.node_id)
 
     # ---- 通知：校验人有新的待校验任务 (#2) ----
     notif_tasks = [

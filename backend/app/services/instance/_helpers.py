@@ -1,5 +1,6 @@
 """实例服务公共辅助函数"""
 
+from datetime import datetime
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +9,24 @@ from app.models import (
     InstanceNode,
     User,
 )
+
+
+def compute_deadline_info(deadline: datetime | None) -> tuple[bool, int | None]:
+    """计算逾期状态和剩余天数
+
+    供各 service 的 list 函数复用，统一逾期判断逻辑。
+
+    Returns:
+        (is_overdue, days_remaining)
+        - is_overdue: True=已逾期
+        - days_remaining: 正数=剩余天数, 0=今日截止, 负数=已逾期天数, None=无截止时间
+    """
+    if deadline is None:
+        return False, None
+    now = datetime.now()
+    delta = deadline - now
+    days = delta.days
+    return days < 0, days
 
 
 
@@ -59,7 +78,7 @@ async def _batch_get_active_node_info(db: AsyncSession, instance_ids: list[int])
         return {}
 
     # 活跃状态：排除 finished / terminated / waiting（等待上游尚未激活）
-    active_statuses = ["running", "pending", "processing",
+    active_statuses = ["arrived", "running", "pending", "processing",
                        "waiting_check", "waiting_approval", "waiting_endorsement"]
 
     # 查询每个实例的第一个活跃工作节点（按 sort_order 升序）
@@ -68,7 +87,7 @@ async def _batch_get_active_node_info(db: AsyncSession, instance_ids: list[int])
         .where(
             InstanceNode.instance_id.in_(instance_ids),
             InstanceNode.is_start == False,
-            InstanceNode.is_end == False,
+            # 不再排除 is_end：终审时结束节点为 waiting_approval，需要显示处理人
             InstanceNode.status.in_(active_statuses),
         )
         .order_by(InstanceNode.instance_id, InstanceNode.sort_order)
@@ -137,6 +156,7 @@ async def _batch_get_active_node_info(db: AsyncSession, instance_ids: list[int])
             "approver_ids": approver_ids,
             "endorser_id": node.endorser_id,
             "endorser_name": user_name_map.get(node.endorser_id) if node.endorser_id else None,
+            "deadline": node.deadline,  # 活跃节点的截止时间（供列表逾期判断）
         }
 
     return info_map
@@ -206,6 +226,72 @@ def enrich_handler_info_with_names(node_info: dict, user_name_map: dict[int, str
         node_info["approver_first_name"] = user_name_map[approver_ids[0]]
 
     return node_info
+
+
+async def _batch_get_active_deadlines(db: AsyncSession, instance_ids: list[int]) -> dict[int, datetime | None]:
+    """批量查询实例当前活跃节点的截止时间（专用于列表逾期判断）
+
+    与 _batch_get_active_node_info 不同：
+    - 专查 deadline，不查人员信息
+    - 每个实例取 sort_order 最小的活跃工作节点
+    """
+    if not instance_ids:
+        return {}
+
+    active_statuses = ["arrived", "running", "pending", "processing",
+                       "waiting_check", "waiting_approval", "waiting_endorsement"]
+
+    stmt = (
+        select(InstanceNode.instance_id, InstanceNode.deadline)
+        .where(
+            InstanceNode.instance_id.in_(instance_ids),
+            InstanceNode.is_start == False,
+            # 不再排除 is_end：终审节点也需要查截止时间
+            InstanceNode.status.in_(active_statuses),
+        )
+        .order_by(InstanceNode.instance_id, InstanceNode.sort_order)
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # 每个实例只保留第一个活跃节点（sort_order 最小）
+    deadline_map: dict[int, datetime | None] = {}
+    for row in rows:
+        if row.instance_id not in deadline_map:
+            deadline_map[row.instance_id] = row.deadline
+
+    return deadline_map
+
+
+async def _batch_get_flow_deadlines(db: AsyncSession, instance_ids: list[int]) -> dict[int, datetime | None]:
+    """批量查询实例流程截止时间 —— 最后一个工作节点（sort_order 最大，排除开始/结束）的 deadline
+
+    与 _batch_get_active_deadlines 不同：
+    - 此函数查的是流程整体截止时间，不是当前活跃节点
+    - 取 sort_order 最大的工作节点
+    """
+    if not instance_ids:
+        return {}
+
+    stmt = (
+        select(InstanceNode.instance_id, InstanceNode.deadline)
+        .where(
+            InstanceNode.instance_id.in_(instance_ids),
+            InstanceNode.is_start == False,
+            InstanceNode.is_end == False,
+        )
+        .order_by(InstanceNode.instance_id, InstanceNode.sort_order.desc())
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # 每个实例只保留最后一个工作节点（sort_order 最大）
+    deadline_map: dict[int, datetime | None] = {}
+    for row in rows:
+        if row.instance_id not in deadline_map:
+            deadline_map[row.instance_id] = row.deadline
+
+    return deadline_map
 
 
 async def compute_progress(db: AsyncSession, instance_id: int) -> tuple[int, int, list]:

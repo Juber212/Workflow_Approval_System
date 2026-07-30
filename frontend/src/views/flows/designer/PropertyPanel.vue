@@ -72,6 +72,20 @@
           />
         </el-form-item>
 
+        <!-- ═══════ 人员配置区头部（含一键应用） ═══════ -->
+        <div class="personnel-header">
+          <span class="personnel-header__title">人员配置</span>
+          <el-button
+            v-if="hasPersonnelConfig"
+            size="small"
+            type="primary"
+            plain
+            @click="applyPersonnelToAllNodes"
+          >
+            ⚡ 一键应用到全部节点
+          </el-button>
+        </div>
+
         <!-- 负责人 -->
         <el-form-item
           label="负责人"
@@ -88,34 +102,34 @@
           />
         </el-form-item>
 
-        <!-- 校验人（多人） -->
+        <!-- 校验人（单人） -->
         <el-form-item
           label="校验人"
           prop="checkers"
-          :rules="[{ required: true, message: '请选择校验人', trigger: 'change', type: 'array', min: 1 }]"
+          :rules="[{ required: true, message: '请选择校验人', trigger: 'change' }]"
         >
           <UserSelector
             v-model="form.checkers"
-            :multiple="true"
+            :multiple="false"
             :initial-options="checkerInitialOptions"
-            placeholder="搜索并选择校验人（可多选）"
+            placeholder="搜索并选择校验人"
             org-members
             @update:model-value="handleCheckersChange"
             @options-loaded="handleOptionsLoaded"
           />
         </el-form-item>
 
-        <!-- 审批人（多人） -->
+        <!-- 审批人（单人） -->
         <el-form-item
           label="审批人"
           prop="approvers"
-          :rules="[{ required: true, message: '请选择审批人', trigger: 'change', type: 'array', min: 1 }]"
+          :rules="[{ required: true, message: '请选择审批人', trigger: 'change' }]"
         >
           <UserSelector
             v-model="form.approvers"
-            :multiple="true"
+            :multiple="false"
             :initial-options="approverInitialOptions"
-            placeholder="搜索并选择审批人（可多选）"
+            placeholder="搜索并选择审批人"
             org-members
             @update:model-value="handleApproversChange"
             @options-loaded="handleOptionsLoaded"
@@ -155,24 +169,27 @@
           />
         </el-form-item>
 
-        <!-- 发起模式：日期范围选择器（预估开始 → 截止，预填跳过节假日的日期） -->
+        <!-- 发起模式：截止日期选择器（修改后自动级联下游节点） -->
         <el-form-item
           v-else
-          label="计划日期"
-          prop="deadlineRange"
-          :rules="[{ required: true, message: '请选择计划日期范围', trigger: 'change' }]"
+          label="截止日期"
+          prop="deadline"
+          :rules="[{ required: true, message: '请选择截止日期', trigger: 'change' }]"
         >
+          <div class="plan-begin-row">
+            <span class="plan-begin-label">计划开始</span>
+            <span class="plan-begin-value">{{ form.plan_begin || '—' }}</span>
+          </div>
           <el-date-picker
-            v-model="form.deadlineRange"
-            type="daterange"
-            start-placeholder="预估开始"
-            end-placeholder="截止日期"
+            v-model="form.deadline"
+            type="date"
+            placeholder="选择截止日期"
             value-format="YYYY-MM-DD"
-            style="width: 100%"
-            @change="syncToNode"
+            style="width: 100%; margin-top: 8px"
+            @change="handleDeadlineChange"
           />
           <div class="field-hint">
-            开始：发起日期 + 前序节点累计 · 截止：开始 + {{ form.time_limit_days ?? '?' }} 工作日（已跳过法定节假日和周末）
+            预估 {{ form.time_limit_days ?? '?' }} 个工作日（周末已跳过，节假日以发起时后端计算为准）
           </div>
         </el-form-item>
 
@@ -214,7 +231,7 @@
               >
                 <!-- 折叠态：摘要行 -->
                 <div class="folder-card__summary" @click="toggleFolder(idx)">
-                  <span class="folder-card__icon">📁</span>
+                  <span class="folder-card__icon"><el-icon :size="14"><Folder /></el-icon></span>
                   <span class="folder-card__name">{{ folder.name || '未命名文件夹' }}</span>
                   <span class="folder-card__rule">{{ folderRuleSummary(folder) }}</span>
                   <el-icon class="folder-card__arrow" :class="{ rotated: expandedFolderIdx === idx }"><ArrowRight /></el-icon>
@@ -312,7 +329,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
-import { InfoFilled, Setting, ArrowRight } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { InfoFilled, Setting, ArrowRight, Folder } from '@element-plus/icons-vue'
 import UserSelector from '@/components/UserSelector.vue'
 import type { UserSearchItem } from '@/api/admin'
 import type { FileFolderConfig } from '@/api/designer'
@@ -325,8 +343,6 @@ const props = defineProps<{
   nodeData?: any
   /** 是否为发起项目模式（显示日历而非数字输入框） */
   launchMode?: boolean
-  /** 发起模式下预计算好的日期映射 { 节点模板ID → { begin, deadline } } */
-  deadlineMap?: Record<number, { begin: string; deadline: string }>
 }>()
 
 /** emit 事件 */
@@ -343,12 +359,13 @@ const form = reactive({
   description: '',
   assignee_id: undefined as number | undefined,
   assignee_name: '' as string,
-  checkers: [] as number[],
-  checkers_names: [] as string[],
-  approvers: [] as number[],
-  approvers_names: [] as string[],
+  checkers: undefined as number | undefined,
+  checkers_name: '' as string,
+  approvers: undefined as number | undefined,
+  approvers_name: '' as string,
   time_limit_days: undefined as number | undefined,
-  deadlineRange: undefined as [string, string] | undefined,  // 发起模式：[begin, deadline]
+  plan_begin: undefined as string | undefined,  // 发起模式：计划开始（前序节点累积计算）
+  deadline: undefined as string | undefined,    // 发起模式：截止日期
   require_file: false,
   require_assignee_signature: true,
   require_checker_signature: true,
@@ -380,13 +397,13 @@ const isSystemNode = computed(() => {
 const isConfigured = computed(() => {
   // 发起模式：检查日期范围
   const hasDeadline = props.launchMode
-    ? (form.deadlineRange && form.deadlineRange.length === 2)
+    ? !!form.deadline
     : (form.time_limit_days && form.time_limit_days >= 1)
   return !!(
     form.name &&
     form.assignee_id &&
-    form.checkers.length > 0 &&
-    form.approvers.length > 0 &&
+    form.checkers != null &&
+    form.approvers != null &&
     hasDeadline
   )
 })
@@ -400,19 +417,17 @@ const assigneeInitialOptions = computed<UserSearchItem[]>(() => {
 })
 
 const checkerInitialOptions = computed<UserSearchItem[]>(() => {
-  const ids = form.checkers || []
-  const names = form.checkers_names || []
-  return ids.map((id, i) => ({
-    id, username: '', real_name: names[i] || `用户${id}`, organization_id: null, organization_name: null,
-  }))
+  if (form.checkers != null && form.checkers_name) {
+    return [{ id: form.checkers, username: '', real_name: form.checkers_name, organization_id: null, organization_name: null }]
+  }
+  return []
 })
 
 const approverInitialOptions = computed<UserSearchItem[]>(() => {
-  const ids = form.approvers || []
-  const names = form.approvers_names || []
-  return ids.map((id, i) => ({
-    id, username: '', real_name: names[i] || `用户${id}`, organization_id: null, organization_name: null,
-  }))
+  if (form.approvers != null && form.approvers_name) {
+    return [{ id: form.approvers, username: '', real_name: form.approvers_name, organization_id: null, organization_name: null }]
+  }
+  return []
 })
 
 /** 批准人初始选项（单人） */
@@ -443,10 +458,15 @@ function loadFromNode() {
   form.description = p.description || ''
   form.assignee_id = p.assignee_id ?? undefined
   form.assignee_name = p.assignee_name || ''
-  form.checkers = Array.isArray(p.checkers) ? [...p.checkers] : []
-  form.checkers_names = Array.isArray(p.checkers_names) ? [...p.checkers_names] : []
-  form.approvers = Array.isArray(p.approvers) ? [...p.approvers] : []
-  form.approvers_names = Array.isArray(p.approvers_names) ? [...p.approvers_names] : []
+  // 校验人/审批人：存储为数组（兼容旧数据），UI 只取第一个
+  const ch = Array.isArray(p.checkers) ? p.checkers : []
+  const chNames = Array.isArray(p.checkers_names) ? p.checkers_names : []
+  form.checkers = ch.length > 0 ? ch[0] : undefined
+  form.checkers_name = chNames.length > 0 ? chNames[0] : ''
+  const ap = Array.isArray(p.approvers) ? p.approvers : []
+  const apNames = Array.isArray(p.approvers_names) ? p.approvers_names : []
+  form.approvers = ap.length > 0 ? ap[0] : undefined
+  form.approvers_name = apNames.length > 0 ? apNames[0] : ''
   form.time_limit_days = p.time_limit_days ?? undefined
   form.require_file = p.require_file ?? false
   form.require_assignee_signature = p.require_assignee_signature ?? true
@@ -456,20 +476,12 @@ function loadFromNode() {
   form.endorser_name = p.endorser_name || ''
   form.require_endorser_signature = p.require_endorser_signature ?? true
 
-  // 发起模式：从预计算映射取 begin + deadline 填入日期范围
-  const dbId = p.db_id
-  if (props.launchMode && props.deadlineMap && dbId != null) {
-    // 优先用节点上已保存的范围（用户手动调整过的），否则用预计算值
-    const mapEntry = props.deadlineMap[dbId]
-    if (p.deadline_range && Array.isArray(p.deadline_range) && p.deadline_range.length === 2) {
-      form.deadlineRange = p.deadline_range as [string, string]
-    } else if (mapEntry) {
-      form.deadlineRange = [mapEntry.begin, mapEntry.deadline] as [string, string]
-    } else {
-      form.deadlineRange = undefined
-    }
-  } else {
-    form.deadlineRange = undefined
+  // 发起模式：读取节点上已保存的截止日期（初始值由 FlowDesigner 预填）
+  form.plan_begin = p.plan_begin ?? undefined
+  form.deadline = p.deadline ?? undefined
+  if (!props.launchMode) {
+    form.plan_begin = undefined
+    form.deadline = undefined
   }
 
   // 文件夹配置
@@ -501,10 +513,10 @@ function syncToNode() {
     description: form.description,
     assignee_id: form.assignee_id ?? null,
     assignee_name: form.assignee_name || null,
-    checkers: form.checkers.length > 0 ? [...form.checkers] : null,
-    checkers_names: form.checkers_names.length > 0 ? [...form.checkers_names] : null,
-    approvers: form.approvers.length > 0 ? [...form.approvers] : null,
-    approvers_names: form.approvers_names.length > 0 ? [...form.approvers_names] : null,
+    checkers: form.checkers != null ? [form.checkers] : null,
+    checkers_names: form.checkers_name ? [form.checkers_name] : null,
+    approvers: form.approvers != null ? [form.approvers] : null,
+    approvers_names: form.approvers_name ? [form.approvers_name] : null,
     time_limit_days: form.time_limit_days ?? null,
     require_file: form.require_file,
     file_folders: useFileFolders.value && folders.value.length > 0
@@ -516,8 +528,8 @@ function syncToNode() {
     endorser_id: form.endorser_id ?? null,
     endorser_name: form.endorser_name || null,
     require_endorser_signature: form.require_endorser_signature,
-    // 发起模式下保存 deadline_range，后续 handleLaunch 会收集为 node_override
-    ...(props.launchMode && form.deadlineRange?.length === 2 ? { deadline_range: form.deadlineRange } : {}),
+    // 发起模式下保存截止日期，后续 handleLaunch 会收集为 node_override
+    ...(props.launchMode ? { plan_begin: form.plan_begin, deadline: form.deadline } : {}),
   })
 }
 
@@ -535,14 +547,14 @@ function handleAssigneeChange(val: number | undefined) {
 }
 
 /** 校验人变更 —— 同步名称 + 写入节点 */
-function handleCheckersChange(val: number[]) {
-  form.checkers_names = (val || []).map(id => userNameCache[id] || '').filter(Boolean)
+function handleCheckersChange(val: number | undefined) {
+  form.checkers_name = val != null ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
 /** 审批人变更 —— 同步名称 + 写入节点 */
-function handleApproversChange(val: number[]) {
-  form.approvers_names = (val || []).map(id => userNameCache[id] || '').filter(Boolean)
+function handleApproversChange(val: number | undefined) {
+  form.approvers_name = val != null ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
@@ -626,6 +638,131 @@ const folderNameConflict = computed<string | null>(() => {
   }
   return null
 })
+
+// ========== 工作日计算（跳过周末，节假日以后端为准） ==========
+
+/** 判断是否周末 */
+function isWeekend(date: Date): boolean {
+  const d = date.getDay()
+  return d === 0 || d === 6
+}
+
+/** 两个日期之间的工作日数（含首尾） */
+function countBusinessDays(startStr: string, endStr: string): number {
+  let count = 0
+  const cur = new Date(startStr)
+  const end = new Date(endStr)
+  while (cur <= end) {
+    if (!isWeekend(cur)) count++
+    cur.setDate(cur.getDate() + 1)
+  }
+  return count
+}
+
+/** 从 start 起加 N 个工作日，返回结果日期 YYYY-MM-DD */
+function addBusinessDays(startStr: string, days: number): string {
+  const cur = new Date(startStr)
+  let added = 0
+  while (added < days) {
+    cur.setDate(cur.getDate() + 1)
+    if (!isWeekend(cur)) added++
+  }
+  return cur.toISOString().slice(0, 10)
+}
+
+// ========== 发起模式：截止日期变更 → 级联下游 ==========
+
+function handleDeadlineChange(newDeadline: string | undefined) {
+  if (!newDeadline || !props.lf || !props.launchMode) {
+    syncToNode()
+    return
+  }
+
+  const begin = form.plan_begin
+  if (!begin) {
+    syncToNode()
+    return
+  }
+
+  // 反向计算当前节点的工作日数
+  const newDays = countBusinessDays(begin, newDeadline)
+  form.time_limit_days = Math.max(1, newDays)
+
+  // 同步当前节点到 LogicFlow（含新 deadline 和 time_limit_days）
+  syncToNode()
+
+  // ── 级联更新下游节点 ──
+  const allNodes = props.lf.getGraphData().nodes || []
+  const workNodes = allNodes
+    .filter((n: any) => {
+      const p = n.properties || {}
+      return !p.is_start && !p.is_end
+    })
+    .sort((a: any, b: any) => (a.properties?.sort_order ?? 0) - (b.properties?.sort_order ?? 0))
+
+  const currentIdx = workNodes.findIndex((n: any) => String(n.id) === String(props.nodeData?.id))
+  if (currentIdx < 0 || currentIdx >= workNodes.length - 1) return
+
+  // 逐级推进：每个下游节点开始 = 前一个截止日 + 1 工作日
+  let prevDeadline = newDeadline
+  for (let i = currentIdx + 1; i < workNodes.length; i++) {
+    const node = workNodes[i]
+    const existingProps = node.properties || {}
+    const limitDays = existingProps.time_limit_days || 1
+
+    // 下游开始日 = 前一个截止日 + 1（跳过周末到下一个工作日）
+    const nextStart = addBusinessDays(prevDeadline, 1)
+    const nextDeadline = addBusinessDays(nextStart, limitDays)
+
+    props.lf.setProperties(node.id, {
+      ...existingProps,
+      plan_begin: nextStart,
+      deadline: nextDeadline,
+    })
+
+    prevDeadline = nextDeadline
+  }
+
+  // 如果当前选中的是下游节点，也需要更新面板表单
+  ElMessage.success('截止日期已更新，下游节点已级联')
+}
+
+/** 是否配置了至少一个人员字段（显示"一键应用"按钮的条件） */
+const hasPersonnelConfig = computed(() => {
+  return !!(form.assignee_id || form.checkers != null || form.approvers != null || form.endorser_id)
+})
+
+/** 一键应用当前节点的人员配置到所有工作节点（排除开始/结束） */
+function applyPersonnelToAllNodes() {
+  if (!props.lf) return
+
+  const allNodes = props.lf.getGraphData().nodes || []
+  // 找到所有工作节点（排除开始/结束）
+  const workNodes = allNodes.filter((n: any) => {
+    const p = n.properties || {}
+    return !p.is_start && !p.is_end
+  })
+
+  if (workNodes.length === 0) return
+
+  // 更新所有工作节点的人员属性（合并到现有属性，不覆盖其他配置）
+  for (const node of workNodes) {
+    const existingProps = node.properties || {}
+    props.lf.setProperties(node.id, {
+      ...existingProps,  // 保留节点原有配置（名称、时限、签批等）
+      assignee_id: form.assignee_id ?? null,
+      assignee_name: form.assignee_name || null,
+      checkers: form.checkers != null ? [form.checkers] : null,
+      checkers_names: form.checkers_name ? [form.checkers_name] : null,
+      approvers: form.approvers != null ? [form.approvers] : null,
+      approvers_names: form.approvers_name ? [form.approvers_name] : null,
+      endorser_id: form.endorser_id ?? null,
+      endorser_name: form.endorser_name || null,
+    })
+  }
+
+  ElMessage.success(`已应用到 ${workNodes.length} 个工作节点`)
+}
 
 /** 节点变化时重新加载表单 */
 watch(() => props.nodeData, () => {
@@ -791,5 +928,36 @@ watch(() => props.nodeData, () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* 发起模式：计划开始只读行 */
+.plan-begin-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  font-size: 13px;
+
+  .plan-begin-label { color: var(--el-text-color-secondary); flex-shrink: 0; }
+  .plan-begin-value { font-weight: 600; color: var(--el-text-color-primary); }
+}
+
+/* 人员配置区头部 */
+.personnel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 6px;
+
+  &__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+  }
 }
 </style>

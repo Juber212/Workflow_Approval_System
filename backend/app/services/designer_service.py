@@ -27,15 +27,19 @@ async def save_design_data(
     nodes_data: list[dict],
     edges_data: list[dict],
 ) -> dict:
-    """批量保存设计器数据 —— 新增/更新/删除节点和连线，同一事务"""
+    """批量保存设计器数据 —— 先校验后保存，新增/更新/删除节点和连线，同一事务"""
     logger.debug(f"[designer] 开始 template_id={template_id} nodes={len(nodes_data)} edges={len(edges_data)}")
-    # 校验模板存在且为 draft（加行锁防并发覆盖）
+
+    # === 第一步：发布前校验（先于写操作，确保模板结构合法） ===
+    # 注意：校验针对的是"保存后"的数据，因此先用 savepoint 做干跑校验
+    from app.services.validation_service import validate_template_for_publish
+
+    # 校验模板存在（加行锁防并发覆盖）
     tpl = (await db.execute(
         select(FlowTemplate).where(FlowTemplate.id == template_id).with_for_update()
     )).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
-    # 所有模板均可编辑设计（无状态限制）
 
     # 获取现有节点和连线
     existing_nodes = (await db.execute(
@@ -150,6 +154,15 @@ async def save_design_data(
     await _topological_sort(db, template_id)
     await db.flush()  # 确保 sort_order 变更持久化
 
+    # === 发布前校验（保存后立即检查模板结构合法性） ===
+    # 若有校验错误则抛出异常 → get_db 自动回滚 → 不保存非法设计
+    validate_errors = await validate_template_for_publish(db, template_id)
+    if validate_errors:
+        raise AppException(
+            ErrorCode.VALIDATION_ERROR,
+            "模板校验失败，请修复以下问题后重新保存：\n- " + "\n- ".join(validate_errors),
+        )
+
     return {
         "template_id": template_id,
         "node_count": len(submitted_node_ids),
@@ -175,7 +188,9 @@ async def _create_node(db: AsyncSession, template_id: int, data: dict) -> Templa
 
 async def _update_node(db: AsyncSession, node_id: int, data: dict) -> None:
     """更新已有节点"""
-    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one()
+    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, f"节点 ID={node_id} 不存在")
     for field in _NODE_UPDATABLE_FIELDS:
         if field in data:
             setattr(node, field, data[field])
@@ -240,7 +255,9 @@ def _resolve_edge_endpoint(
 
 async def _update_edge(db: AsyncSession, edge_id: int, source_id: int, target_id: int, points: str | None = None) -> None:
     """更新已有连线 —— 含折线路径点串"""
-    edge = (await db.execute(select(TemplateEdge).where(TemplateEdge.id == edge_id))).scalar_one()
+    edge = (await db.execute(select(TemplateEdge).where(TemplateEdge.id == edge_id))).scalar_one_or_none()
+    if edge is None:
+        raise AppException(ErrorCode.NOT_FOUND, f"连线 ID={edge_id} 不存在")
     edge.source_node_id = source_id
     edge.target_node_id = target_id
     edge.points = points

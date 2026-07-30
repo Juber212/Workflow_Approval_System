@@ -273,10 +273,25 @@ async def update_template(db: AsyncSession, template_id: int, data: TemplateUpda
 
 
 async def delete_template(db: AsyncSession, template_id: int) -> None:
-    """删除模板 —— 关联节点和连线级联删除"""
+    """删除模板 —— 关联节点和连线级联删除，若有运行中实例则拒绝"""
     tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == template_id))).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+
+    # 检查是否有运行中/未终止的实例引用此模板
+    from app.models import FlowInstance
+    active_count = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(
+            FlowInstance.template_id == template_id,
+            FlowInstance.status.in_(["created", "running"]),
+        )
+    )).scalar()
+    if active_count and active_count > 0:
+        raise AppException(
+            ErrorCode.VALIDATION_ERROR,
+            f"无法删除模板：仍有 {active_count} 个运行中的流程实例使用此模板",
+        )
+
     await db.delete(tpl)
     await db.flush()
 

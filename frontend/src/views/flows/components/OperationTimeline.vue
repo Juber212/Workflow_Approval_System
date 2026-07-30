@@ -59,6 +59,8 @@ function logTypeLabel(type: string): string {
     approve: '审批通过',
     reject: '审批退回',
     final_reject: '终审驳回',
+    endorse: '批准通过',
+    endorse_reject: '批准驳回',
     instance_completed: '流程完成',
     instance_terminated: `终止${t}`,
     personnel_changed: '人员变更',
@@ -70,8 +72,8 @@ function logTypeLabel(type: string): string {
 
 /** 操作类型对应颜色 */
 function logColor(type: string): string {
-  if (type.includes('rejected') || type.includes('terminated')) return 'var(--el-color-danger)'
-  if (type.includes('completed') || type.includes('passed') || type.includes('approved')) return 'var(--el-color-success)'
+  if (type.includes('rejected') || type.includes('terminated') || type === 'endorse_reject') return 'var(--el-color-danger)'
+  if (type.includes('completed') || type.includes('passed') || type.includes('approved') || type === 'endorse') return 'var(--el-color-success)'
   if (type.includes('created') || type.includes('started')) return 'var(--el-color-primary)'
   return 'var(--el-color-info)'
 }

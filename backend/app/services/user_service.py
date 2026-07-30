@@ -98,15 +98,24 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
     if existing:
         raise AppException(ErrorCode.CONFLICT, f"用户名 '{data.username}' 已存在")
 
-    # 校验组织存在
-    org = (await db.execute(select(Organization).where(Organization.id == data.organization_id))).scalar_one_or_none()
-    if org is None:
-        raise AppException(ErrorCode.NOT_FOUND, "所属组织不存在")
-
     # 校验角色存在
     roles = (await db.execute(select(Role).where(Role.id.in_(data.role_ids)))).scalars().all()
     if len(roles) != len(data.role_ids):
         raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
+
+    # 判断是否包含管理员角色
+    is_admin = any(r.code == "system_admin" for r in roles)
+
+    # 非管理员必须指定组织
+    if not is_admin and data.organization_id is None:
+        raise AppException(ErrorCode.VALIDATION_ERROR, "非管理员用户必须选择所属组织")
+
+    # 管理员可选组织；指定了才校验存在性
+    org: Organization | None = None
+    if data.organization_id is not None:
+        org = (await db.execute(select(Organization).where(Organization.id == data.organization_id))).scalar_one_or_none()
+        if org is None:
+            raise AppException(ErrorCode.NOT_FOUND, "所属组织不存在")
 
     # 创建用户（使用系统默认初始密码，首次登录需改密）
     user = User(
@@ -134,7 +143,7 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
         email=user.email,
         phone=user.phone,
         organization_id=user.organization_id,
-        organization_name=org.name,
+        organization_name=org.name if org else None,
         roles=[r.code for r in roles],
         is_active=user.is_active,
         created_at=user.created_at,
@@ -148,15 +157,24 @@ async def update_user(db: AsyncSession, user_id: int, data: UserUpdate) -> UserD
     if user is None:
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
-    # 校验组织存在
-    org = (await db.execute(select(Organization).where(Organization.id == data.organization_id))).scalar_one_or_none()
-    if org is None:
-        raise AppException(ErrorCode.NOT_FOUND, "所属组织不存在")
-
     # 校验角色存在
     roles = (await db.execute(select(Role).where(Role.id.in_(data.role_ids)))).scalars().all()
     if len(roles) != len(data.role_ids):
         raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
+
+    # 判断是否包含管理员角色
+    is_admin = any(r.code == "system_admin" for r in roles)
+
+    # 非管理员必须指定组织
+    if not is_admin and data.organization_id is None:
+        raise AppException(ErrorCode.VALIDATION_ERROR, "非管理员用户必须选择所属组织")
+
+    # 管理员可选组织；指定了才校验存在性
+    org: Organization | None = None
+    if data.organization_id is not None:
+        org = (await db.execute(select(Organization).where(Organization.id == data.organization_id))).scalar_one_or_none()
+        if org is None:
+            raise AppException(ErrorCode.NOT_FOUND, "所属组织不存在")
 
     # 更新基本信息
     user.real_name = data.real_name
@@ -179,7 +197,7 @@ async def update_user(db: AsyncSession, user_id: int, data: UserUpdate) -> UserD
         email=user.email,
         phone=user.phone,
         organization_id=user.organization_id,
-        organization_name=org.name,
+        organization_name=org.name if org else None,
         roles=[r.code for r in roles],
         is_active=user.is_active,
         created_at=user.created_at,

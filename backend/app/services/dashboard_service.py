@@ -15,6 +15,7 @@ from app.models import (
     Approval,
 )
 from app.models.enums import TaskStatus, CheckStatus, ApprovalStatus
+from app.services.instance._helpers import compute_deadline_info
 from app.schemas.dashboard import (
     DashboardData,
     DashboardStats,
@@ -240,12 +241,11 @@ async def _get_bottleneck_tracking(
 
     inst_ids = [i.id for i in instances]
 
-    # 批量查节点
+    # 批量查节点（不再排除 is_end：终审时结束节点为活跃状态，需显示）
     nodes_result = await db.execute(
         select(InstanceNode).where(
             InstanceNode.instance_id.in_(inst_ids),
             InstanceNode.is_start == False,
-            InstanceNode.is_end == False,
         ).order_by(InstanceNode.instance_id, InstanceNode.sort_order)
     )
     all_nodes = nodes_result.scalars().all()
@@ -631,6 +631,8 @@ async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:
     for record_type, rows in [("task", task_rows), ("check", check_rows), ("approval", approval_rows)]:
         for row in rows:
             tpl_type = row.template_type or "project"
+            d = row.deadline
+            is_overdue, days_remaining = compute_deadline_info(d)
             all_items.append({
                 "type": record_type,
                 "type_label": _TYPE_LABEL[record_type],
@@ -639,7 +641,9 @@ async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:
                 "instance_name": row.instance_name,
                 "node_name": row.node_name or "",
                 "priority": row.priority or "normal",
-                "deadline": row.deadline.isoformat() if row.deadline else None,
+                "deadline": d.isoformat() if d else None,
+                "is_overdue": is_overdue,
+                "days_remaining": days_remaining,
                 "_tpl_type": tpl_type,  # 内部用于分组，不暴露给前端
             })
 

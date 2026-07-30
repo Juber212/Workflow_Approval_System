@@ -27,11 +27,21 @@
         </div>
       </div>
 
-      <!-- 节点信息 -->
+      <!-- 节点信息 —— 合并 Task/Approval 页字段，节点说明全宽 -->
       <div class="card">
         <div class="card__header">节点信息</div>
         <div class="card__body">
+          <!-- 节点说明：独占一行（文字可能较长） -->
+          <div v-if="detail.node_description" class="node-desc">{{ detail.node_description }}</div>
           <div class="info-grid">
+            <div class="info-grid__item">
+              <div class="k">完成时限</div>
+              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }}</div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">截止时间</div>
+              <div class="v">{{ formatTime(detail.deadline) || '—' }}</div>
+            </div>
             <div class="info-grid__item">
               <div class="k">发起人</div>
               <div class="v">{{ detail.initiator_name }}</div>
@@ -66,18 +76,48 @@
         </div>
       </div>
 
-      <!-- 文件列表 -->
-      <div class="card">
-        <div class="card__header">节点文件（{{ detail.files.length }}）</div>
+      <!-- 流程全部文件（按节点分组，批准人可完整掌握上下文） -->
+      <!-- 本节点文件 -->
+      <div class="card" v-if="currentFiles.length > 0">
+        <div class="card__header">本节点文件（{{ currentFiles.length }}）<el-tag size="small" type="primary" effect="plain" style="margin-left:6px">当前节点</el-tag></div>
         <div class="card__body">
-          <div v-if="detail.files.length === 0" class="empty-hint">暂无文件</div>
-          <div v-for="f in detail.files" :key="f.id" class="file-row">
+          <div v-for="f in currentFiles" :key="f.id" class="file-row">
             <span>{{ f.original_name }}</span>
             <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
             <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
             <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
           </div>
         </div>
+      </div>
+
+      <!-- 历史节点文件（默认折叠） -->
+      <div class="card" v-if="historyFileGroups.length > 0">
+        <div class="card__header" style="cursor:pointer" @click="showHistoryFiles = !showHistoryFiles">
+          <span style="display:flex;align-items:center;gap:6px">
+            历史节点文件（{{ historyFileTotal }}）
+            <el-icon :size="14" style="transition:transform 0.2s" :style="{ transform: showHistoryFiles ? 'rotate(90deg)' : 'rotate(0deg)' }"><ArrowRight /></el-icon>
+          </span>
+        </div>
+        <div class="card__body" v-show="showHistoryFiles">
+          <div v-for="group in historyFileGroups" :key="group.nodeKey" class="file-group">
+            <div class="file-group__header">
+              <span class="file-group__node-name">{{ group.nodeName }}</span>
+              <span class="file-group__count">{{ group.files.length }} 个文件</span>
+            </div>
+            <div v-for="f in group.files" :key="f.id" class="file-row">
+              <span>{{ f.original_name }}</span>
+              <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
+              <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+              <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 无文件兜底 -->
+      <div class="card" v-if="detail.files.length === 0">
+        <div class="card__header">流程文件</div>
+        <div class="card__body"><div class="empty-hint">暂无文件</div></div>
       </div>
 
       <!-- 校验进度（已完成，只读） -->
@@ -99,7 +139,6 @@
           <div v-for="a in detail.approvals" :key="a.id" class="progress-row">
             <span>{{ a.approver_name }}</span>
             <span class="status-tag" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
-            <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
             <span v-if="a.opinion" class="opinion">「{{ a.opinion }}」</span>
           </div>
         </div>
@@ -142,6 +181,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowRight } from '@element-plus/icons-vue'
 import { getToken } from '@/api/request'
 import { getEndorsementDetail, endorseApprove, endorseReject, type EndorsementDetail } from '@/api/endorsement'
 import { previewFile, downloadFile } from '@/api/task'
@@ -164,6 +204,33 @@ const detail = ref<EndorsementDetail | null>(null)
 const opinion = ref('')
 const endorsing = ref(false)
 const rejecting = ref(false)
+const showHistoryFiles = ref(false)  // 历史节点文件默认折叠
+
+/** 本节点文件（后端 node_files 已过滤，直接使用） */
+const currentFiles = computed(() => {
+  if (!detail.value) return []
+  return detail.value.node_files as any[]
+})
+
+/** 历史节点文件（非当前节点，按节点分组） */
+const historyFileGroups = computed(() => {
+  if (!detail.value) return []
+  const map = new Map<string, { nodeId: number | null; nodeName: string; files: typeof detail.value.files }>()
+  for (const f of detail.value.files) {
+    if (f.node_id === detail.value!.node_id) continue  // 跳过本节点
+    const key = f.node_id ? String(f.node_id) : '_unknown'
+    if (!map.has(key)) {
+      map.set(key, { nodeId: f.node_id, nodeName: f.node_name || '未知节点', files: [] })
+    }
+    map.get(key)!.files.push(f)
+  }
+  return [...map.values()]
+})
+
+/** 历史文件总数 */
+const historyFileTotal = computed(() => {
+  return historyFileGroups.value.reduce((sum, g) => sum + g.files.length, 0)
+})
 
 // 签批预览弹框
 const showSignatureDialog = ref(false)
@@ -174,7 +241,7 @@ const sigSlots = ref<SignatureSlot[] | null>(null)
 优先用 mime_type 判断是否为 PDF，兜底用文件名后缀。 */
 const pdfFiles = computed(() => {
   if (!detail.value) return []
-  return (detail.value.files as any[])
+  return (detail.value.node_files as any[])
     .filter(f => f.mime_type === 'application/pdf' || (f.original_name || '').toLowerCase().endsWith('.pdf'))
     .map(f => ({
       file_id: f.id,
@@ -284,10 +351,29 @@ async function handleReject() {
   &:hover { text-decoration: underline; }
 }
 
+.node-desc {
+  font-size: 13px; color: var(--el-text-color-secondary);
+  padding: 8px 12px; background: var(--el-bg-color-page);
+  border-radius: 6px; margin-bottom: 12px; line-height: 1.6;
+}
+
 .info-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;
-  .k { color: var(--el-text-color-secondary); margin-bottom: 2px; font-size: 12px; }
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px 12px; font-size: 14px;
+  .k { color: var(--el-text-color-secondary); margin-bottom: 4px; font-size: 12px; }
   .v { color: var(--el-text-color-primary); font-weight: 500; }
+}
+
+/* 文件分组 */
+.file-group {
+  margin-bottom: 12px;
+  &:last-child { margin-bottom: 0; }
+  &__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0 4px; margin-bottom: 4px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+  &__node-name { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
+  &__count { font-size: 12px; color: var(--el-text-color-secondary); margin-left: auto; }
 }
 
 .file-row { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: var(--el-bg-color-page); border-radius: 4px; margin-bottom: 4px; font-size: 13px; }

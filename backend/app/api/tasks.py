@@ -19,7 +19,7 @@ from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
 )
 from app.api.deps import get_current_active_user, CurrentUser
-from app.models import Task, InstanceNode, File, DocumentTemplate, FlowInstance, TemplateDocumentLink
+from app.models import Task, InstanceNode, File, DocumentTemplate, FlowInstance, TemplateDocumentLink, TemplateCategory, TemplateCategoryDocument
 from app.models.enums import TaskStatus
 from sqlalchemy import select
 from urllib.parse import quote
@@ -111,7 +111,9 @@ async def prepare_sign(
     if task.status not in (TaskStatus.PENDING, TaskStatus.PROCESSING):
         raise AppException(ErrorCode.FORBIDDEN, "当前状态不可操作")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # 查询所有文件
     task_files = (await db.execute(
@@ -136,11 +138,12 @@ async def prepare_sign(
                 conversion_pending = True
             file_ids.append(f.id)
 
-        await db.commit()
-
-        # 入队异步转换（不等待结果）
+        # 先入队异步转换，再 commit —— 防止入队失败导致文件永久卡在 pending
+        # 如果入队成功但 commit 失败，Worker 转换时会发现文件状态已回滚，安全跳过
         if to_convert:
             await enqueue_batch_conversion(to_convert, task_id, current_user.id)
+
+        await db.commit()
     else:
         await db.commit()
 
@@ -182,7 +185,9 @@ async def get_files_conversion_status(
     if task.assignee_id != current_user.id:
         raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可操作")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     task_files = (await db.execute(
         select(File).where(File.task_id == task_id, File.round == node.round)
@@ -254,8 +259,11 @@ async def download_file(
         if inst is None or inst.organization_id != current_user.organization_id:
             raise AppException(ErrorCode.FORBIDDEN, "无权访问此文件")
 
-    # 拼接完整路径
-    full_path = os.path.join(settings.STORAGE_ROOT, f.file_path)
+    # 安全解析文件路径（防路径遍历攻击）
+    from app.utils.file_utils import resolve_file_path, is_safe_path
+    full_path = resolve_file_path(f.file_path)
+    if not is_safe_path(f.file_path):
+        raise AppException(ErrorCode.FORBIDDEN, "非法文件路径")
     if not os.path.exists(full_path):
         raise AppException(ErrorCode.NOT_FOUND, "文件已被删除或不存在于磁盘")
 
@@ -288,9 +296,7 @@ async def list_task_document_templates(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取任务可用的文件模板列表 —— 通过中间表查找流程模板关联的文件模板"""
-    from app.schemas.template import DocTemplateItem, DocTemplateListResponse
-
+    """获取任务可用的文件模板列表（含模板包） —— 关联什么就显示什么"""
     # 校验 Task 存在且当前用户有权访问
     task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
     if task is None:
@@ -298,40 +304,142 @@ async def list_task_document_templates(
     if task.assignee_id != current_user.id:
         raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可查看")
 
-    # 通过实例获取 template_id，再通过中间表查关联的文档模板
+    # 通过实例获取 template_id
     instance = (await db.execute(
         select(FlowInstance).where(FlowInstance.id == task.instance_id)
     )).scalar_one_or_none()
     if instance is None:
         raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
 
-    # 优先使用实例级配置，为空则继承模板关联
-    doc_ids = instance.doc_template_ids
-    if doc_ids:
+    template_id = instance.template_id
+
+    # ── 收集已关联的文档模板 ID（去重） ──
+    linked_doc_ids: set[int] = set()
+    linked_cat_ids: set[int] = set()
+
+    # 实例级配置优先
+    if instance.doc_template_ids:
+        linked_doc_ids.update(instance.doc_template_ids)
+    else:
+        # 查中间表：单模板关联
+        doc_links = (await db.execute(
+            select(TemplateDocumentLink.document_id).where(
+                TemplateDocumentLink.template_id == template_id,
+                TemplateDocumentLink.document_id.isnot(None),
+            )
+        )).scalars().all()
+        linked_doc_ids.update(d for d in doc_links if d is not None)
+
+        # 查中间表：分类（包）关联
+        cat_links = (await db.execute(
+            select(TemplateDocumentLink.category_id).where(
+                TemplateDocumentLink.template_id == template_id,
+                TemplateDocumentLink.category_id.isnot(None),
+            )
+        )).scalars().all()
+        linked_cat_ids.update(c for c in cat_links if c is not None)
+
+    # ── 查询单个模板 ──
+    templates: list[dict] = []
+    if linked_doc_ids:
         docs = (await db.execute(
             select(DocumentTemplate).where(
-                DocumentTemplate.id.in_(doc_ids)
+                DocumentTemplate.id.in_(list(linked_doc_ids))
             ).order_by(DocumentTemplate.created_at.desc())
         )).scalars().all()
-    else:
-        docs = (await db.execute(
-            select(DocumentTemplate).join(
-                TemplateDocumentLink, TemplateDocumentLink.document_id == DocumentTemplate.id
-            ).where(
-                TemplateDocumentLink.template_id == instance.template_id,
-            ).order_by(DocumentTemplate.created_at.desc())
+        templates = [
+            {
+                "id": d.id, "name": d.name, "original_name": d.original_name,
+                "file_size": d.file_size, "file_type": d.file_type,
+                "created_at": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in docs
+        ]
+
+    # ── 查询分类（包），含内部模板 ──
+    categories: list[dict] = []
+    if linked_cat_ids:
+        cats = (await db.execute(
+            select(TemplateCategory).where(
+                TemplateCategory.id.in_(list(linked_cat_ids))
+            ).order_by(TemplateCategory.created_at.desc())
         )).scalars().all()
 
-    items = [
-        {
-            "id": d.id, "name": d.name, "original_name": d.original_name,
-            "file_size": d.file_size, "file_type": d.file_type,
-            "created_at": d.created_at.isoformat() if d.created_at else None,
-        }
-        for d in docs
-    ]
+        for cat in cats:
+            # 查询包内模板
+            cat_docs = (await db.execute(
+                select(DocumentTemplate).join(
+                    TemplateCategoryDocument, TemplateCategoryDocument.document_id == DocumentTemplate.id
+                ).where(
+                    TemplateCategoryDocument.category_id == cat.id,
+                ).order_by(DocumentTemplate.created_at.desc())
+            )).scalars().all()
 
-    return ApiResponse.ok({"items": items})
+            categories.append({
+                "id": cat.id,
+                "name": cat.name,
+                "description": cat.description,
+                "document_count": len(cat_docs),
+                "documents": [
+                    {
+                        "id": d.id, "name": d.name, "original_name": d.original_name,
+                        "file_size": d.file_size, "file_type": d.file_type,
+                        "created_at": d.created_at.isoformat() if d.created_at else None,
+                    }
+                    for d in cat_docs
+                ],
+            })
+
+    return ApiResponse.ok({"templates": templates, "categories": categories})
+
+
+
+
+@router.get("/tasks/{task_id}/document-templates/download-zip")
+async def download_task_template_zip(
+    task_id: int,
+    category_id: int = Query(..., description="模板包 ID"),
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """下载模板包 ZIP —— 填充包内所有模板的占位符后打包"""
+    from fastapi.responses import StreamingResponse
+    from app.services.category_service import batch_fill_and_zip
+
+    # 校验 Task 权限
+    task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one_or_none()
+    if task is None:
+        raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
+    if task.assignee_id != current_user.id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可下载")
+
+    # 查询包内模板 ID 列表
+    cat_doc_rows = (await db.execute(
+        select(TemplateCategoryDocument.document_id).where(
+            TemplateCategoryDocument.category_id == category_id,
+        )
+    )).scalars().all()
+
+    doc_ids = [d for d in cat_doc_rows if d is not None]
+    if not doc_ids:
+        raise AppException(ErrorCode.NOT_FOUND, "该包内无模板")
+
+    # 查询包名（用于 ZIP 文件名）
+    cat = (await db.execute(
+        select(TemplateCategory).where(TemplateCategory.id == category_id)
+    )).scalar_one_or_none()
+    zip_name = f"{cat.name}.zip" if cat else "templates.zip"
+
+    # 填充 + 打包
+    zip_buffer = await batch_fill_and_zip(db, doc_ids, task.instance_id, task.node_id)
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename*=UTF-8\'\'{quote(zip_name)}',
+        },
+    )
 
 
 @router.get("/tasks/{task_id}/document-templates/{doc_id}/download")
@@ -362,26 +470,10 @@ async def download_document_template(
     if doc is None:
         raise AppException(ErrorCode.NOT_FOUND, "文件模板不存在")
 
-    # 3. 查模板是否通过中间表关联到此 Task 对应的流程模板
-    instance = (await db.execute(
-        select(FlowInstance).where(FlowInstance.id == task.instance_id)
-    )).scalar_one_or_none()
-    if instance is None:
-        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
-
-    link = (await db.execute(
-        select(TemplateDocumentLink).where(
-            TemplateDocumentLink.template_id == instance.template_id,
-            TemplateDocumentLink.document_id == doc_id,
-        )
-    )).scalar_one_or_none()
-    if link is None:
-        raise AppException(ErrorCode.FORBIDDEN, "该文件模板未关联到此项目")
-
-    # 4. 解析变量 → 实际值
+    # 3. 解析变量 → 实际值
     replacements = await resolve_template_variables(db, doc_id, task_id)
 
-    # 5. 加载模板文件 → 替换 → 返回内存流
+    # 4. 加载模板文件 → 替换 → 返回内存流
     abs_path = get_doc_template_abs_path(doc)
     if not os.path.exists(abs_path):
         raise AppException(ErrorCode.NOT_FOUND, "模板文件不存在于磁盘")
@@ -393,7 +485,7 @@ async def download_document_template(
         logger.warning(f"[文件模板] 下载失败: doc_id={doc_id}, task_id={task_id}, err={e}")
         raise AppException(ErrorCode.INTERNAL_ERROR, "模板文件处理失败，请检查模板格式")
 
-    # 6. 确定 MIME 类型并返回
+    # 5. 确定 MIME 类型并返回
     mime_map = {
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -19,6 +19,7 @@ from app.engine.flow_engine import propagate_from_node
 from app.services.notification_service import create_notification, clear_related
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.file_service import batch_delete_files_with_physical
+from app.services.instance._helpers import compute_deadline_info
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,8 @@ async def list_endorsements(
         select(Endorsement, FlowInstance.name.label("instance_name"),
                FlowInstance.template_type.label("instance_type"),
                InstanceNode.name.label("node_name"),
-               InstanceNode.is_end.label("is_end_node"))
+               InstanceNode.is_end.label("is_end_node"),
+               InstanceNode.deadline.label("node_deadline"))
         .join(FlowInstance, Endorsement.instance_id == FlowInstance.id)
         .join(InstanceNode, Endorsement.node_id == InstanceNode.id)
         .where(Endorsement.endorser_id == current_user_id)
@@ -51,6 +53,9 @@ async def list_endorsements(
 
     if status:
         base_stmt = base_stmt.where(Endorsement.status == status)
+    else:
+        # 默认只显示待处理的批准记录（与审批列表行为一致）
+        base_stmt = base_stmt.where(Endorsement.status == EndorsementStatus.PENDING)
 
     if keyword:
         base_stmt = base_stmt.where(FlowInstance.name.like(f"%{keyword}%"))
@@ -81,6 +86,9 @@ async def list_endorsements(
             "status": row.Endorsement.status,
             "is_end_node": row.is_end_node if row.is_end_node is not None else False,
             "round": row.Endorsement.round,
+            "deadline": row.node_deadline.isoformat() if row.node_deadline else None,
+            "is_overdue": compute_deadline_info(row.node_deadline)[0],
+            "days_remaining": compute_deadline_info(row.node_deadline)[1],
             "created_at": row.Endorsement.created_at,
         }
         for row in rows
@@ -118,15 +126,22 @@ async def get_endorsement_detail(
             select(Task).where(Task.id == e.task_id)
         )).scalar_one_or_none()
 
-    # 查询当前轮次文件
+    # 查询实例全部文件（批准人需查看完整上下文，含之前所有节点文件）
     files_result = await db.execute(
         select(File).where(
             File.instance_id == e.instance_id,
-            File.node_id == e.node_id,
-            File.round == node.round,
-        )
+        ).order_by(File.node_id, File.id.desc())
     )
     files = files_result.scalars().all()
+
+    # 批量查询文件所属节点名称
+    file_node_ids = list(set(f.node_id for f in files if f.node_id))
+    file_node_names: dict[int, str] = {}
+    if file_node_ids:
+        fn_result = await db.execute(
+            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
+        )
+        file_node_names = {row[0]: row[1] for row in fn_result.all()}
 
     # 查询校验/审批记录
     checks_result = await db.execute(
@@ -189,6 +204,9 @@ async def get_endorsement_detail(
         "node_id": e.node_id,
         "node_name": node.name,
         "node_status": node.status,
+        "node_description": node.description,  # 节点说明
+        "time_limit_days": node.time_limit_days,  # 完成时限（工作日）
+        "deadline": node.deadline.isoformat() if node.deadline else None,  # 截止时间
         "task_id": e.task_id,
         "endorser_id": e.endorser_id,
         "endorser_name": endorser_user.real_name if endorser_user else "",
@@ -207,7 +225,14 @@ async def get_endorsement_detail(
         "nodes": [{"id": n.id, "name": n.name, "status": n.status, "is_start": n.is_start, "is_end": n.is_end}
                    for n in all_nodes],
         "files": [{"id": f.id, "original_name": f.original_name, "mime_type": f.mime_type,
-                    "file_size": f.file_size, "round": f.round} for f in files],
+                    "file_size": f.file_size, "round": f.round,
+                    "node_id": f.node_id,
+                    "node_name": file_node_names.get(f.node_id, "") if f.node_id else ""}
+                   for f in files],
+        # 仅本节点文件（签批预览用，后端过滤，不可信前端）
+        "node_files": [{"id": f.id, "original_name": f.original_name, "mime_type": f.mime_type,
+                         "file_size": f.file_size, "round": f.round}
+                        for f in files if f.node_id == node.id],
         "checks": [{"id": c.id, "checker_id": c.checker_id,
                      "checker_name": name_users_map.get(c.checker_id).real_name if name_users_map.get(c.checker_id) else "",
                      "status": c.status, "opinion": c.opinion,
@@ -358,6 +383,10 @@ async def endorse(
     node.completed_at = now
     await db.flush()
 
+    logger.info(
+        "endorse: 节点 #%d「%s」→ FINISHED，调用 propagate_from_node(instance=%d, node=%d)",
+        node.id, node.name, e.instance_id, node.id,
+    )
     await propagate_from_node(db, e.instance_id, node.id)
     return {"message": "批准通过，流程已推进到下一节点"}
 
@@ -406,17 +435,19 @@ async def endorse_reject(
     # 5. 驳回：当前轮次待处理的审批 + 校验 + 批准全部终止
     from app.models import CheckRecord, Approval
 
-    # 终止当前轮次 pending 的 Approval
+    # 终止当前轮次 pending 的 Approval（加 round 过滤防止误杀其他轮次）
     await db.execute(
         update(Approval)
-        .where(Approval.node_id == e.node_id, Approval.status == ApprovalStatus.PENDING)
+        .where(Approval.node_id == e.node_id, Approval.status == ApprovalStatus.PENDING,
+               Approval.round == e.round)
         .values(status=ApprovalStatus.TERMINATED)
     )
 
-    # 终止当前轮次 pending 的 CheckRecord
+    # 终止当前轮次 pending 的 CheckRecord（加 round 过滤防止误杀其他轮次）
     await db.execute(
         update(CheckRecord)
-        .where(CheckRecord.node_id == e.node_id, CheckRecord.status == "pending")
+        .where(CheckRecord.node_id == e.node_id, CheckRecord.status == "pending",
+               CheckRecord.round == e.round)
         .values(status="terminated")
     )
 

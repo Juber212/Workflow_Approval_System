@@ -56,7 +56,7 @@
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
         <NodePanel :lf="canvasRef?.getLf() ?? null" :presets="presets" @add="handleAddNode" @edit-preset="handleEditPreset" @delete-preset="handleDeletePreset" />
         <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
-        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" :launch-mode="isLaunchMode" :deadline-map="deadlineMap" @save-as-preset="handleSaveAsPreset" />
+        <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" :launch-mode="isLaunchMode" @save-as-preset="handleSaveAsPreset" />
       </div>
       <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
     </div>
@@ -96,6 +96,18 @@
         </el-form-item>
 
         <!-- 文件模板选择 —— 继承模板关联，可临时调整 -->
+        <el-form-item label="模板包" v-if="launchLinkedCategories.length > 0">
+          <div class="launch-doc-list">
+            <div v-for="c in launchLinkedCategories" :key="'lcat-' + c.id" class="launch-doc-item">
+              <span>
+                <el-tag size="small" type="warning" effect="plain">📦 包</el-tag>
+                {{ c.name }}
+                <span class="launch-doc-orig">({{ c.document_count }} 个模板)</span>
+              </span>
+              <span class="launch-doc-hint">发起后在项目详情页可一键下载 ZIP</span>
+            </div>
+          </div>
+        </el-form-item>
         <el-form-item label="文件模板" v-if="launchDocTemplates.length > 0">
           <div class="launch-doc-list">
             <el-checkbox-group v-model="launchDocSelected">
@@ -128,7 +140,7 @@
     <!-- 文件模板管理弹窗 -->
     <el-dialog
       v-model="showDocDialog"
-      title="选择文件模板"
+      title="关联文件模板"
       width="680px"
       @open="handleDocDialogOpen"
       destroy-on-close
@@ -141,34 +153,61 @@
         </div>
       </div>
 
-      <!-- 已关联模板 -->
-      <div v-if="linkedDocTemplates.length > 0" class="doc-section">
-        <h4 class="doc-section__title">已关联的模板（{{ linkedDocTemplates.length }}）</h4>
-        <div class="doc-item" v-for="d in linkedDocTemplates" :key="d.id">
-          <span class="doc-item__info">
-            <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
-            <span class="doc-item__name">{{ d.name }}</span>
-            <span class="doc-item__orig">({{ d.original_name }})</span>
-          </span>
-          <el-button link type="danger" size="small" @click="handleUnlinkDoc(d)">移除</el-button>
-        </div>
+      <!-- 已关联项 —— 分类和模板合并为一个列表 -->
+      <div v-if="linkedTotal > 0" class="doc-section">
+        <h4 class="doc-section__title">已关联（{{ linkedTotal }}）</h4>
+        <template v-for="item in linkedList" :key="item.key">
+          <div class="doc-item" :class="{ 'doc-item--expanded': item.isCategory && expandedCats.has(item.catId) }">
+            <span class="doc-item__info" @click="item.isCategory && toggleCatExpand(item.catId)" :style="item.isCategory ? 'cursor:pointer' : ''">
+              <el-tag size="small" :type="item.tagType" effect="plain">{{ item.tagLabel }}</el-tag>
+              <span class="doc-item__name">{{ item.name }}</span>
+              <span class="doc-item__orig">{{ item.subtitle }}</span>
+              <span v-if="item.isCategory" class="doc-item__expand-icon">{{ expandedCats.has(item.catId) ? '▾' : '▸' }}</span>
+            </span>
+            <el-button link type="danger" size="small" @click="item.isCategory ? handleUnlinkCategory(item.raw as TemplateCategorySummary) : handleUnlinkDoc(item.raw as DocTemplateItem)">移除</el-button>
+          </div>
+          <!-- 展开的包内模板 -->
+          <div v-if="item.isCategory && expandedCats.has(item.catId)" class="doc-sub-list">
+            <div v-for="sub in catDocsMap[item.catId]" :key="'sub-' + sub.id" class="doc-sub-item">
+              <span class="doc-sub-item__info">
+                <el-tag :type="sub.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ sub.file_type }}</el-tag>
+                <span>{{ sub.name }}</span>
+              </span>
+              <span class="doc-sub-item__size">{{ formatFileSize(sub.file_size) }}</span>
+            </div>
+            <div v-if="!catDocsMap[item.catId]?.length" class="doc-sub-empty">暂无模板</div>
+          </div>
+        </template>
       </div>
 
-      <!-- 组织内可用模板 -->
-      <div v-if="availableDocTemplates.length > 0" class="doc-section">
-        <h4 class="doc-section__title">组织内可用模板（{{ availableDocTemplates.length }}）<span class="doc-section__hint">管理员上传</span></h4>
-        <div class="doc-item" v-for="d in availableDocTemplates" :key="d.id">
-          <span class="doc-item__info">
-            <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
-            <span class="doc-item__name">{{ d.name }}</span>
-            <span class="doc-item__orig">({{ d.original_name }})</span>
-            <span class="doc-item__size">{{ formatFileSize(d.file_size) }}</span>
-          </span>
-          <el-button link type="primary" size="small" @click="handleLinkDoc(d)">关联</el-button>
-        </div>
+      <!-- 可关联项 —— 合并列表 -->
+      <div v-if="availableList.length > 0" class="doc-section">
+        <h4 class="doc-section__title">可关联（{{ availableList.length }}）</h4>
+        <template v-for="item in availableList" :key="item.key">
+          <div class="doc-item" :class="{ 'doc-item--expanded': item.isCategory && expandedCats.has(item.catId) }">
+            <span class="doc-item__info" @click="item.isCategory && toggleCatExpand(item.catId)" :style="item.isCategory ? 'cursor:pointer' : ''">
+              <el-tag size="small" :type="item.tagType" effect="plain">{{ item.tagLabel }}</el-tag>
+              <span class="doc-item__name">{{ item.name }}</span>
+              <span class="doc-item__orig">{{ item.subtitle }}</span>
+              <span v-if="item.isCategory" class="doc-item__expand-icon">{{ expandedCats.has(item.catId) ? '▾' : '▸' }}</span>
+            </span>
+            <el-button link type="primary" size="small" @click="item.isCategory ? handleLinkCategory(item.raw as TemplateCategorySummary) : handleLinkDoc(item.raw as DocTemplateItem)">关联</el-button>
+          </div>
+          <!-- 展开的包内模板 -->
+          <div v-if="item.isCategory && expandedCats.has(item.catId)" class="doc-sub-list">
+            <div v-for="sub in catDocsMap[item.catId]" :key="'sub-' + sub.id" class="doc-sub-item">
+              <span class="doc-sub-item__info">
+                <el-tag :type="sub.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ sub.file_type }}</el-tag>
+                <span>{{ sub.name }}</span>
+              </span>
+              <span class="doc-sub-item__size">{{ formatFileSize(sub.file_size) }}</span>
+            </div>
+            <div v-if="!catDocsMap[item.catId]?.length" class="doc-sub-empty">暂无模板</div>
+          </div>
+        </template>
       </div>
 
-      <el-empty v-if="linkedDocTemplates.length === 0 && availableDocTemplates.length === 0" description="暂无可用文件模板，请联系管理员上传" :image-size="60" />
+      <el-empty v-if="linkedTotal === 0 && availableList.length === 0" description="暂无可用文件模板，请联系管理员上传" :image-size="60" />
 
       <template #footer><el-button @click="showDocDialog = false">关闭</el-button></template>
     </el-dialog>
@@ -176,10 +215,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, downloadTemplatesZip, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
+import request from '@/api/request'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance, calculateDeadlines } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
@@ -199,6 +239,7 @@ const showLaunchDialog = ref(false)
 // ─── 发起弹窗文件模板 ────────────────────────────────────
 const launchDocTemplates = ref<DocTemplateItem[]>([])
 const launchDocSelected = ref<number[]>([])
+const launchLinkedCategories = ref<TemplateCategorySummary[]>([])
 
 const launchFormRef = ref<FormInstance>()
 const templateName = ref('')
@@ -207,8 +248,6 @@ const undoable = ref(false)
 const redoable = ref(false)
 const viewMode = ref<'canvas' | 'list'>('canvas')
 const selectedNodeData = ref<any>(null)
-/** 发起模式下预计算的日期映射（模板节点 ID → {begin, deadline}） */
-const deadlineMap = ref<Record<number, { begin: string; deadline: string }>>({})
 
 /** 预设列表 */
 const presets = ref<PresetItem[]>([])
@@ -221,12 +260,28 @@ const pendingPresetData = ref<PresetFormData | null>(null)
 // ─── 文件模板 ───────────────────────────────────────────
 const showDocDialog = ref(false)
 const linkedDocTemplates = ref<DocTemplateItem[]>([])
+const linkedCategories = ref<TemplateCategorySummary[]>([])
 const availableDocTemplates = ref<DocTemplateItem[]>([])
+const availableCategories = ref<TemplateCategorySummary[]>([])
 const docVariables = ref<string[]>([])
+
+/** 包内模板明细缓存：categoryId → 模板列表 */
+const catDocsMap = reactive<Record<number, DocTemplateItem[]>>({})
+/** 弹窗中展开的包 ID 集合 */
+const expandedCats = reactive<Set<number>>(new Set())
 
 /** 弹窗打开时刷新列表 */
 async function handleDocDialogOpen() {
   await loadDocTemplates()
+}
+
+/** 切换包展开/折叠 */
+function toggleCatExpand(catId: number) {
+  if (expandedCats.has(catId)) {
+    expandedCats.delete(catId)
+  } else {
+    expandedCats.add(catId)
+  }
 }
 
 /** 加载文件模板列表 */
@@ -236,10 +291,23 @@ async function loadDocTemplates() {
   try {
     const data = await getDocTemplates(templateId)
     linkedDocTemplates.value = data.linked
+    linkedCategories.value = (data as any).linked_categories || []
     availableDocTemplates.value = data.available
+    availableCategories.value = (data as any).available_categories || []
     docVariables.value = data.available_variables
+
+    // 并行拉所有包的模板明细（用公开接口，不限管理员）
+    const allCats = [...linkedCategories.value, ...availableCategories.value]
+    if (allCats.length === 0) return
+    const details = await Promise.allSettled(
+      allCats.map(c => request.get(`/template-categories/${c.id}`).then(r => r.data))
+    )
+    details.forEach((r, i) => {
+      if (r.status === 'fulfilled' && allCats[i]) {
+        catDocsMap[allCats[i].id] = r.value.documents as any as DocTemplateItem[]
+      }
+    })
   } catch (e) {
-    // 模板不存在时不报错
     console.error('加载文件模板列表失败:', e)
   }
 }
@@ -252,7 +320,7 @@ function currentTemplateId(): number | null {
   return Number.isNaN(n) ? null : n
 }
 
-/** 关联模板到当前流程 */
+/** 关联单个模板到当前流程 */
 async function handleLinkDoc(doc: DocTemplateItem) {
   const templateId = currentTemplateId()
   if (!templateId) return
@@ -265,13 +333,40 @@ async function handleLinkDoc(doc: DocTemplateItem) {
   }
 }
 
+/** 关联分类（模板包）到当前流程 */
+async function handleLinkCategory(cat: TemplateCategorySummary) {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    await linkDocTemplates(templateId, undefined, [cat.id])
+    ElMessage.success(`已关联分类「${cat.name}」`)
+    await loadDocTemplates()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '关联失败')
+  }
+}
+
 /** 取消关联 */
 async function handleUnlinkDoc(doc: DocTemplateItem) {
   const templateId = currentTemplateId()
   if (!templateId) return
   try {
     await ElMessageBox.confirm(`确定移除「${doc.name}」？`, '取消关联', { type: 'warning' })
-    await unlinkDocTemplate(templateId, doc.id)
+    await unlinkDocTemplate(templateId, 'document', doc.id)
+    ElMessage.success('已移除')
+    await loadDocTemplates()
+  } catch {
+    // 用户取消
+  }
+}
+
+/** 取消分类关联 */
+async function handleUnlinkCategory(cat: TemplateCategorySummary) {
+  const templateId = currentTemplateId()
+  if (!templateId) return
+  try {
+    await ElMessageBox.confirm(`确定移除分类「${cat.name}」？`, '取消关联', { type: 'warning' })
+    await unlinkDocTemplate(templateId, 'category', cat.id)
     ElMessage.success('已移除')
     await loadDocTemplates()
   } catch {
@@ -286,11 +381,56 @@ async function loadLaunchDocTemplates() {
   try {
     const data = await getDocTemplates(templateId)
     launchDocTemplates.value = data.linked
-    launchDocSelected.value = data.linked.map(d => d.id)  // 默认全选
+    launchDocSelected.value = data.linked.map(d => d.id)  // 默认全选单个模板
+    launchLinkedCategories.value = (data as any).linked_categories || []
   } catch {
     launchDocTemplates.value = []
+    launchLinkedCategories.value = []
   }
 }
+
+// ─── 合并列表（分类 + 模板，统一渲染）───
+
+interface DocListItem {
+  key: string
+  name: string
+  subtitle: string
+  tagLabel: string
+  tagType: '' | 'success' | 'warning' | 'info' | 'danger'
+  isCategory: boolean
+  catId: number  // 分类 ID，单个模板为 0
+  raw: DocTemplateItem | TemplateCategorySummary
+}
+
+function _makeItems(
+  cats: TemplateCategorySummary[],
+  docs: DocTemplateItem[],
+  keyPrefix: string,
+): DocListItem[] {
+  return [
+    ...cats.map(c => ({
+      key: `${keyPrefix}-cat-${c.id}`, name: c.name,
+      subtitle: `${c.document_count} 个模板`,
+      tagLabel: '📦 包', tagType: 'warning' as const,
+      isCategory: true, catId: c.id, raw: c,
+    })),
+    ...docs.map(d => ({
+      key: `${keyPrefix}-doc-${d.id}`, name: d.name,
+      subtitle: d.original_name,
+      tagLabel: `.${d.file_type}`, tagType: (d.file_type === 'xlsx' ? 'success' : '') as const,
+      isCategory: false, catId: 0, raw: d,
+    })),
+  ]
+}
+
+/** 已关联总数 */
+const linkedTotal = computed(() => linkedDocTemplates.value.length + linkedCategories.value.length)
+
+/** 已关联——合并为一个列表，分类在前 */
+const linkedList = computed<DocListItem[]>(() => _makeItems(linkedCategories.value, linkedDocTemplates.value, 'linked'))
+
+/** 可关联——合并列表 */
+const availableList = computed<DocListItem[]>(() => _makeItems(availableCategories.value, availableDocTemplates.value, 'avail'))
 
 // 监听发起弹窗打开 → 加载文件模板
 watch(showLaunchDialog, (val) => {
@@ -441,13 +581,13 @@ onMounted(async () => {
         edges: detail.edges.map(e => {
           const ptsList = pointsStrToList(e.points)
           return ptsList
-            ? { id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id), points: e.points, pointsList: ptsList }
-            : { id: String(e.id), type: 'polyline', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) }
+            ? { id: String(e.id), type: 'bezier', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id), points: e.points, pointsList: ptsList }
+            : { id: String(e.id), type: 'bezier', sourceNodeId: String(e.source_node_id), targetNodeId: String(e.target_node_id) }
         }),
       })
       updateUndoRedoState(lf)
 
-      // 发起模式：预计算每个工作节点的截止日期（跳过法定节假日和周末）
+      // 发起模式：预计算每个工作节点的截止日期并写入 lf 节点属性
       if (isLaunchMode.value) {
         const workNodes = detail.nodes
           .filter(n => !n.is_start && !n.is_end)
@@ -459,13 +599,14 @@ onMounted(async () => {
               today,
               workNodes.map(n => ({ node_id: n.id, time_limit_days: n.time_limit_days })),
             )
-            const map: Record<number, { begin: string; deadline: string }> = {}
             for (const r of results) {
               if (r.begin && r.deadline) {
-                map[r.node_id] = { begin: r.begin, deadline: r.deadline }
+                lf.setProperties(String(r.node_id), {
+                  plan_begin: r.begin,
+                  deadline: r.deadline,
+                })
               }
             }
-            deadlineMap.value = map
           } catch (err) {
             console.warn('预填截止日期失败（后端 /utils/calculate-deadlines 可能未部署）:', err)
           }
@@ -736,10 +877,9 @@ async function handleLaunch() {
       if (n.properties?.is_start || n.properties?.is_end) continue
       const override: any = { node_id: Number(dbId) }
       let hasOverride = false
-      // 截止日期覆盖（从 deadline_range 取截止日）
-      const dlRange = n.properties?.deadline_range
-      if (dlRange && Array.isArray(dlRange) && dlRange.length === 2) {
-        override.deadline = dlRange[1]  // [begin, deadline]
+      // 截止日期覆盖（从节点 deadline 属性取截止日）
+      if (n.properties?.deadline) {
+        override.deadline = n.properties.deadline
         hasOverride = true
       }
       // 人员变更覆盖（与模板不同时才传）
@@ -813,10 +953,30 @@ async function handleLaunch() {
   padding: 8px 12px; border: 1px solid var(--el-border-color-lighter); border-radius: 6px;
   margin-bottom: 6px; transition: background .15s;
   &:hover { background: var(--el-fill-color-light); }
+  &--expanded { border-color: var(--el-color-primary-light-5); border-radius: 6px 6px 0 0; margin-bottom: 0; }
   &__info { display: flex; align-items: center; gap: 8px; min-width: 0; }
   &__name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   &__orig { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   &__size { font-size: 11px; color: var(--el-text-color-placeholder); white-space: nowrap; }
+  &__expand-icon { font-size: 11px; color: var(--el-text-color-secondary); margin-left: auto; }
+}
+
+/* 包内子模板列表 */
+.doc-sub-list {
+  border: 1px solid var(--el-color-primary-light-5); border-top: none;
+  border-radius: 0 0 6px 6px;
+  margin-top: -1px; margin-bottom: 6px;
+  background: var(--el-color-primary-light-9);
+}
+.doc-sub-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 12px 5px 28px;
+  &:not(:last-child) { border-bottom: 1px solid var(--el-color-primary-light-7); }
+  &__info { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  &__size { font-size: 11px; color: var(--el-text-color-placeholder); }
+}
+.doc-sub-empty {
+  padding: 8px 28px; font-size: 12px; color: var(--el-text-color-placeholder);
 }
 
 .doc-upload-row {

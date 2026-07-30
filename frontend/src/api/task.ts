@@ -2,6 +2,7 @@
 import request, { getToken } from './request'
 import type { PaginatedResponse } from './index'
 import type { SignatureSlot } from './signature'
+import type { DocTemplateItem } from './template'
 
 // ==================== 类型 ====================
 
@@ -28,6 +29,7 @@ export interface TaskDetail {
   initiator_id: number
   initiator_name: string
   priority: string
+  difficulty: string  // 难度等级（1-4）
   node_id: number
   node_name: string
   node_description: string | null
@@ -45,8 +47,10 @@ export interface TaskDetail {
   current_node_index: number
   nodes: FlowNodeBrief[]
   files: TaskFileItem[]
+  node_files: TaskFileItem[]  // 仅本节点文件（签批用，后端过滤）
   checks: TaskCheckItem[]
   approvals: TaskApprovalItem[]
+  endorsements: Array<{ id: number; endorser_id: number; status: string; opinion?: string | null }>  // 批准记录（仅难度4时存在）
   rejected_type: string | null  // 退回类型: "check" | "approval" | null
   rejected_reason: string | null  // 退回原因
   // 节点签批配置（三个独立开关）
@@ -75,12 +79,14 @@ export interface FlowNodeBrief {
 export interface TaskFileItem {
   id: number
   original_name: string
-  mime_type: string | null  // 文件 MIME 类型，用于判断是否为 PDF
+  mime_type: string | null
   file_size: number | null
   uploader_name: string
   upload_type: string
-  folder_name: string | null  // 所属文件夹名称
+  folder_name: string | null
   round: number
+  node_id: number | null   // 所属节点 ID
+  node_name: string        // 所属节点名称
   created_at: string | null
 }
 
@@ -233,6 +239,50 @@ export async function downloadFile(fileId: number): Promise<void> {
   const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
   const raw = starMatch?.[1] || plainMatch?.[1] || `file-${fileId}`
   a.download = decodeURIComponent(raw)
+  a.click()
+  URL.revokeObjectURL(blobUrl)
+}
+
+// ==================== 文件模板（任务处理页用） ====================
+
+/** 模板包（分类）—— 含内部模板列表 */
+export interface TaskTemplateCategory {
+  id: number
+  name: string
+  description: string | null
+  document_count: number
+  documents: DocTemplateItem[]
+}
+
+/** 任务可用文件模板响应 */
+export interface TaskDocTemplatesResponse {
+  templates: DocTemplateItem[]       // 未归包的散模板
+  categories: TaskTemplateCategory[] // 模板包列表
+}
+
+/** 获取任务可用的文件模板列表（含模板包） */
+export async function getTaskDocTemplates(taskId: number): Promise<TaskDocTemplatesResponse> {
+  const res = await request.get(`/tasks/${taskId}/document-templates`)
+  return res.data
+}
+
+/** 下载模板包 ZIP（填充占位符后打包） */
+export async function downloadTaskTemplateZip(taskId: number, categoryId: number): Promise<void> {
+  const token = getToken()
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const resp = await fetch(
+    `${baseUrl}/tasks/${taskId}/document-templates/download-zip?category_id=${categoryId}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+  )
+  if (!resp.ok) throw new Error('下载失败')
+  const blob = await resp.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  const disposition = resp.headers.get('Content-Disposition') || ''
+  const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
+  const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
+  a.download = decodeURIComponent(starMatch?.[1] || plainMatch?.[1] || 'templates.zip')
   a.click()
   URL.revokeObjectURL(blobUrl)
 }

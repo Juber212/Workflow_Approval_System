@@ -123,6 +123,7 @@
         <el-table
           :data="curPending" stripe border
           v-if="curPending.length > 0"
+          :row-class-name="(d: any) => deadlineRowClass(d)"
           row-key="id" max-height="360"
         >
           <!-- 类型标签 -->
@@ -144,9 +145,7 @@
           <!-- 截止时间 -->
           <el-table-column label="截止时间" min-width="120">
             <template #default="{ row }">
-              <span v-if="row.deadline" :class="{ 'deadline-overdue': isOverdue(row.deadline) }">
-                {{ formatDeadline(row.deadline) }}
-              </span>
+              <span v-if="row.deadline">{{ formatTime(row.deadline) }}</span>
               <span v-else class="text-muted">—</span>
             </template>
           </el-table-column>
@@ -174,12 +173,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { getDashboard, type DashboardData, type MyPendingItem } from '@/api/dashboard'
 import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { priLabel } from '@/utils/labels'
+import { formatTime } from '@/utils/format'
 
 const router = useRouter()
 const loading = ref(false)
@@ -221,15 +222,11 @@ const curOrgOverview = computed(() => catTab.value === 'project' ? data.org_over
 const curPending = computed(() => catTab.value === 'project' ? data.my_pending : data.proposal_my_pending)
 
 /** 格式化截止时间 */
-function formatDeadline(d: string | null): string {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('zh-CN')
-}
-
-/** 是否已逾期 */
-function isOverdue(d: string | null): boolean {
-  if (!d) return false
-  return new Date(d) < new Date()
+/** 逾期/临期行标色 */
+function deadlineRowClass({ row }: any): string {
+  if (row?.is_overdue) return 'r--red'
+  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
+  return ''
 }
 
 /** 点击待办行 → 跳转对应处理页 */
@@ -342,7 +339,6 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
 }
 
 /* ─── 逾期文本 ─── */
-.deadline-overdue { color: var(--el-color-danger); font-weight: 500; }
 .text-muted { color: var(--el-text-color-placeholder); }
 
 /* ─── 双栏弹性 ─── */

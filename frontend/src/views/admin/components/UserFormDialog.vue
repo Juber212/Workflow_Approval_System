@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import type { OrgOption, RoleOption } from '@/api/admin'
 
@@ -72,7 +72,7 @@ const props = defineProps<{
   initialData?: {
     username: string
     real_name: string
-    organization_id: number
+    organization_id: number | null
     roles: string[]
     email: string | null
     phone: string | null
@@ -86,7 +86,7 @@ const emit = defineEmits<{
   submit: [data: {
     username: string
     real_name: string
-    organization_id: number
+    organization_id: number | null
     role_ids: number[]
     email: string | null
     phone: string | null
@@ -99,6 +99,12 @@ watch(visible, (v) => { emit('update:modelValue', v) })
 
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
+
+/** 当前选中角色中是否包含系统管理员 */
+const isAdminSelected = computed(() => {
+  const adminRole = props.roleOptions.find(r => r.code === 'system_admin')
+  return adminRole ? form.role_ids.includes(adminRole.id) : false
+})
 
 /** 表单数据 */
 const form = reactive({
@@ -127,6 +133,19 @@ const rules: FormRules = {
   organization_id: [{ required: true, message: '请选择组织', trigger: 'change' }],
   role_ids: [{ required: true, message: '请选择至少一个角色', trigger: 'change' }],
 }
+
+/** 监听角色变动 → 动态切换组织字段必填（管理员可选，其他角色必填） */
+watch(isAdminSelected, (isAdmin) => {
+  if (formRef.value) {
+    formRef.value.clearValidate('organization_id')
+  }
+  // 动态修改 organization_id 的 required 规则
+  const orgRule = rules.organization_id?.[0]
+  if (orgRule) {
+    orgRule.required = !isAdmin
+    orgRule.message = isAdmin ? undefined : '非管理员必须选择组织'
+  }
+})
 
 /** 弹窗打开时初始化表单 */
 watch(visible, (val) => {
@@ -159,7 +178,7 @@ async function handleSubmit() {
     emit('submit', {
       username: form.username,
       real_name: form.real_name,
-      organization_id: form.organization_id!,
+      organization_id: form.organization_id,
       role_ids: form.role_ids,
       email: form.email || null,
       phone: form.phone || null,

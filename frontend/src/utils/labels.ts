@@ -28,13 +28,13 @@ export function instStatusLabel(s: string): string {
 
 /** 任务状态 CSS 类名 */
 export function taskStatusClass(s: string): string {
-  const m: Record<string, string> = { pending: 'status-tag--running', processing: 'status-tag--draft', waiting_check: 'status-tag--running', waiting_approval: 'status-tag--running', completed: 'status-tag--completed', overdue: 'status-tag--terminated' }
+  const m: Record<string, string> = { pending: 'status-tag--running', processing: 'status-tag--draft', waiting_check: 'status-tag--running', waiting_approval: 'status-tag--running', waiting_endorsement: 'status-tag--running', completed: 'status-tag--completed', overdue: 'status-tag--terminated', rejected: 'status-tag--terminated', terminated: 'status-tag--terminated' }
   return m[s] || ''
 }
 
 /** 任务状态中文 */
 export function taskStatusLabel(s: string): string {
-  const m: Record<string, string> = { pending: '待处理', processing: '处理中', waiting_check: '待校验', waiting_approval: '待审批', completed: '已完成' }
+  const m: Record<string, string> = { pending: '待处理', processing: '处理中', waiting_check: '待校验', waiting_approval: '待审批', waiting_endorsement: '待批准', completed: '已完成', overdue: '已逾期', rejected: '已退回', terminated: '已终止' }
   return m[s] || s
 }
 

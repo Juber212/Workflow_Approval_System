@@ -16,15 +16,16 @@ from app.models import (
     User,
     File,
     Approval,
+    Endorsement,
     OperationLog,
     Signature,
 )
-from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, OperatorType
+from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, EndorsementStatus, OperatorType
 from app.schemas.common import PaginatedData
 from app.schemas.check import CheckListItem, CheckDetail
 from app.services.notification_service import create_notification, clear_related
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
-from app.services.instance._helpers import compute_progress
+from app.services.instance._helpers import compute_progress, compute_deadline_info
 from app.services.file_service import batch_delete_files_with_physical
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,8 @@ async def list_checks(
         inst = insts_map.get(c.instance_id)
         assignee = users_map.get(task.assignee_id) if task else None
 
+        node_deadline = node.deadline if node else None
+        is_overdue, days_remaining = compute_deadline_info(node_deadline)
         items.append(CheckListItem(
             id=c.id,
             instance_id=c.instance_id,
@@ -97,6 +100,9 @@ async def list_checks(
             submitter_name=assignee.real_name if assignee else "",
             status=c.status,
             round=c.round or 1,
+            deadline=node_deadline.isoformat() if node_deadline else None,
+            is_overdue=is_overdue,
+            days_remaining=days_remaining,
             created_at=c.created_at,
         ))
 
@@ -136,11 +142,20 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     total_nodes, current_node_index, all_nodes = await compute_progress(db, c.instance_id)
 
-    # 文件
+    # 文件 —— 查实例全部文件（校验人需了解完整上下文）
     files_result = await db.execute(
-        select(File).where(File.task_id == c.task_id, File.round == node.round).order_by(File.id.desc())
+        select(File).where(File.instance_id == c.instance_id).order_by(File.node_id, File.id.desc())
     )
     files = files_result.scalars().all()
+
+    # 批量查询文件所属节点名称
+    file_node_ids = list(set(f.node_id for f in files if f.node_id))
+    file_node_names: dict[int, str] = {}
+    if file_node_ids:
+        fn_result = await db.execute(
+            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
+        )
+        file_node_names = {row[0]: row[1] for row in fn_result.all()}
 
     # 并行校验进度（排除被系统终止的记录）
     all_checks_result = await db.execute(
@@ -166,13 +181,18 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         submitter_id=task.assignee_id,
         submitter_name=submitter.real_name if submitter else "",
         priority=(inst.priority or "normal").lower(),
+        difficulty=(inst.difficulty or "1"),  # 难度等级
         node_id=c.node_id,
         node_name=node.name,
+        node_description=node.description,  # 节点说明
         task_id=c.task_id,
         checker_id=c.checker_id,
         checker_name=checker_user.real_name if checker_user else "",
         status=c.status,
         opinion=c.opinion,
+        time_limit_days=node.time_limit_days,  # 完成时限
+        deadline=node.deadline,  # 截止时间
+        round=node.round,  # 当前轮次
         total_nodes=total_nodes,
         current_node_index=current_node_index,
         nodes=[
@@ -188,14 +208,25 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             {
                 "id": f.id,
                 "original_name": f.original_name,
-                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
+                "mime_type": f.mime_type,
                 "file_size": f.file_size,
                 "uploader_name": "",
                 "upload_type": f.upload_type,
                 "round": f.round,
+                "node_id": f.node_id,
+                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in files
+        ],
+        # 仅本节点文件（签批预览用，后端过滤）
+        node_files=[
+            {
+                "id": f.id, "original_name": f.original_name,
+                "mime_type": f.mime_type, "file_size": f.file_size,
+                "round": f.round,
+            }
+            for f in files if f.node_id == c.node_id
         ],
         assignee_note=task.assignee_note,
         check_progress=[
@@ -277,7 +308,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
         operator_type=OperatorType.USER,
         operator_id=current_user_id,
         operation_type="check_pass",
-        round=c.task_id,
+        round=c.round,
         description=f"校验通过" + ("（已签名）" if sig_ids else ""),
     )
     db.add(log)
@@ -318,14 +349,61 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
         task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
         if task is None:
             raise AppException(ErrorCode.NOT_FOUND, "关联任务不存在")
+
+        approvers = node.approvers or []
+
+        # === 无审批人时的处理（防止节点死锁） ===
+        if not approvers:
+            # 查询实例判断难度等级
+            inst = (await db.execute(
+                select(FlowInstance).where(FlowInstance.id == c.instance_id)
+            )).scalar_one_or_none()
+            if inst is None:
+                raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
+
+            if inst.difficulty == "4" and node.endorser_id:
+                # 难度4 + 有批准人 → 跳过审批，直接进入批准环节
+                endorsement = Endorsement(
+                    instance_id=c.instance_id,
+                    node_id=c.node_id,
+                    task_id=c.task_id,
+                    endorser_id=node.endorser_id,
+                    status=EndorsementStatus.PENDING,
+                    round=node.round,
+                )
+                db.add(endorsement)
+                task.status = TaskStatus.WAITING_ENDORSEMENT
+                node.status = InstanceNodeStatus.WAITING_ENDORSEMENT
+                await db.flush()
+                await create_notification(
+                    db, user_id=node.endorser_id, type="endorsement_assigned",
+                    title="新的待批准任务",
+                    content=f"节点「{node.name}」已通过校验（无审批人，直接进入批准），等待你批准",
+                    link=f"/profile/endorse/{endorsement.id}",
+                )
+                await clear_related(db, user_id=current_user_id, types=["check_assigned"])
+                return {"all_passed": True, "message": "全部校验通过（无审批人），已进入批准阶段"}
+
+            # 无审批人且不需要批准 → 跳过审批，直接完成节点
+            task.status = TaskStatus.COMPLETED
+            task.completed_at = now
+            node.status = InstanceNodeStatus.FINISHED
+            node.completed_at = now
+            await db.flush()
+            await clear_related(db, user_id=current_user_id, types=["check_assigned"])
+
+            # 传播到下游节点
+            from app.engine.flow_engine import propagate_from_node
+            await propagate_from_node(db, c.instance_id, node.id)
+
+            return {"all_passed": True, "node_completed": True,
+                    "message": "全部校验通过（无审批人），节点已完成"}
+
+        # === 有审批人：正常进入审批阶段 ===
         task.status = TaskStatus.WAITING_APPROVAL
         node.status = InstanceNodeStatus.WAITING_APPROVAL
-
-        # 按 approvers 创建 Approval 记录
-        approvers = node.approvers or []
         created_approvals: list[Approval] = []  # 记录创建的 Approval（用于通知）
-        if approvers:
-            for a in approvers:
+        for a in approvers:
                 approval = Approval(
                     instance_id=c.instance_id,
                     node_id=c.node_id,
@@ -351,7 +429,10 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             for ap in created_approvals
         ]
         if notif_tasks:
-            await asyncio.gather(*notif_tasks)
+            try:
+                await asyncio.gather(*notif_tasks)
+            except Exception:
+                logger.warning("[pass_check] 通知创建失败，不影响校验通过", exc_info=True)
 
         # ---- 通知清除：校验完成后删除该校验人的待校验通知 (#11) ----
 
@@ -436,7 +517,7 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         operator_type=OperatorType.USER,
         operator_id=current_user_id,
         operation_type="check_return",
-        round=c.task_id,
+        round=c.round,
         description=f"校验退回：{opinion}",
     )
     db.add(log)

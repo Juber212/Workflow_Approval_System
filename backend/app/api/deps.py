@@ -76,6 +76,8 @@ def require_manager(current_user: CurrentUser) -> None:
 
 def require_same_org(current_user: CurrentUser, org_id: int) -> None:
     """要求当前用户属于指定组织，否则抛出 403（防止跨所操作）"""
+    if current_user.organization_id is None:
+        raise AppException(ErrorCode.FORBIDDEN, "您无组织归属，不可执行此操作")
     if current_user.organization_id != org_id:
         raise AppException(ErrorCode.FORBIDDEN, "不可跨所操作，仅本所所长可执行此操作")
 

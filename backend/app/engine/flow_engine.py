@@ -7,10 +7,10 @@
 """
 
 import asyncio
-from collections import deque
+import logging
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import InstanceNode, InstanceEdge, Task, FlowInstance, Approval
@@ -19,6 +19,8 @@ from app.models.enums import InstanceNodeStatus, ApprovalStatus, TaskStatus
 # 这是当前架构的已知权衡——通知创建与节点传播紧密耦合，强行解耦会增加不必要的抽象
 # 若未来引入循环引用，可考虑用事件回调或延迟导入重构
 from app.services.notification_service import create_notification
+
+logger = logging.getLogger(__name__)
 
 
 async def activate_start_node(db: AsyncSession, instance_id: int) -> None:
@@ -68,50 +70,60 @@ async def propagate_from_node(
     downstream_edges = edges_result.scalars().all()
 
     if not downstream_edges:
+        logger.warning(
+            "propagate_from_node: 节点 #%d（实例 #%d）无下游边，传播终止",
+            finished_node_id, instance_id,
+        )
         return []
 
-    # BFS 队列：(node_id) —— 每个到达条件满足的节点入队
-    queue: deque[int] = deque()
-    for edge in downstream_edges:
-        queue.append(edge.target_node_id)
+    # 收集直接下游节点 ID（单层传播，V1 仅处理源节点的直接下游）
+    target_ids = [edge.target_node_id for edge in downstream_edges]
 
     activated_ids: list[int] = []
     _tasks_for_notify: list[tuple] = []  # 收集创建的 Task（工作节点）用于通知
     _end_approvals: list[tuple] = []  # 收集终审审批记录（结束节点）用于通知：([user_id], instance_name)
 
-    # BFS 循环保护：查询节点总数计算最大迭代次数（防止环形边无限循环）
-    all_nodes = (await db.execute(
-        select(InstanceNode).where(InstanceNode.instance_id == instance_id)
-    )).scalars().all()
-    max_iterations = len(all_nodes) * 2 if all_nodes else 100
-    iteration = 0
-
-    while queue:
-        iteration += 1
-        if iteration > max_iterations:  # 超过阈值，可能存在环形边
-            import logging
-            logging.getLogger(__name__).error(f"流程传播异常：instance={instance_id} BFS 超过最大迭代次数")
-            break
-
-        node_id = queue.popleft()
-
+    for node_id in target_ids:
+        # 原子递增 arrived_count，避免并发丢失更新导致 fork-join 死锁
+        await db.execute(
+            update(InstanceNode)
+            .where(InstanceNode.id == node_id)
+            .values(arrived_count=InstanceNode.arrived_count + 1)
+        )
+        # 重新 fetch 获取最新值用于后续判断
         node = (
             await db.execute(
                 select(InstanceNode).where(InstanceNode.id == node_id)
             )
-        ).scalar_one()
-
-        # 到达信号 +1
-        node.arrived_count += 1
+        ).scalar_one_or_none()
+        if node is None:
+            logger.warning("propagate_from_node: 目标节点 #%d 不存在（可能已被并发删除），跳过", node_id)
+            continue
 
         # 检查是否所有上游分支均已到达
         if node.arrived_count < node.incoming_count:
+            logger.info(
+                "propagate_from_node: 节点 #%d「%s」arrived=%d/%d，等待其他上游完成",
+                node.id, node.name, node.arrived_count, node.incoming_count,
+            )
             continue  # 还有上游未完成，继续等待
+
+        # 重入守卫：非 WAITING 状态的节点不应被重复激活（防止环形边/并发导致无限循环）
+        if node.status != InstanceNodeStatus.WAITING:
+            logger.warning(
+                "propagate_from_node: 节点 #%d「%s」当前状态=%s（非 WAITING），跳过激活以防环形边重复触发",
+                node.id, node.name, node.status,
+            )
+            continue
 
         # === 所有上游已到达，按节点类型处理 ===
 
         if node.is_end:
             # 结束节点：进入 waiting_approval，按 approvers 创建审批记录，不生成 Task
+            logger.info(
+                "propagate_from_node: 结束节点 #%d「%s」激活 → WAITING_APPROVAL",
+                node.id, node.name,
+            )
             node.status = InstanceNodeStatus.WAITING_APPROVAL
             node.started_at = datetime.now()
 
@@ -145,9 +157,22 @@ async def propagate_from_node(
 
         else:
             # 普通工作节点：激活为 running，生成 Task
+            # 守卫：无负责人时拒绝激活，避免节点 RUNNING 但无 Task 导致永久死锁
+            if not node.assignee_id:
+                logger.error(
+                    "propagate_from_node: 节点 #%d「%s」无负责人（assignee_id 为空），"
+                    "无法激活，流程卡死！请管理员在实例详情中紧急换人",
+                    node.id, node.name,
+                )
+                continue
+
             now = datetime.now()
             node.status = InstanceNodeStatus.RUNNING
             node.started_at = now
+            logger.info(
+                "propagate_from_node: 工作节点 #%d「%s」激活 → RUNNING（assignee_id=%s）",
+                node.id, node.name, node.assignee_id,
+            )
 
             # 兜底：若发起时未预计算 deadline，则按自然日估算（不跳过节假日）
             # 正常流程在 create_instance 中已用 add_workdays 预计算，此处不应触发
@@ -155,17 +180,15 @@ async def propagate_from_node(
                 node.deadline = now + timedelta(days=node.time_limit_days)
 
             # 创建 Task（状态 pending，等待负责人处理）
-            created_task: Task | None = None
-            if node.assignee_id:
-                created_task = Task(
-                    instance_id=instance_id,
-                    node_id=node.id,
-                    assignee_id=node.assignee_id,
-                    status=TaskStatus.PENDING,
-                )
-                db.add(created_task)
-                # 收集创建的 Task 用于后续通知
-                _tasks_for_notify.append((node, created_task))
+            created_task = Task(
+                instance_id=instance_id,
+                node_id=node.id,
+                assignee_id=node.assignee_id,
+                status=TaskStatus.PENDING,
+            )
+            db.add(created_task)
+            # 收集创建的 Task 用于后续通知
+            _tasks_for_notify.append((node, created_task))
 
             activated_ids.append(node.id)
 

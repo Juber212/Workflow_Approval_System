@@ -9,7 +9,7 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
-from app.services.instance._helpers import compute_progress
+from app.services.instance._helpers import compute_progress, compute_deadline_info
 from app.services.file_service import batch_delete_files_with_physical
 from app.models import (
     Approval,
@@ -23,6 +23,7 @@ from app.models import (
     CheckRecord,
     OperationLog,
     Signature,
+    Endorsement,
 )
 from app.models.enums import (
     ApprovalStatus,
@@ -30,6 +31,7 @@ from app.models.enums import (
     InstanceNodeStatus,
     InstanceStatus,
     CheckStatus,
+    EndorsementStatus,
     OperatorType,
 )
 from app.schemas.common import PaginatedData
@@ -37,6 +39,55 @@ from app.schemas.approval import ApprovalListItem, ApprovalDetail
 from app.engine.flow_engine import propagate_from_node
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_downstream_nodes_by_edges(
+    db: AsyncSession,
+    instance_id: int,
+    start_node_id: int,
+    stop_node_id: int,
+) -> list:
+    """基于边 BFS 查找 start_node 到 stop_node 之间的下游节点（含 stop_node）
+
+    优化：一次性加载实例所有边到内存，BFS 纯内存遍历，避免 N+1 查询。
+    替换 sort_order 区间过滤：修复 fork/join DAG 拓扑中 sort_order 线性排序
+    无法正确表达偏序关系导致的死节点问题。
+    """
+    from collections import deque, defaultdict
+
+    # 一次性加载实例所有边，构建邻接表（源节点 → [目标节点, ...]）
+    all_edges = (await db.execute(
+        select(InstanceEdge).where(InstanceEdge.instance_id == instance_id)
+    )).scalars().all()
+    adjacency: dict[int, list[int]] = defaultdict(list)
+    for edge in all_edges:
+        adjacency[edge.source_node_id].append(edge.target_node_id)
+
+    downstream: list = []
+    visited: set[int] = {start_node_id}
+    queue: deque[int] = deque()
+
+    # 从 start_node 的直接下游开始
+    for target_id in adjacency.get(start_node_id, []):
+        if target_id not in visited:
+            visited.add(target_id)
+            queue.append(target_id)
+
+    while queue:
+        nid = queue.popleft()
+        if nid == stop_node_id:
+            downstream.append(nid)
+            continue  # 到达停止节点，不再继续向下遍历
+
+        downstream.append(nid)
+
+        # 继续沿边向下遍历（内存查找，无 DB 调用）
+        for target_id in adjacency.get(nid, []):
+            if target_id not in visited:
+                visited.add(target_id)
+                queue.append(target_id)
+
+    return downstream
 
 
 async def list_approvals(
@@ -91,6 +142,8 @@ async def list_approvals(
     for a in approvals:
         node = nodes_map.get(a.node_id)
         inst = insts_map.get(a.instance_id)
+        node_deadline = node.deadline if node else None
+        is_overdue, days_remaining = compute_deadline_info(node_deadline)
         items.append(ApprovalListItem(
             id=a.id,
             instance_id=a.instance_id,
@@ -102,6 +155,9 @@ async def list_approvals(
             status=a.status,
             is_end_node=node.is_end if node else False,
             round=a.round or 1,
+            deadline=node_deadline.isoformat() if node_deadline else None,
+            is_overdue=is_overdue,
+            days_remaining=days_remaining,
             created_at=a.created_at,
         ))
 
@@ -139,15 +195,10 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     total_nodes, current_node_index, all_nodes = await compute_progress(db, a.instance_id)
 
-    # 文件（终审节点查看流程全部文件，普通节点只看本节点文件）
-    if node.is_end:
-        files_result = await db.execute(
-            select(File).where(File.instance_id == a.instance_id).order_by(File.id.desc())
-        )
-    else:
-        files_result = await db.execute(
-            select(File).where(File.node_id == a.node_id).order_by(File.id.desc())
-        )
+    # 文件 —— 查实例全部文件（审批人需了解完整上下文）
+    files_result = await db.execute(
+        select(File).where(File.instance_id == a.instance_id).order_by(File.node_id, File.id.desc())
+    )
     files = files_result.scalars().all()
 
     # 批量查询文件所属节点名称
@@ -208,9 +259,11 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         for ap in all_apprs
     ]
 
-    # 驳回目标候选（仅结束节点审批，列出已执行的中间工作节点）
+    # 驳回目标候选（列出可驳回的历史已完成节点）
+    # 终审节点：所有非首尾已执行节点；中间节点：当前节点之前已完成的历史节点
     reject_target_nodes = []
     if node.is_end:
+        # 终审：列出所有已执行的非首尾节点
         exec_nodes_result = await db.execute(
             select(InstanceNode).where(
                 InstanceNode.instance_id == a.instance_id,
@@ -219,6 +272,18 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
                 InstanceNode.status.notin_(["waiting", "terminated"]),
             ).order_by(InstanceNode.sort_order)
         )
+    else:
+        # 中间节点：列出当前节点之前已完成的工作节点（供审批人选择驳回目标）
+        exec_nodes_result = await db.execute(
+            select(InstanceNode).where(
+                InstanceNode.instance_id == a.instance_id,
+                InstanceNode.is_start == False,
+                InstanceNode.is_end == False,
+                InstanceNode.sort_order < node.sort_order,
+                InstanceNode.status == InstanceNodeStatus.FINISHED,
+            ).order_by(InstanceNode.sort_order)
+        )
+    if exec_nodes_result:
         reject_target_nodes = [
             {"id": n.id, "name": n.name, "sort_order": n.sort_order, "status": n.status}
             for n in exec_nodes_result.scalars().all()
@@ -232,6 +297,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         initiator_id=inst.initiator_id,
         initiator_name=initiator.real_name if initiator else "",
         priority=(inst.priority or "normal").lower(),
+        difficulty=(inst.difficulty or "1"),  # 难度等级
         node_id=a.node_id,
         node_name=node.name,
         node_description=node.description,
@@ -241,6 +307,9 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         status=a.status,
         opinion=a.opinion,
         is_end_node=node.is_end,
+        time_limit_days=node.time_limit_days,  # 完成时限
+        deadline=node.deadline,  # 截止时间
+        round=node.round,  # 当前轮次
         total_nodes=total_nodes,
         current_node_index=current_node_index,
         nodes=[
@@ -255,7 +324,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         files=[
             {
                 "id": f.id, "original_name": f.original_name,
-                "mime_type": f.mime_type,  # 文件 MIME 类型（前端判断是否为 PDF）
+                "mime_type": f.mime_type,
                 "file_size": f.file_size,
                 "node_id": f.node_id,
                 "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
@@ -264,6 +333,15 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in files
+        ],
+        # 仅本节点文件（签批预览用，后端过滤）
+        node_files=[
+            {
+                "id": f.id, "original_name": f.original_name,
+                "mime_type": f.mime_type, "file_size": f.file_size,
+                "round": f.round,
+            }
+            for f in files if f.node_id == a.node_id
         ],
         check_progress=check_progress,
         approval_progress=approval_progress,
@@ -393,7 +471,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         operator_type=OperatorType.USER,
         operator_id=current_user_id,
         operation_type="approve",
-        round=a.task_id or 0,
+        round=a.round,
         description="审批通过" + ("（已签名）" if sig_ids else ""),
     )
     db.add(log)
@@ -483,8 +561,6 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
 
     # 难度4 + 有批准人 → 进入批准环节（审核→签字→节点完成）
     if inst.difficulty == "4" and node.endorser_id:
-        from app.models.endorsement import Endorsement
-        from app.models.enums import EndorsementStatus
         endorsement = Endorsement(
             instance_id=a.instance_id,
             node_id=a.node_id,
@@ -566,6 +642,7 @@ async def reject(
 
         target_node = (await db.execute(
             select(InstanceNode).where(InstanceNode.id == target_node_id, InstanceNode.instance_id == a.instance_id)
+            .with_for_update()  # 加锁防并发驳回覆盖
         )).scalar_one_or_none()
         if target_node is None:
             raise AppException(ErrorCode.NOT_FOUND, "目标节点不存在")
@@ -601,25 +678,31 @@ async def reject(
             )
             db.add(new_task)
 
-        # 重置目标节点之后、终审节点（含）的所有下游节点为 waiting
-        downstream_result = await db.execute(
-            select(InstanceNode).where(
-                InstanceNode.instance_id == a.instance_id,
-                InstanceNode.sort_order > target_node.sort_order,
-                InstanceNode.sort_order <= node.sort_order,
-            ).order_by(InstanceNode.sort_order)
+        # 基于边 BFS 查找目标节点到终审节点之间的下游节点
+        downstream_node_ids = await _get_downstream_nodes_by_edges(
+            db, a.instance_id, target_node_id, node.id,
         )
-        for dn in downstream_result.scalars().all():
-            # 删除下游节点文件（先DB后物理文件）
+        if downstream_node_ids:
+            downstream_result = await db.execute(
+                select(InstanceNode).where(InstanceNode.id.in_(downstream_node_ids))
+            )
+        else:
+            downstream_result = await db.execute(select(InstanceNode).where(False))
+        # 批量收集所有下游节点文件 + 终止 Task（一次遍历）
+        final_downstream_nodes = list(downstream_result.scalars().all())
+        final_downstream_files: list = []
+        for dn in final_downstream_nodes:
             dn_files_result = await db.execute(select(File).where(File.node_id == dn.id))
             dn_files = dn_files_result.scalars().all()
-            if dn_files:
-                await batch_delete_files_with_physical(db, list(dn_files))
+            final_downstream_files.extend(dn_files)
+        if final_downstream_files:
+            await batch_delete_files_with_physical(db, final_downstream_files)
+        for dn in final_downstream_nodes:
             # 终止下游节点未完成的 Task
             await db.execute(
                 update(Task).where(
                     Task.node_id == dn.id,
-                    Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.WAITING_CHECK, TaskStatus.WAITING_APPROVAL]),
+                    Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.WAITING_CHECK, TaskStatus.WAITING_APPROVAL, TaskStatus.WAITING_ENDORSEMENT]),
                 ).values(status=TaskStatus.TERMINATED)
             )
             # 重置节点状态（轮次 +1，表示又一次经过此节点）
@@ -627,6 +710,7 @@ async def reject(
             dn.status = InstanceNodeStatus.WAITING
             dn.started_at = None
             dn.completed_at = None
+            dn.arrived_count = 0  # 重置到达计数，防止旧轮次计数污染
 
         # 终止终审节点其余待审批记录
         await db.execute(
@@ -642,7 +726,7 @@ async def reject(
             operator_type=OperatorType.USER,
             operator_id=current_user_id,
             operation_type="final_reject",
-            round=0,
+            round=a.round,
             description=f"终审总驳回 → {target_node.name}：{opinion}",
         )
         db.add(log)
@@ -662,7 +746,135 @@ async def reject(
         return {"message": f"已驳回至「{target_node.name}」节点"}
 
     else:
-        # 中间节点审批退回：固定退回当前负责人
+        # ── 中间节点审批退回 ──
+        # 有 target_node_id → 驳回到历史已完成节点
+        # 无 target_node_id → 固定退回当前节点负责人（兼容旧行为）
+        if target_node_id is not None:
+            # ── 驳回到指定历史节点 ──
+            target_node = (await db.execute(
+                select(InstanceNode).where(
+                    InstanceNode.id == target_node_id,
+                    InstanceNode.instance_id == a.instance_id,
+                ).with_for_update()  # 加锁防并发驳回覆盖
+            )).scalar_one_or_none()
+            if target_node is None:
+                raise AppException(ErrorCode.NOT_FOUND, "目标节点不存在")
+            if target_node.is_start or target_node.is_end:
+                raise AppException(ErrorCode.BAD_REQUEST, "不可驳回至开始或结束节点")
+            if target_node.sort_order >= node.sort_order:
+                raise AppException(ErrorCode.BAD_REQUEST, "只能驳回至当前节点之前的历史节点")
+
+            a.status = ApprovalStatus.REJECTED
+            a.opinion = opinion
+            a.decided_at = now
+            a.reject_target_node_id = target_node_id
+
+            # 终止当前节点其他 pending 审批
+            await db.execute(
+                update(Approval)
+                .where(Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
+                .values(status=ApprovalStatus.TERMINATED, decided_at=now)
+            )
+            # 终止当前节点 pending 校验
+            await db.execute(
+                update(CheckRecord)
+                .where(CheckRecord.task_id == a.task_id, CheckRecord.status == CheckStatus.PENDING)
+                .values(status=CheckStatus.TERMINATED, decided_at=now)
+            )
+            # 终止当前节点 pending 批准（难度4兜底）
+            await db.execute(
+                update(Endorsement)
+                .where(Endorsement.node_id == a.node_id, Endorsement.status == EndorsementStatus.PENDING)
+                .values(status=EndorsementStatus.TERMINATED, decided_at=now)
+            )
+            # 批量删除当前节点当前轮文件（一次 flush，避免 N 次 DB 操作）
+            curr_files_result = await db.execute(
+                select(File).where(File.node_id == a.node_id, File.round == node.round)
+            )
+            curr_files = curr_files_result.scalars().all()
+            if curr_files:
+                await batch_delete_files_with_physical(db, list(curr_files))
+
+            # 重新激活目标节点
+            target_node.round += 1
+            target_node.status = InstanceNodeStatus.RUNNING
+            target_node.started_at = now
+            target_node.arrived_count = 0
+
+            # 批量删除目标节点文件
+            target_files_result = await db.execute(select(File).where(File.node_id == target_node_id))
+            target_files = target_files_result.scalars().all()
+            if target_files:
+                await batch_delete_files_with_physical(db, list(target_files))
+
+            # 生成新 Task
+            new_task = None
+            if target_node.assignee_id:
+                new_task = Task(
+                    instance_id=a.instance_id,
+                    node_id=target_node_id,
+                    assignee_id=target_node.assignee_id,
+                    status=TaskStatus.PENDING,
+                )
+                db.add(new_task)
+                await db.flush()
+
+            # 基于边 BFS 查找目标节点到当前节点之间的下游节点
+            downstream_node_ids = await _get_downstream_nodes_by_edges(
+                db, a.instance_id, target_node_id, node.id,
+            )
+            if downstream_node_ids:
+                downstream_result = await db.execute(
+                    select(InstanceNode).where(InstanceNode.id.in_(downstream_node_ids))
+                )
+            else:
+                downstream_result = await db.execute(select(InstanceNode).where(False))
+            # 批量收集所有下游节点 → 一次性删除文件 + 终止 Task
+            downstream_nodes = list(downstream_result.scalars().all())
+            all_downstream_files: list = []
+            for dn in downstream_nodes:
+                dn_files = (await db.execute(select(File).where(File.node_id == dn.id))).scalars().all()
+                all_downstream_files.extend(dn_files)
+            if all_downstream_files:
+                await batch_delete_files_with_physical(db, all_downstream_files)
+            for dn in downstream_nodes:
+                await db.execute(
+                    update(Task).where(
+                        Task.node_id == dn.id,
+                        Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING, TaskStatus.WAITING_CHECK, TaskStatus.WAITING_APPROVAL, TaskStatus.WAITING_ENDORSEMENT]),
+                    ).values(status=TaskStatus.TERMINATED)
+                )
+                dn.round += 1
+                dn.status = InstanceNodeStatus.WAITING
+                dn.started_at = None
+                dn.completed_at = None
+                dn.arrived_count = 0  # 重置到达计数，防止旧轮次计数污染
+
+            # 日志
+            log = OperationLog(
+                instance_id=a.instance_id,
+                node_id=a.node_id,
+                operator_type=OperatorType.USER,
+                operator_id=current_user_id,
+                operation_type="reject_to_history",
+                round=a.round,
+                description=f"审批驳回到历史节点「{target_node.name}」：{opinion}",
+            )
+            db.add(log)
+            await db.flush()
+
+            # 通知目标节点负责人
+            if target_node.assignee_id and new_task:
+                await create_notification(
+                    db, user_id=target_node.assignee_id, type="approval_rejected",
+                    title="审批驳回",
+                    content=f"节点「{node.name}」审批驳回到「{target_node.name}」：{opinion}",
+                    link=f"/profile/task/{new_task.id}",
+                )
+
+            return {"message": f"已驳回至历史节点「{target_node.name}」"}
+
+        # ── 无目标节点：退回当前节点负责人（原有逻辑）──
         a.status = ApprovalStatus.REJECTED
         a.opinion = opinion
         a.decided_at = now
@@ -685,8 +897,6 @@ async def reject(
         )
 
         # 终止当前节点 pending 的批准记录（难度4场景，安全兜底）
-        from app.models import Endorsement
-        from app.models.enums import EndorsementStatus
         await db.execute(
             update(Endorsement)
             .where(
@@ -705,6 +915,7 @@ async def reject(
             await batch_delete_files_with_physical(db, list(curr_files))
 
         # Node → running, Task → processing，轮次 +1
+        task: Task | None = None
         node.status = InstanceNodeStatus.RUNNING
         node.round += 1
         if a.task_id:
@@ -719,7 +930,7 @@ async def reject(
             operator_type=OperatorType.USER,
             operator_id=current_user_id,
             operation_type="reject",
-            round=a.task_id or 0,
+            round=a.round,
             description=f"审批退回：{opinion}",
         )
         db.add(log)

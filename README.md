@@ -1,17 +1,128 @@
 # 企业流程审批系统
 
-以流程驱动的企业级业务管理平台。不仅限于 OA 审批，而是将每个流程视为独立项目，覆盖模板设计、实例发起、节点执行、多级审批、签批存档、超期预警的全生命周期管理。
+<p align="center">
+  <strong>以流程驱动项目的企业级业务管理平台</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/status-deployable-success" alt="status">
+  <img src="https://img.shields.io/badge/tests-190%20passed-brightgreen" alt="tests">
+  <img src="https://img.shields.io/badge/python-3.10+-blue" alt="python">
+  <img src="https://img.shields.io/badge/vue-3.5-brightgreen" alt="vue">
+</p>
+
+---
+
+## 这是什么
+
+不是传统 OA 请假系统。是让一个项目像流水线一样自动推进的审批管理平台。
+
+- 所长画一条流程（比如"初步设计 → 校对 → 审核 → 批准 → 归档"）
+- 发起时指定每个环节谁做、谁校验、谁审批
+- 系统自动推任务，文件自动转 PDF、签名自动上文档、所有操作有日志
+
+> 新手入门：[用户使用手册](docs/user-manual/用户使用手册.md)
+
+---
+
+## 流程全景
+
+```
+  所长设计模板              发起项目实例           节点执行与审批
+┌──────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│              │    │                  │    │  负责人上传文件       │
+│  拖拽节点     │    │  选模板、调配置    │    │      ↓              │
+│  配置审批人   │──→│  指定每节点人员    │──→│  系统自动转 PDF       │
+│  发布上线     │    │  确认发起         │    │      ↓              │
+│              │    │                  │    │  校验人并行校验       │
+└──────────────┘    └──────────────────┘    │      ↓              │
+                                            │  审批人并行审批       │
+                                            │      ↓              │
+                                            │  [难度4] 批准人签阅   │
+                                            │      ↓              │
+                                            │  签名上PDF → 下一节点 │
+                                            └─────────────────────┘
+```
+
+---
 
 ## 技术栈
 
-| 层 | 技术 |
-|----|------|
-| 前端 | Vue 3 + TypeScript + Element Plus + LogicFlow |
-| 后端 | FastAPI + SQLAlchemy 2.0（异步） |
-| 数据库 | MySQL 8.0 InnoDB |
-| 任务队列 | Redis + arq（PDF 转换异步化） |
-| 实时通信 | WebSocket + Redis Pub/Sub |
-| 文件处理 | LibreOffice（Word/Excel→PDF）+ pypdf（签名） |
+| 层 | 技术 | 说明 |
+|----|------|------|
+| 前端框架 | Vue 3 + TypeScript | Composition API |
+| UI 组件 | Element Plus | 企业级组件库 |
+| 流程设计器 | LogicFlow | 滴滴开源，拖拽式流程编辑 |
+| 后端框架 | FastAPI | 异步 Python 框架 |
+| ORM | SQLAlchemy 2.0 | 异步模式 |
+| 数据库 | MySQL 8.0 | InnoDB，操作日志按年分区 |
+| 任务队列 | Redis + arq | PDF 转换异步化 |
+| 认证 | JWT | python-jose |
+| 实时通信 | WebSocket + Redis Pub/Sub | 通知实时推送，30s 轮询兜底 |
+| PDF 转换 | LibreOffice | 无头模式，asyncio.Semaphore 限流 2 并发 |
+| PDF 签名 | pypdf | 签名图片插入，多角色多槽位 |
+
+---
+
+## 角色体系
+
+| 角色 | 标识 | 职责 |
+|------|------|------|
+| 系统管理员 | `system_admin` | 用户/组织/角色/配置/文件模板维护，不参与业务 |
+| 所长 | `manager` | 设计流程、发起与终止项目、终审 |
+| 普通用户 | `user` | 执行节点、上传文件、校验、审批 |
+
+> 一个人可以有多个角色，所长也可以被分配去做审批人
+
+---
+
+## 主要功能
+
+<table>
+<tr>
+<td width="50%">
+
+**流程设计器**
+- 拖拽节点、配置负责人/校验人/审批人/批准人/时限
+- 连线即流程，发布前自动校验完整性和连通性
+- 支持 fork/join 并行分叉汇合
+
+**文件处理**
+- 上传 Word/Excel/图片/PDF，非 PDF 自动转 PDF
+- 节点可配置文件提交分类（文件夹模式，必填/可选 + 数量限制）
+- 文件模板下载时自动替换 15 个占位符（项目名称、发起日期等）
+
+**签批**
+- 用户上传签名图片（PNG 透明底）
+- 审批/批准通过后签名自动插入 PDF，多角色多槽位
+- 拖拽调整位置，签名下方显示中文日期
+
+</td>
+<td width="50%">
+
+**通知**
+- WebSocket 推送 + 30s 轮询兜底
+- 侧边栏角标、个人中心 Tab 角标、首页红点实时更新
+- 预留企业微信通知集成
+
+**截止时间预警**
+- 逾期标红、临期（≤1天）标黄
+- 覆盖首页、个人中心、项目管理、方案管理全部列表
+
+**紧急处理**
+- 发起人可随时更换未完成节点的人员
+- 优先级和截止时间随时可调
+- 任何状态的项目均可终止（不可恢复）
+
+**操作日志**
+- 所有流程操作记录日志，按年分区
+- 只写不删，完整审计
+
+</td>
+</tr>
+</table>
+
+---
 
 ## 快速开始
 
@@ -20,64 +131,99 @@
 - Python 3.10+
 - Node.js 18+
 - MySQL 8.0
-- LibreOffice 7.x+
 - Redis 6.x+
+- LibreOffice 7.x+（可选，不装则 PDF 转换功能不可用）
 
-### 部署
-
-详见 [`04_Deployment.md`](04_Deployment.md)
+### 后端
 
 ```bash
-# 后端
 cd backend
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # 编辑配置
-alembic upgrade head
-uvicorn app.main:app --host 0.0.0.0 --port 8000
 
-# 前端
-cd frontend
-npm install
-npm run build  # 生产构建；开发用 npm run dev
+export DATABASE_URL="mysql+aiomysql://root:password@localhost:3306/workflow_approval"
+export SECRET_KEY="改成随机长字符串"
+export DEFAULT_ADMIN_PASSWORD="管理员初始密码"
+
+mysql -u root -p -e "CREATE DATABASE workflow_approval CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+alembic upgrade head
+python -m app.core.seed
+uvicorn app.main:app --reload
 ```
 
-## 项目文档
+Swagger：`http://localhost:8000/docs`
+
+### 前端
+
+```bash
+cd frontend
+npm install
+npm run dev          # 开发
+npm run build        # 生产构建
+```
+
+### 默认管理员
+
+| 用户名 | 密码 |
+|--------|------|
+| `admin` | 环境变量 `DEFAULT_ADMIN_PASSWORD` 设定的值 |
+
+---
+
+## 测试
+
+```bash
+pytest tests/ -v          # Mock 测试 158 条，13 秒跑完
+pytest tests/mysql/ -v    # MySQL 真实测试 19 条，需要 workflow_approval_test 库
+```
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| Mock 单元 | 158 | 内存运行，毫秒级 |
+| Mock 集成 | 10 | TestClient + mock_db |
+| MySQL 真实 | 19 | SAVEPOINT 隔离，独立建表删表 |
+| **合计** | **190** | **0 业务逻辑 bug** |
+
+---
+
+## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [`00_Project_Blueprint.md`](00_Project_Blueprint.md) | 系统架构、状态机、业务规则执行细节 |
-| [`01_PRD.md`](01_PRD.md) | 产品需求文档，功能模块与交互流程 |
-| [`02_Database_Design.md`](02_Database_Design.md) | 数据库完整设计（DDL、ER、分区策略） |
-| [`03_API_Design.md`](03_API_Design.md) | REST API 端点清单（72 个 HTTP + 1 WebSocket） |
-| [`04_Deployment.md`](04_Deployment.md) | 部署与运维（Nginx 配置、备份策略） |
-| [`CHANGELOG.md`](CHANGELOG.md) | 版本变更记录 |
-| [`Developer_Documentation.md`](Developer_Documentation.md) | 开发历程与技术决策记录 |
-| [`Learning_Journal.md`](Learning_Journal.md) | 问题与经验积累 |
-| [`AUDIT_FIX_LOG.md`](AUDIT_FIX_LOG.md) | 全量代码审计修复日志 |
-| [`CLAUDE.md`](CLAUDE.md) | AI 辅助开发指南（项目上下文） |
+| [用户使用手册](docs/user-manual/用户使用手册.md) | 操作步骤，20 分钟上手 |
+| [开发者上手指南](Developer_Documentation.md) | 环境搭建、目录结构、常用命令 |
+| [技术蓝图](00_Project_Blueprint.md) | 系统架构、状态机、流程引擎设计 |
+| [产品需求文档](01_PRD.md) | 功能模块与交互流程 |
+| [数据库设计](02_Database_Design.md) | 24 张表完整 DDL + ER 图 + 分区策略 |
+| [API 设计](03_API_Design.md) | 99 个 HTTP 端点 + 1 个 WebSocket |
+| [部署运维](04_Deployment.md) | Nginx、HTTPS、备份 |
+| [变更日志](CHANGELOG.md) | 版本变更记录 |
+| [审计修复日志](AUDIT_FIX_LOG.md) | 全量代码审计 + 修复记录 |
+| [CLAUDE.md](CLAUDE.md) | AI 辅助开发指南 |
+| [企业微信通知集成](docs/superpowers/specs/2026-07-29-wework-notification-design.md) | 设计方案（待实施） |
 
-## 项目状态
+---
 
-✅ 可部署上线 | 测试 190 条（0 业务逻辑 bug）| 后端 30 Service + 18 API 模块 | 前端 23 路由
+## 项目结构
 
-## 核心特性
-
-- **统一节点模型**：不区分开始/工作/结束，行为由位置决定
-- **并行审批**：校验/审批/批准并行处理，支持 fork/join 分叉汇合
-- **PDF 自动转换**：Word/Excel/图片提交时自动转 PDF
-- **签批上文档**：审批通过后签名自动插入 PDF 指定坐标
-- **备选审批策略**：支持 all_approve（全票通过）和 single_approve（一票通过）
-- **四档难度**：难度 4 级引入批准人（Endorser）额外审批层
-- **实时通知**：WebSocket 推送 + 30s 轮询兜底，侧边栏角标实时更新
-- **紧急换人**：发起人可随时更换运行中实例的人员，支持兜底
-- **文件模板**：Word/Excel 模板 + 15 个占位符自动替换
-- **超期预警**：独立的超期项汇总页面，逾期标红警告
-- **操作日志**：按年分区，只写不删，完整追溯
-
-## 角色体系
-
-| 角色 | 职责 |
-|------|------|
-| 系统管理员 | 用户/组织/角色/系统配置/文件模板维护 |
-| 所长 | 流程模板设计、发起/终止流程、终审 |
-| 普通用户 | 节点执行、上传文件、校验/审批 |
+```
+├── backend/                  # FastAPI 后端
+│   ├── app/
+│   │   ├── api/              # 18 个路由文件，99 端点
+│   │   ├── models/           # 24 个模型，24 张表
+│   │   ├── schemas/          # Pydantic 请求/响应 Schema
+│   │   ├── services/         # 业务逻辑层
+│   │   └── core/             # 配置/安全/数据库/种子/限流
+│   ├── alembic/              # 数据库迁移
+│   ├── tests/                # 190 条测试
+│   └── storage/archive/      # 文件存储
+├── frontend/                 # Vue 3 前端
+│   └── src/
+│       ├── views/            # admin / dashboard / flows / profile / proposals
+│       ├── api/              # 请求封装 + 类型定义
+│       ├── stores/           # Pinia 状态管理
+│       └── components/       # 公共组件
+└── docs/
+    ├── user-manual/          # 用户使用手册 + 截图
+    └── superpowers/          # 设计规范与实施计划
+```

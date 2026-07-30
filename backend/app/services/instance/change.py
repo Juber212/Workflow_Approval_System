@@ -52,8 +52,8 @@ async def change_personnel(
                 result.add(item)
         return result - {0}  # 排除无效 0
 
-    # ========== 1. 校验实例 ==========
-    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    # ========== 1. 校验实例（加锁防并发）==========
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id).with_for_update()
     result = await db.execute(stmt)
     instance = result.scalar_one_or_none()
     if not instance:
@@ -61,11 +61,11 @@ async def change_personnel(
     if instance.initiator_id != current_user.id:
         raise AppException(ErrorCode.NOT_INITIATOR, "仅发起人可更换人员")
 
-    # ========== 2. 校验节点 ==========
+    # ========== 2. 校验节点（加锁防并发）==========
     node_stmt = select(InstanceNode).where(
         InstanceNode.id == node_id,
         InstanceNode.instance_id == instance_id,
-    )
+    ).with_for_update()
     node_result = await db.execute(node_stmt)
     node = node_result.scalar_one_or_none()
     if not node:
@@ -112,7 +112,7 @@ async def change_personnel(
                     Task.status.in_(["pending", "processing"]),
                 )
             )).scalar_one_or_none()
-            task_id_for_check = active_task.id if active_task else 0
+            task_id_for_check = active_task.id if active_task else None
             for uid in added:
                 db.add(CheckRecord(
                     instance_id=instance_id,
@@ -216,6 +216,7 @@ async def change_personnel(
         operator_type="user",
         operator_id=current_user.id,
         operation_type="personnel_changed",
+        round=node.round,  # 记录当前节点轮次
         description=f"节点「{node.name}」人员变更：{'；'.join(changes)}",
         detail={
             "node_id": node_id,
@@ -343,8 +344,8 @@ async def change_priority(
 
     返回更新后的优先级和实例基本信息。
     """
-    # 1. 查询实例
-    stmt = select(FlowInstance).where(FlowInstance.id == instance_id)
+    # 1. 查询实例（加锁防并发覆盖）
+    stmt = select(FlowInstance).where(FlowInstance.id == instance_id).with_for_update()
     result = await db.execute(stmt)
     instance = result.scalar_one_or_none()
     if not instance:

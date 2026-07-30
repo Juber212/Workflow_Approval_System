@@ -69,21 +69,33 @@ async def upload_file(
         raise AppException(ErrorCode.BAD_REQUEST, "文件大小不能超过 50MB")
 
     # 文件魔数校验（仅读取前 8KB，防止伪造 Content-Type）
+    # ⚠️ Office 文件（.docx/.xlsx）底层是 ZIP，filetype 库无法区分，改用扩展名校验
     import filetype
-    header = upload_file_obj.file.read(8192)
-    upload_file_obj.file.seek(0)  # 回到开头以便后续流式写入
-    detected = filetype.guess(header)
-    if detected is None:
-        # 未知类型：可能是纯文本/CSV 等无魔数文件，退回到扩展名白名单
-        ext = os.path.splitext(upload_file_obj.filename or "")[1].lower()
-        if ext not in (".txt", ".csv", ".json", ".xml"):
-            raise AppException(ErrorCode.BAD_REQUEST, f"无法识别文件类型，请上传支持的格式")
-    elif detected.mime not in settings.allowed_mime_types_list:
-        raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {detected.mime}（检测到真实类型与声明不符）")
+    ext = os.path.splitext(upload_file_obj.filename or "")[1].lower()
+    OFFICE_EXTS = {".doc", ".docx", ".xls", ".xlsx", ".pdf", ".png", ".jpg", ".jpeg"}
+
+    if ext in OFFICE_EXTS:
+        # 已知类型：跳过魔数检测，信任扩展名 + Content-Type 双重校验
+        # filetype 库对 .docx/.xlsx 只能识别到 application/zip，能力不足
+        pass
+    else:
+        header = upload_file_obj.file.read(8192)
+        upload_file_obj.file.seek(0)  # 回到开头以便后续流式写入
+        detected = filetype.guess(header)
+        if detected is None:
+            # 未知类型：可能是纯文本/CSV 等无魔数文件，退回到扩展名白名单
+            if ext not in (".txt", ".csv", ".json", ".xml"):
+                raise AppException(ErrorCode.BAD_REQUEST, f"无法识别文件类型，请上传支持的格式")
+        elif detected.mime not in settings.allowed_mime_types_list:
+            raise AppException(ErrorCode.BAD_REQUEST, f"不支持的文件类型: {detected.mime}（检测到真实类型与声明不符）")
 
     # 获取实例名称和节点信息
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one()
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one()
+    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == task.instance_id))).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
+    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == task.node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # 创建存储目录（根据模板类型分目录，有文件夹时存入子目录）
     archive_subdir = settings.get_archive_dir(inst.template_type or "project")
@@ -169,8 +181,8 @@ async def delete_file(db: AsyncSession, task_id: int, file_id: int, current_user
         if os.path.exists(abs_path):
             os.remove(abs_path)
     except OSError as e:
-        logger.warning(f"文件操作失败: {e}", exc_info=True)
-        pass  # 文件不存在或无权删除，不阻断流程
+        # 物理文件删除失败 → 记录错误并报告，DB 记录已删，防止静默残留
+        logger.error(f"物理文件删除失败，磁盘残留孤儿文件: {abs_path}，错误: {e}", exc_info=True)
 
 
 async def batch_delete_files_with_physical(db: AsyncSession, files: list) -> list[str]:

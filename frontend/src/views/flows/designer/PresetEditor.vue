@@ -27,9 +27,9 @@
       <el-form-item label="校验人">
         <UserSelector
           v-model="form.checkers"
-          :multiple="true"
+          :multiple="false"
           :initial-options="checkerInitialOptions"
-          placeholder="搜索并选择校验人（可多选）"
+          placeholder="搜索并选择校验人"
           org-members
           @update:model-value="handleCheckersChange"
           @options-loaded="handleOptionsLoaded"
@@ -38,9 +38,9 @@
       <el-form-item label="审批人">
         <UserSelector
           v-model="form.approvers"
-          :multiple="true"
+          :multiple="false"
           :initial-options="approverInitialOptions"
-          placeholder="搜索并选择审批人（可多选）"
+          placeholder="搜索并选择审批人"
           org-members
           @update:model-value="handleApproversChange"
           @options-loaded="handleOptionsLoaded"
@@ -90,8 +90,8 @@ const form = reactive({
   name: '',
   node_name: '',
   assignee_id: undefined as number | undefined,
-  checkers: [] as number[],
-  approvers: [] as number[],
+  checkers: undefined as number | undefined,
+  approvers: undefined as number | undefined,
   time_limit_days: 3,
   require_file: true,
 })
@@ -111,15 +111,17 @@ const assigneeInitialOptions = computed<UserSearchItem[]>(() => {
 })
 
 const checkerInitialOptions = computed<UserSearchItem[]>(() => {
-  return (form.checkers || []).map(id => ({
-    id, username: '', real_name: userNameCache[id] || '', organization_id: null, organization_name: null,
-  }))
+  if (form.checkers != null) {
+    return [{ id: form.checkers, username: '', real_name: userNameCache[form.checkers] || '', organization_id: null, organization_name: null }]
+  }
+  return []
 })
 
 const approverInitialOptions = computed<UserSearchItem[]>(() => {
-  return (form.approvers || []).map(id => ({
-    id, username: '', real_name: userNameCache[id] || '', organization_id: null, organization_name: null,
-  }))
+  if (form.approvers != null) {
+    return [{ id: form.approvers, username: '', real_name: userNameCache[form.approvers] || '', organization_id: null, organization_name: null }]
+  }
+  return []
 })
 
 /** 加载初始数据 */
@@ -145,16 +147,16 @@ function loadInitial() {
     form.name = props.initial.name || ''
     form.node_name = props.initial.node_name || ''
     form.assignee_id = props.initial.assignee_id ?? undefined
-    form.checkers = (props.initial.checkers || []).map((c: any) => c.user_id)
-    form.approvers = (props.initial.approvers || []).map((a: any) => a.user_id)
+    form.checkers = props.initial.checkers?.[0]?.user_id ?? undefined
+    form.approvers = props.initial.approvers?.[0]?.user_id ?? undefined
     form.time_limit_days = props.initial.time_limit_days ?? 3
     form.require_file = props.initial.require_file ?? true
   } else {
     form.name = ''
     form.node_name = ''
     form.assignee_id = undefined
-    form.checkers = []
-    form.approvers = []
+    form.checkers = undefined
+    form.approvers = undefined
     form.time_limit_days = 3
     form.require_file = true
   }
@@ -171,8 +173,8 @@ function handleOptionsLoaded(users: Array<{ id: number; real_name: string }>) {
 }
 
 function handleAssigneeChange(_val: number | undefined) { /* 不需要额外处理 */ }
-function handleCheckersChange(_val: number[]) { /* 不需要额外处理 */ }
-function handleApproversChange(_val: number[]) { /* 不需要额外处理 */ }
+function handleCheckersChange(_val: number | undefined) { /* 不需要额外处理 */ }
+function handleApproversChange(_val: number | undefined) { /* 不需要额外处理 */ }
 
 /** 关闭时重置表单 */
 function handleClose() {
@@ -191,8 +193,8 @@ async function handleSave() {
       name: form.name.trim(),
       node_name: form.node_name.trim(),
       assignee_id: form.assignee_id || null,
-      checkers: form.checkers.length > 0 ? form.checkers.map(id => ({ user_id: id })) : null,
-      approvers: form.approvers.length > 0 ? form.approvers.map(id => ({ user_id: id })) : null,
+      checkers: form.checkers != null ? [{ user_id: form.checkers }] : null,
+      approvers: form.approvers != null ? [{ user_id: form.approvers }] : null,
       time_limit_days: form.time_limit_days,
       require_file: form.require_file,
     }

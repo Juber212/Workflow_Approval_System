@@ -97,7 +97,12 @@ async def post_edge(
     target_node_id = data.get("target_node_id")
     if not source_node_id or not target_node_id:
         raise AppException(ErrorCode.VALIDATION_ERROR, "source_node_id 和 target_node_id 为必填字段")
-    result = await add_edge(db, template_id, int(source_node_id), int(target_node_id))
+    try:
+        sid = int(source_node_id)
+        tid = int(target_node_id)
+    except (ValueError, TypeError):
+        raise AppException(ErrorCode.VALIDATION_ERROR, "节点 ID 必须为整数")
+    result = await add_edge(db, template_id, sid, tid)
     await db.commit()
     return ApiResponse.ok(result, message="连线已添加")
 

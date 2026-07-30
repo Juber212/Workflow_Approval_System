@@ -156,7 +156,7 @@ const formVisible = ref(false)
 interface EditUserData {
   username: string
   real_name: string
-  organization_id: number
+  organization_id: number | null  // 管理员可为空
   roles: string[]
   email: string | null
   phone: string | null
@@ -214,7 +214,7 @@ function openEdit(row: UserItem) {
   editingUser.value = {
     username: row.username,
     real_name: row.real_name,
-    organization_id: row.organization_id!,
+    organization_id: row.organization_id,
     roles: row.roles,
     email: row.email,
     phone: row.phone,
@@ -254,9 +254,13 @@ async function handleFormSubmit(data: any) {
 
 // ========== 启禁用 ==========
 async function handleToggleStatus(row: UserItem) {
-  await toggleUserStatus(row.id, !row.is_active)
-  ElMessage.success(row.is_active ? '已禁用' : '已启用')
-  fetchList()
+  try {
+    await toggleUserStatus(row.id, !row.is_active)
+    ElMessage.success(row.is_active ? '已禁用' : '已启用')
+    fetchList()
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || '操作失败，请稍后重试')
+  }
 }
 
 // ========== 重置密码 ==========

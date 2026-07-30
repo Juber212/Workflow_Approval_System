@@ -68,14 +68,14 @@
             <el-option label="处理中" value="processing" />
           </el-select>
         </div>
-        <el-table border :data="tasks" stripe v-loading="taskLoading" @row-click="(row: any) => router.push({ name: 'TaskDetail', params: { id: row.id } })" style="cursor:pointer">
+        <el-table border :data="tasks" stripe v-loading="taskLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'TaskDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="当前节点" min-width="100" />
           <el-table-column prop="initiator_name" label="发起人" min-width="72" />
           <el-table-column label="截止时间" min-width="140">
             <template #default="{ row }">
-              <span :class="{ 'text-danger': row.is_overdue }">{{ formatTime(row.deadline) }}</span>
-              <el-tag v-if="row.is_overdue" type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
+              <span v-if="row.deadline">{{ formatTime(row.deadline) }}</span>
+              <span v-else class="text-muted">—</span>
             </template>
           </el-table-column>
           <el-table-column label="优先级" min-width="64">
@@ -103,13 +103,19 @@
         <div class="list-toolbar">
           <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchChecks" />
         </div>
-        <el-table border :data="checks" stripe v-loading="checkLoading" @row-click="(row: any) => router.push({ name: 'CheckDetail', params: { id: row.id } })" style="cursor:pointer">
+        <el-table border :data="checks" stripe v-loading="checkLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'CheckDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="submitter_name" label="提交人" min-width="72" />
           <el-table-column prop="created_at" label="提交时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
           <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
+          </el-table-column>
+          <el-table-column label="截止时间" min-width="120">
+            <template #default="{ row }">
+              <span v-if="row.deadline">{{ formatTime(row.deadline) }}</span>
+              <span v-else class="text-muted">—</span>
+            </template>
           </el-table-column>
           <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
@@ -131,16 +137,22 @@
         <div class="list-toolbar">
           <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchApprovals" />
         </div>
-        <el-table border :data="approvals" stripe v-loading="approvalLoading" @row-click="(row: any) => router.push({ name: 'ApprovalDetail', params: { id: row.id } })" style="cursor:pointer">
+        <el-table border :data="approvals" stripe v-loading="approvalLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'ApprovalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100">
             <template #default="{ row }">
-              {{ row.node_name }}<el-tag v-if="row.is_end_node" size="small" type="warning" effect="plain">终审</el-tag>
+              {{ row.node_name }}<el-tag v-if="row.is_end_node" size="small" type="warning" effect="plain" style="margin-left:6px">终审</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
           <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
+          </el-table-column>
+          <el-table-column label="截止时间" min-width="120">
+            <template #default="{ row }">
+              <span v-if="row.deadline" >{{ formatTime(row.deadline) }}</span>
+              <span v-else class="text-muted">—</span>
+            </template>
           </el-table-column>
           <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
@@ -162,12 +174,18 @@
         <div class="list-toolbar">
           <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchEndorsements" />
         </div>
-        <el-table border :data="endorsements" stripe v-loading="endorsementLoading" @row-click="(row: any) => router.push({ name: 'EndorseDetail', params: { id: row.id } })" style="cursor:pointer">
+        <el-table border :data="endorsements" stripe v-loading="endorsementLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'EndorseDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
           <el-table-column prop="node_name" label="节点" min-width="100" />
           <el-table-column prop="created_at" label="创建时间" min-width="140" :formatter="(r: any) => formatTime(r.created_at)" />
           <el-table-column label="轮次" min-width="48">
             <template #default="{ row }"><span v-if="row.round > 1" class="round-tag">#{{ row.round }}</span></template>
+          </el-table-column>
+          <el-table-column label="截止时间" min-width="120">
+            <template #default="{ row }">
+              <span v-if="row.deadline">{{ formatTime(row.deadline) }}</span>
+              <span v-else class="text-muted">—</span>
+            </template>
           </el-table-column>
           <el-table-column label="状态" min-width="64">
             <template #default="{ row }">
@@ -353,6 +371,13 @@ const userStore = useUserStore()
 const notifyStore = useNotificationStore()
 
 const isManager = computed(() => userStore.isManager)
+
+/** 逾期/临期行标色（与 index 卡点追踪一致） */
+function deadlineRowClass({ row }: any): string {
+  if (row?.is_overdue) return 'r--red'
+  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
+  return ''
+}
 
 /** 顶层视图类型：项目 / 方案 */
 const viewType = ref<'project' | 'proposal'>('project')
@@ -581,6 +606,7 @@ onMounted(() => {
   fetchTasks()
   fetchChecks()
   fetchApprovals()
+  fetchEndorsements()
   startAutoRefresh()
 })
 
@@ -668,6 +694,7 @@ watch(propActiveTab, (tab) => {
 .list-toolbar { display: flex; gap: 12px; margin-bottom: 16px; }
 
 .text-danger { color: var(--el-color-danger); font-weight: 500; }
+.text-muted { color: var(--el-text-color-placeholder); }
 
 .pri-tag {
   font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
@@ -679,4 +706,10 @@ watch(propActiveTab, (tab) => {
 
 /* 分页 */
 .list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
+</style>
+
+<style lang="scss">
+/* 逾期/临期行背景色（非 scoped 才能覆盖 el-table 行样式） */
+.r--red td { background: #fef0f0 !important; }
+.r--yel td { background: #fffaf0 !important; }
 </style>

@@ -1,6 +1,6 @@
 """认证 API —— 登录 / 个人信息 / 密码修改 / 签名上传"""
 
-from fastapi import APIRouter, Depends, Header, UploadFile, File
+from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload

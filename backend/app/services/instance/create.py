@@ -75,6 +75,15 @@ async def create_instance(
             )
 
     # ========== 4. 创建 FlowInstance ==========
+    # 实例名校验：禁止路径遍历字符，防止逃逸存储目录
+    instance_name = request.name.strip()
+    _illegal_chars = {"../", "..\\", "/", "\\", ":", "*", "?", "\"", "<", ">", "|"}
+    if not instance_name or any(c in instance_name for c in _illegal_chars):
+        raise AppException(
+            ErrorCode.BAD_REQUEST,
+            f"实例名称不能为空或包含特殊字符（{' '.join(sorted(_illegal_chars))}）",
+        )
+
     priority = request.priority
     if priority not in ("urgent", "high", "normal", "low"):
         priority = "normal"
@@ -83,7 +92,7 @@ async def create_instance(
         difficulty = "1"
 
     instance = FlowInstance(
-        name=request.name.strip(),
+        name=instance_name,
         description=request.description,
         template_id=request.template_id,
         template_name=tpl.name,

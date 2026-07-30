@@ -58,7 +58,9 @@ export interface MyPendingItem {
   instance_name: string
   node_name: string
   priority: string       // urgent / high / normal / low
-  deadline: string | null  // ISO 格式截止时间
+  deadline: string | null       // ISO 格式截止时间
+  is_overdue: boolean            // 是否逾期
+  days_remaining: number | null  // 剩余天数（负数=已逾期）
 }
 
 export interface DashboardData {

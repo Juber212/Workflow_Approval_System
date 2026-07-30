@@ -75,7 +75,9 @@ class MyPendingItem(BaseModel):
     instance_name: str      # 实例名称（项目/方案名）
     node_name: str          # 当前节点名称
     priority: str           # urgent / high / normal / low
-    deadline: str | None = None  # ISO 格式截止时间，null 表示无截止
+    deadline: str | None = None       # ISO 格式截止时间，null 表示无截止
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期）
 
 
 class DashboardData(BaseModel):

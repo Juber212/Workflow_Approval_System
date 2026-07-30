@@ -14,6 +14,9 @@ export interface EndorsementListItem {
   status: string
   is_end_node: boolean
   round: number
+  deadline: string | null       // 截止时间（ISO 格式）
+  is_overdue: boolean            // 是否逾期
+  days_remaining: number | null  // 剩余天数（负数=已逾期）
   created_at: string | null
 }
 
@@ -30,6 +33,9 @@ export interface EndorsementDetail {
   node_id: number
   node_name: string
   node_status: string
+  node_description: string | null     // 节点说明
+  time_limit_days: number | null      // 完成时限（工作日）
+  deadline: string | null             // 截止时间
   task_id: number | null
   endorser_id: number
   endorser_name: string
@@ -45,7 +51,8 @@ export interface EndorsementDetail {
   current_node_index: number
   total_nodes: number
   nodes: { id: number; name: string; is_start: boolean; is_end: boolean; status: string }[]
-  files: { id: number; original_name: string; file_size: number | null; round: number }[]
+  files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; round: number; node_id: number | null; node_name: string }[]
+  node_files: { id: number; original_name: string; mime_type: string | null; file_size: number | null; round: number }[]  // 仅本节点文件（签批用，后端过滤）
   checks: { id: number; checker_id: number; checker_name: string; status: string; opinion: string | null; decided_at: string | null }[]
   approvals: { id: number; approver_id: number; approver_name: string; status: string; opinion: string | null; signature_applied: boolean; decided_at: string | null }[]
   decided_at: string | null

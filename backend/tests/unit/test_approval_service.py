@@ -209,8 +209,9 @@ class TestReject:
             MagicMock(),                            # 2: clear_related delete
             MockResult(scalar_one=target_node),     # 3: SELECT target_node
             MockResult(scalars_all=[]),             # 4: SELECT target files（空）
-            MockResult(scalars_all=[]),             # 5: SELECT downstream nodes（空）
-            MagicMock(),                            # 6: terminate other approvals
+            MockResult(scalars_all=[]),             # 5: SELECT edges from target_node（边遍历）
+            MockResult(scalars_all=[]),             # 6: SELECT downstream nodes（空）
+            MagicMock(),                            # 7: terminate other approvals
         ]
 
         result = await reject(mock_db, approval_id=1, current_user_id=1,

@@ -23,6 +23,10 @@ class ProposalListItem(BaseModel):
     initiator_id: int
     initiator_name: str = ""
     status: str
+    deadline: str | None = None       # 当前活跃节点的截止时间
+    flow_deadline: str | None = None  # 流程截止时间（最后一个工作节点的截止时间）
+    is_overdue: bool = False           # 是否逾期
+    days_remaining: int | None = None  # 剩余天数（负数=已逾期，null=无截止）
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

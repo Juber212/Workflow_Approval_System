@@ -2,6 +2,7 @@
   <!-- 节点卡片 —— 折叠面板，展示节点文件/校验/审批详情 -->
   <div
     class="node-card"
+    :data-node-id="node.id"
     :class="{
       'is-active': isActive,
       'is-wait': isWait,
@@ -40,9 +41,9 @@
       <!-- 阶段进度指示（非开始/结束/跳过节点显示） -->
       <div v-if="!node.is_start && !node.is_end" class="stage-progress">
         <div class="stage-steps">
-          <template v-for="(label, idx) in ['处理', '校验', '审批', '完成']" :key="label">
+          <template v-for="(label, idx) in stageSteps" :key="label">
             <div class="stage-step" :class="stageClass(idx)">{{ label }}</div>
-            <div v-if="idx < 3" class="stage-line" :class="stageLineClass(idx)"></div>
+            <div v-if="idx < stageSteps.length - 1" class="stage-line" :class="stageLineClass(idx)"></div>
           </template>
         </div>
       </div>
@@ -87,7 +88,7 @@
           <!-- 有文件夹配置：按文件夹分组 -->
           <template v-if="hasFolderConfig">
             <div v-for="group in folderFileGroups" :key="group.name" class="folder-file-group">
-              <div class="node-col__title">📁 {{ group.name }}（{{ group.files.length }}）</div>
+              <div class="node-col__title"><el-icon :size="14"><Folder /></el-icon> {{ group.name }}（{{ group.files.length }}）</div>
               <div v-if="group.files.length === 0" class="node-col__empty">暂未上传文件</div>
               <div v-else class="file-list">
                 <div v-for="f in group.files" :key="f.id" class="file-row">
@@ -105,7 +106,7 @@
           </template>
           <!-- 无文件夹配置：原有平面展示 -->
           <template v-else>
-          <div class="node-col__title">📁 文件（{{ normalFiles.length }}）</div>
+          <div class="node-col__title"><el-icon :size="14"><Folder /></el-icon> 文件（{{ normalFiles.length }}）</div>
           <div v-if="normalFiles.length === 0" class="node-col__empty">暂未上传文件</div>
           <div v-else class="file-list">
             <div v-for="f in normalFiles" :key="f.id" class="file-row">
@@ -122,7 +123,7 @@
           </template>
           <!-- 补交文件 -->
           <template v-if="supplementFiles.length > 0">
-            <div class="node-col__title node-col__title--supplement">📎 补交文件（{{ supplementFiles.length }}）</div>
+            <div class="node-col__title node-col__title--supplement"><el-icon :size="14"><Upload /></el-icon> 补交文件（{{ supplementFiles.length }}）</div>
             <div class="file-list">
               <div v-for="f in supplementFiles" :key="f.id" class="file-row file-row--supplement">
                 <el-icon :size="14"><Document /></el-icon>
@@ -140,7 +141,7 @@
 
         <!-- 校验栏 -->
         <div class="node-col">
-          <div class="node-col__title">✓ 校验记录（{{ node.checks.length }}）</div>
+          <div class="node-col__title"><el-icon :size="14"><CircleCheck /></el-icon> 校验记录（{{ node.checks.length }}）</div>
           <div v-if="node.checks.length === 0" class="node-col__empty">暂无</div>
           <div v-else class="record-list">
             <div
@@ -162,7 +163,7 @@
 
         <!-- 审批栏 -->
         <div class="node-col">
-          <div class="node-col__title">📝 审批记录（{{ node.approvals.length }}）</div>
+          <div class="node-col__title"><el-icon :size="14"><EditPen /></el-icon> 审批记录（{{ node.approvals.length }}）</div>
           <div v-if="node.approvals.length === 0" class="node-col__empty">暂无</div>
           <div v-else class="record-list">
             <div
@@ -175,7 +176,6 @@
                 <span class="record-user">{{ a.approver_name }}</span>
                 <span class="record-status" :class="approvalStatusClass(a.status)">{{ approvalStatusLabel(a.status) }}</span>
                 <span class="record-round" v-if="a.round > 1">#{{ a.round }}</span>
-                <el-tag v-if="a.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
               </div>
               <div v-if="a.opinion" class="record-item__opinion">「{{ a.opinion }}」</div>
               <div class="record-item__time" v-if="a.decided_at">{{ formatTime(a.decided_at) }}</div>
@@ -183,7 +183,7 @@
           </div>
           <!-- 批准记录（难度4，审批子区块） -->
           <template v-if="node.endorser_id && node.endorsements && node.endorsements.length > 0">
-            <div class="node-col__title node-col__title--sub">🔏 批准记录（{{ node.endorsements.length }}）</div>
+            <div class="node-col__title node-col__title--sub"><el-icon :size="14"><Lock /></el-icon> 批准记录（{{ node.endorsements.length }}）</div>
             <div class="record-list">
               <div
                 v-for="e in node.endorsements"
@@ -195,7 +195,6 @@
                   <span class="record-user">{{ e.endorser_name }}</span>
                   <span class="record-status" :class="approvalStatusClass(e.status)">{{ endorsementStatusLabel(e.status) }}</span>
                   <span class="record-round" v-if="e.round > 1">#{{ e.round }}</span>
-                  <el-tag v-if="e.signature_applied" size="small" type="success" effect="plain">已签名</el-tag>
                 </div>
                 <div v-if="e.opinion" class="record-item__opinion">「{{ e.opinion }}」</div>
                 <div class="record-item__time" v-if="e.decided_at">{{ formatTime(e.decided_at) }}</div>
@@ -217,8 +216,8 @@
 
 <script setup lang="ts">
 /** 节点卡片 —— 折叠展示节点配置、文件、校验、审批详情 */
-import { ref, computed, watch } from 'vue'
-import { ArrowDown, Document } from '@element-plus/icons-vue'
+import { ref, computed, watch, nextTick } from 'vue'
+import { ArrowDown, Document, Folder, CircleCheck, EditPen, Upload, Lock } from '@element-plus/icons-vue'
 import type { DetailNodeInfo } from '@/api/instance'
 import { previewFile, downloadFile } from '@/api/task'
 import { formatTime, formatFileSize } from '@/utils/format'
@@ -230,6 +229,8 @@ const props = defineProps<{
   instanceStatus?: string
   /** 强制展开/折叠（null=默认行为，true=全部展开，false=全部折叠） */
   forceExpand?: boolean | null
+  /** 高亮节点 ID —— 匹配时强制展开并滚动可见（进度条点击联动） */
+  highlightNodeId?: number | null
 }>()
 
 defineEmits<{
@@ -254,7 +255,7 @@ const canSupplementNode = computed(() => {
 
 // ========== 折叠状态 ==========
 /** 活动状态集合 —— 这些状态的节点默认展开 */
-const ACTIVE_STATUSES = ['arrived', 'running', 'waiting_check', 'waiting_approval']
+const ACTIVE_STATUSES = ['arrived', 'running', 'waiting_check', 'waiting_approval', 'waiting_endorsement']
 
 /** 默认：仅展开进行中的节点（开始节点永远折叠，结束节点仅进行中时展开） */
 const expanded = ref(getInitialExpand())
@@ -273,6 +274,17 @@ watch(() => props.forceExpand, (val) => {
   else if (val === false) expanded.value = false
 })
 
+/** 进度条点击联动：匹配到高亮节点时展开并滚动到可视区域 */
+watch(() => props.highlightNodeId, (val) => {
+  if (val === props.node.id) {
+    expanded.value = true
+    nextTick(() => {
+      const el = document.querySelector(`[data-node-id="${props.node.id}"]`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+})
+
 // ========== 节点序号 ==========
 const indexLabel = computed(() => {
   const s = (props.node.status || '').toLowerCase()
@@ -289,6 +301,7 @@ const nodeStatusLabel = computed(() => {
     running: '处理中',
     waiting_check: '待校验',
     waiting_approval: '待审批',
+    waiting_endorsement: '待批准',
     finished: '已完成',
     rejected: '已驳回',
     terminated: '已终止',
@@ -303,6 +316,7 @@ const nodeStatusClass = computed(() => {
     running: 'status-tag--running',
     waiting_check: 'status-tag--running',
     waiting_approval: 'status-tag--running',
+    waiting_endorsement: 'status-tag--running',
     finished: 'status-tag--completed',
     rejected: 'status-tag--terminated',
     terminated: 'status-tag--terminated',
@@ -313,7 +327,7 @@ const nodeStatusClass = computed(() => {
 /** 当前活跃节点（有蓝色边框和阴影） */
 const isActive = computed(() => {
   const s = (props.node.status || '').toLowerCase()
-  return ['arrived', 'running', 'waiting_check', 'waiting_approval'].includes(s)
+  return ['arrived', 'running', 'waiting_check', 'waiting_approval', 'waiting_endorsement'].includes(s)
 })
 
 /** 等待中的节点（降低透明度） */
@@ -329,10 +343,22 @@ const isDone = computed(() => {
 })
 
 // ========== 人员名称 ==========
-/** 当前节点所处的阶段序号：-1=未到达, 0=处理, 1=校验, 2=审批, 3=完成 */
+/** 难度4（有批准人）阶段步骤 */
+const hasEndorsement = computed(() => !!props.node.endorser_id)
+
+/** 动态阶段步骤：难度4时在审批和完成之间插入「批准」 */
+const stageSteps = computed(() => {
+  if (hasEndorsement.value) return ['处理', '校验', '审批', '批准', '完成']
+  return ['处理', '校验', '审批', '完成']
+})
+
+/** 当前节点所处的阶段序号（动态适配 4/5 步） */
 const currentStep = computed(() => {
   const s = (props.node.status || '').toLowerCase()
-  if (s === 'finish' || s === 'finished') return 3
+  if (s === 'finish' || s === 'finished') {
+    return hasEndorsement.value ? 4 : 3  // 完成在末位
+  }
+  if (s === 'waiting_endorsement') return 3   // 仅在难度4出现，位于审批之后
   if (s === 'waiting_approval') return 2
   if (s === 'waiting_check') return 1
   if (s === 'arrived' || s === 'running') return 0
@@ -638,6 +664,7 @@ function formatDeadline(val: string): string {
   min-width: 0; /* 防止内容溢出 */
 
   &__title {
+    display: flex; align-items: center; gap: 4px;
     font-size: 12px;
     font-weight: 600;
     color: var(--el-text-color-secondary);

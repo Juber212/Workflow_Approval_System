@@ -93,7 +93,7 @@ async def supplement_files(
     os.makedirs(archive_dir, exist_ok=True)
 
     for upload_file_obj in files:
-        # 5a. 校验文件类型
+        # 5a. 校验文件类型（Client MIME 粗筛）
         if upload_file_obj.content_type not in settings.allowed_mime_types_list:
             raise AppException(
                 ErrorCode.FILE_TYPE_UNSUPPORTED,
@@ -110,17 +110,38 @@ async def supplement_files(
                 f"文件大小超过限制（最大 50MB）: {upload_file_obj.filename}",
             )
 
-        # 5c. 流式写入磁盘（分块读 + 写，避免大文件全量加载）
+        # 5c. 魔数校验（防伪造 Content-Type，与 file_service.py 一致）
+        import filetype
+        ext = os.path.splitext(upload_file_obj.filename or "file")[1].lower()
+        OFFICE_EXTS = {".doc", ".docx", ".xls", ".xlsx", ".pdf", ".png", ".jpg", ".jpeg"}
+        if ext not in OFFICE_EXTS:
+            header = upload_file_obj.file.read(8192)
+            upload_file_obj.file.seek(0)
+            detected = filetype.guess(header)
+            if detected is None:
+                if ext not in (".txt", ".csv", ".json", ".xml"):
+                    raise AppException(
+                        ErrorCode.FILE_TYPE_UNSUPPORTED,
+                        f"无法识别文件类型: {upload_file_obj.filename}，请上传支持的格式",
+                    )
+            elif detected.mime not in settings.allowed_mime_types_list:
+                raise AppException(
+                    ErrorCode.FILE_TYPE_UNSUPPORTED,
+                    f"不支持的文件类型: {detected.mime}（检测到真实类型与声明不符）",
+                )
+
+        # 5d. 流式写入磁盘（分块读 + 写，避免大文件全量加载）
         ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""
         stored_name = f"{uuid.uuid4().hex}{ext}"
         file_path = os.path.join(archive_dir, stored_name)
 
-        with open(file_path, "wb") as f:
+        import aiofiles
+        async with aiofiles.open(file_path, "wb") as f:
             while True:
                 chunk = upload_file_obj.file.read(64 * 1024)  # 64KB 分块
                 if not chunk:
                     break
-                f.write(chunk)
+                await f.write(chunk)
 
         # 5d. 创建 File 记录（task_id=NULL、upload_type=supplement）
         file_record = File(
@@ -162,6 +183,7 @@ async def supplement_files(
         operator_id=current_user.id,
         node_id=node_id,
         operation_type="file_supplement",
+        round=node.round,  # 记录当前节点轮次
         description=f"补交了 {len(file_records)} 个文件至节点「{node.name}」",
         detail={
             "node_name": node.name,

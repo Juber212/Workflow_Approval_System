@@ -62,7 +62,7 @@
     <!-- 方案列表 -->
     <div class="card">
       <div class="card__body" style="padding:0">
-        <el-table border :data="proposals" stripe v-loading="loading" @row-click="handleRowClick" style="cursor:pointer">
+        <el-table border :data="proposals" stripe v-loading="loading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="handleRowClick" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="160">
             <template #default="{ row }"><span class="inst-name">{{ row.name }}</span></template>
           </el-table-column>
@@ -71,6 +71,11 @@
           <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip />
           <el-table-column prop="created_at" label="发起时间" min-width="140">
             <template #default="{ row }"><span class="num">{{ formatTime(row.created_at) }}</span></template>
+          </el-table-column>
+          <el-table-column label="截止时间" min-width="140">
+            <template #default="{ row }">
+              <span class="num">{{ row.flow_deadline ? formatTime(row.flow_deadline) : '-' }}</span>
+            </template>
           </el-table-column>
           <el-table-column label="状态" min-width="80">
             <template #default="{ row }">
@@ -126,6 +131,13 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.isAdmin)
+
+/** 逾期/临期行标色 */
+function deadlineRowClass({ row }: any): string {
+  if (row?.is_overdue) return 'r--red'
+  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
+  return ''
+}
 
 // ========== 组织卡片 ==========
 const propOrgs = ref<ProposalOrgCardItem[]>([])
@@ -331,4 +343,10 @@ async function handlePermanentDelete(row: ProposalListItem) {
 
 .list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .num { font-variant-numeric: tabular-nums; }
+</style>
+
+<style lang="scss">
+/* 逾期/临期行背景色（非 scoped 才能覆盖 el-table） */
+.r--red td { background: #fef0f0 !important; }
+.r--yel td { background: #fffaf0 !important; }
 </style>

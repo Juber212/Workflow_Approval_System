@@ -26,11 +26,20 @@
         </div>
       </div>
 
-      <!-- 节点信息 -->
+      <!-- 节点信息 —— 4 栏紧凑布局 -->
       <div class="card">
         <div class="card__header">节点信息</div>
         <div class="card__body">
+          <div v-if="detail.node_description" class="node-desc">{{ detail.node_description }}</div>
           <div class="info-grid">
+            <div class="info-grid__item">
+              <div class="k">完成时限</div>
+              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }}</div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">截止时间</div>
+              <div class="v">{{ formatTime(detail.deadline) || '—' }}</div>
+            </div>
             <div class="info-grid__item">
               <div class="k">发起人</div>
               <div class="v">{{ detail.initiator_name }}</div>
@@ -39,6 +48,12 @@
               <div class="k">优先级</div>
               <div class="v">
                 <span class="pri-tag" :class="'pri--' + detail.priority">{{ priLabel(detail.priority) }}</span>
+              </div>
+            </div>
+            <div class="info-grid__item">
+              <div class="k">难度等级</div>
+              <div class="v">
+                <span class="diff-badge" :class="'diff--' + detail.difficulty">{{ detail.difficulty }}级</span>
               </div>
             </div>
             <div class="info-grid__item">
@@ -51,6 +66,10 @@
               <div class="k">节点进度</div>
               <div class="v">{{ detail.current_node_index }} / {{ detail.total_nodes }}</div>
             </div>
+            <div class="info-grid__item">
+              <div class="k">当前轮次</div>
+              <div class="v">#{{ detail.round }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -61,18 +80,47 @@
         <div class="card__body">{{ detail.assignee_note }}</div>
       </div>
 
-      <!-- 文件列表 -->
-      <div class="card">
-        <div class="card__header">节点文件（{{ detail.files.length }}）</div>
+      <!-- 本节点文件 -->
+      <div class="card" v-if="currentNodeFiles.length > 0">
+        <div class="card__header">本节点文件（{{ currentNodeFiles.length }}）<el-tag size="small" type="primary" effect="plain" style="margin-left:6px">当前节点</el-tag></div>
         <div class="card__body">
-          <div v-if="detail.files.length === 0" class="empty-hint">暂无文件</div>
-          <div v-for="f in detail.files" :key="f.id" class="file-row">
+          <div v-for="f in currentNodeFiles" :key="f.id" class="file-row">
             <span>{{ f.original_name }}</span>
             <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
             <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
             <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
           </div>
         </div>
+      </div>
+
+      <!-- 历史节点文件（默认折叠） -->
+      <div class="card" v-if="historyFileGroups.length > 0">
+        <div class="card__header" style="cursor:pointer" @click="showHistoryFiles = !showHistoryFiles">
+          <span style="display:flex;align-items:center;gap:6px">
+            历史节点文件（{{ historyFileTotal }}）
+            <el-icon :size="14" style="transition:transform 0.2s" :style="{ transform: showHistoryFiles ? 'rotate(90deg)' : 'rotate(0deg)' }"><ArrowRight /></el-icon>
+          </span>
+        </div>
+        <div class="card__body" v-show="showHistoryFiles">
+          <div v-for="group in historyFileGroups" :key="group.nodeName" class="file-group">
+            <div class="file-group__header">
+              <span class="file-group__node-name">{{ group.nodeName }}</span>
+              <span class="file-group__count">{{ group.files.length }} 个文件</span>
+            </div>
+            <div v-for="f in group.files" :key="f.id" class="file-row">
+              <span>{{ f.original_name }}</span>
+              <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
+              <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+              <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 无文件兜底 -->
+      <div class="card" v-if="detail.files.length === 0">
+        <div class="card__header">节点文件</div>
+        <div class="card__body"><div class="empty-hint">暂无文件</div></div>
       </div>
 
       <!-- 校验进度 -->
@@ -121,6 +169,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowRight } from '@element-plus/icons-vue'
 import { getToken } from '@/api/request'
 import { getCheckDetail, passCheck, returnCheck, type CheckDetail } from '@/api/check'
 import { previewFile, downloadFile } from '@/api/task'
@@ -141,6 +190,27 @@ const detail = ref<CheckDetail | null>(null)
 const opinion = ref('')
 const passing = ref(false)
 const returning = ref(false)
+const showHistoryFiles = ref(false)
+
+/** 本节点文件（后端 node_files 已过滤，直接使用） */
+const currentNodeFiles = computed(() => {
+  if (!detail.value) return []
+  return detail.value.node_files as CheckDetail['files']
+})
+
+/** 历史节点文件（按节点分组） */
+const historyFileGroups = computed(() => {
+  if (!detail.value) return []
+  const map = new Map<string, { nodeName: string; files: CheckDetail['files'] }>()
+  for (const f of detail.value.files) {
+    if (f.node_id === detail.value!.node_id) continue
+    const key = f.node_id ? String(f.node_id) : '_unknown'
+    if (!map.has(key)) map.set(key, { nodeName: (f as any).node_name || '未知节点', files: [] })
+    map.get(key)!.files.push(f)
+  }
+  return [...map.values()]
+})
+const historyFileTotal = computed(() => historyFileGroups.value.reduce((s, g) => s + g.files.length, 0))
 
 // 签批弹框
 const showSignatureDialog = ref(false)
@@ -152,7 +222,7 @@ const sigSlots = ref<SignatureSlot[] | null>(null)
 校验时文件已由负责人提交时转换为 PDF。 */
 const pdfFiles = computed(() => {
   if (!detail.value) return []
-  return (detail.value.files as any[])
+  return (detail.value.node_files as any[])
     .filter(f => f.mime_type === 'application/pdf' || (f.original_name || '').toLowerCase().endsWith('.pdf'))
     .map(f => ({
       file_id: (f as any).id,
@@ -262,10 +332,29 @@ async function handleReturn() {
   &:hover { text-decoration: underline; }
 }
 
+.node-desc {
+  font-size: 13px; color: var(--el-text-color-secondary);
+  padding: 8px 12px; background: var(--el-bg-color-page);
+  border-radius: 6px; margin-bottom: 12px; line-height: 1.6;
+}
+
 .info-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;
-  .k { color: var(--el-text-color-secondary); margin-bottom: 2px; font-size: 12px; }
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px 12px; font-size: 14px;
+  .k { color: var(--el-text-color-secondary); margin-bottom: 4px; font-size: 12px; }
   .v { color: var(--el-text-color-primary); font-weight: 500; }
+}
+
+/* 文件分组 */
+.file-group {
+  margin-bottom: 12px;
+  &:last-child { margin-bottom: 0; }
+  &__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0; margin-bottom: 4px;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+  }
+  &__node-name { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); }
+  &__count { font-size: 12px; color: var(--el-text-color-secondary); margin-left: auto; }
 }
 
 .file-row { display: flex; align-items: center; gap: 10px; padding: 4px 8px; background: var(--el-bg-color-page); border-radius: 4px; margin-bottom: 4px; font-size: 13px; }
@@ -274,6 +363,15 @@ async function handleReturn() {
 .progress-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
 .opinion { color: var(--el-text-color-secondary); font-size: 12px; }
 .actions-bar { display: flex; gap: 12px; margin-top: 12px; }
+
+/* 难度 badge */
+.diff-badge {
+  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
+  &.diff--3 { color: #fff; background: var(--el-color-warning); }
+  &.diff--2 { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
+  &.diff--1 { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
 
 .pri-tag {
   font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
