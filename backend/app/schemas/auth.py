@@ -31,6 +31,7 @@ class UserInfoResponse(BaseModel):
     organization_id: int | None = None
     organization_name: str | None = None
     has_signature: bool = False  # 是否已上传签名图片
+    must_change_password: bool = False  # 首次登录是否需要强制修改密码
 
 
 class ChangePasswordRequest(BaseModel):

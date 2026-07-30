@@ -54,6 +54,9 @@ function showErrorOnce(msg: string): void {
   ElMessage.error(msg)
 }
 
+// 401 跳转守卫 —— 防止并发 401 响应触发多次跳转
+let _isRedirecting = false
+
 /** 响应拦截器 —— 统一错误处理、401 跳转登录 */
 request.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -67,9 +70,12 @@ request.interceptors.response.use(
       // 401 未认证 → 跳转登录（登录接口自身的 401 不跳转，取后端中文消息）
       if (status === 401) {
         const isLoginRequest = error.config?.url?.includes('/auth/login')
-        if (!isLoginRequest) {
+        if (!isLoginRequest && !_isRedirecting) {
+          _isRedirecting = true
           localStorage.removeItem('token')
-          window.location.href = '/login'
+          // 携带当前页面路径，登录成功后恢复
+          const redirect = encodeURIComponent(window.location.pathname + window.location.search)
+          window.location.href = `/login?redirect=${redirect}`
         }
         // 用后端返回的中文消息，避免 Axios 英文 error message
         const msg = data?.message || '认证失败'

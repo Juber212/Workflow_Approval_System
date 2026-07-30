@@ -147,7 +147,8 @@ storage/archive/{实例名称}/
 - ✅ 第四轮全栈深度审计：5 代理并行扫描 100+ 文件，修复致命 6 + 高危 10 + 中危 15，共 31 项（Phase 15）
 - ✅ 数据库隔离级别加固：READ COMMITTED 防 fork-join 并发竞态
 - ✅ 前后端字段对齐：NodeOverride 签名字段 / template type / endorsements 等
-- - [ ] 剩余低危 11 项按需修复
+- ✅ 第五轮架构增强：JWT 黑名单（Redis DB 2）+ must_change_password 前后端双重拦截 + 401 跳转状态保持 + 低危项清零（Phase 16）
+- - [ ] 中危项按需修复
 
 **状态：可部署上线**
 

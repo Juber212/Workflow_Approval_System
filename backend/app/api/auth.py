@@ -97,13 +97,20 @@ async def get_me(
             organization_id=user.organization_id,
             organization_name=user.organization.name if user.organization else None,
             has_signature=user.signature_image is not None,
+            must_change_password=user.must_change_password,
         ).model_dump()
     )
 
 
 @router.post("/logout")
 async def logout(current_user: CurrentUser = Depends(get_current_active_user)):
-    """退出登录 —— V1 客户端删除 Token 即可，服务端不做黑名单"""
+    """退出登录 —— 将 Token 加入 Redis 黑名单，使其即时失效"""
+    # 计算 Token 剩余有效时间，加入黑名单（Redis TTL 自动过期清理）
+    import time as _time
+    remaining = current_user.iat + settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 - int(_time.time())
+    if remaining > 0 and current_user.jti:
+        from app.core.token_blacklist import add_to_blacklist
+        await add_to_blacklist(current_user.jti, remaining)
     return ApiResponse.ok({"message": "退出成功"})
 
 
@@ -265,9 +272,10 @@ async def upload_signature(
         # 保存为 PNG，保留 RGBA 透明通道
         img.save(file_path, "PNG", optimize=True)
     except Exception:
-        # 压缩失败则直接保存原始文件
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        # 压缩失败则直接保存原始文件（异步写入，避免阻塞事件循环）
+        import aiofiles
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(contents)
 
     # 更新数据库
     user.signature_image = file_path

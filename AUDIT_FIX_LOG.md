@@ -605,3 +605,42 @@
 supplement_files 同步 I/O / create 目录事务内创建 / 401 缺 guard flag / PresetEditor+ChangePersonnelDialog 缺卸载守卫 / TaskDetail addEventListener {once:true} / _DEFAULT_MESSAGES 缺条目等 —— 均不影响正常使用，按需后续修复。
 
 - **验证**: pytest 190/190 ✅, vue-tsc 0 errors ✅
+
+---
+
+## Phase 16 — 第五轮架构增强：JWT 黑名单 + 强制改密 + 401 状态保持 + 低危清零（2026-07-30）
+
+> 3 项架构改动 + 低危项清零，涉及 13 个文件。
+
+### 🔐 JWT Token 黑名单（Redis DB 2）
+
+| # | 文件 | 修复 |
+|---|------|------|
+| 1 | `core/security.py` | `create_access_token` 自动注入 `jti`（uuid4）+ `iat`（Unix 时间戳） |
+| 2 | `core/redis.py` | 新增 DB 2 连接（`get_token_blacklist_redis` / `close_token_blacklist_redis`） |
+| 3 | `core/token_blacklist.py`（新） | `add_to_blacklist(jti, ttl)` / `is_blacklisted(jti)` + `TokenBlacklistMiddleware` |
+| 4 | `api/auth.py` | logout 端点：计算剩余 TTL → `add_to_blacklist` |
+| 5 | `api/deps.py` | `CurrentUser` 新增 `jti`、`iat` 字段 |
+| 6 | `main.py` | 注册中间件 + lifespan 关闭连接 |
+
+### 🔒 must_change_password 强制改密
+
+| # | 文件 | 修复 |
+|---|------|------|
+| 7 | `core/auth_middleware.py`（新） | `MustChangePasswordMiddleware`：白名单路径放行，其余查 DB `must_change_password` → 40310 |
+| 8 | `core/error_codes.py` | 新增 `MUST_CHANGE_PASSWORD = 40310` |
+| 9 | `api/auth.py` | `/auth/me` 返回 `must_change_password` |
+| 10 | `schemas/auth.py` | `UserInfoResponse` 新增 `must_change_password` 字段 |
+| 11 | `router/guards.ts` | 路由守卫：`must_change_password=True` → 重定向 `/login?redirect=...` |
+| 12 | `stores/user.ts` | `logout()` / `clearToken()` 调用 `notificationStore.clearAll()` |
+| 13 | `api/auth.ts` | `getMeApi` 返回类型补 `must_change_password` |
+
+### 🔗 401 状态保持 + 低危
+
+| # | 文件 | 修复 |
+|---|------|------|
+| 14 | `api/request.ts` | 401 跳转带 `redirect` 参数 + `_isRedirecting` 防并发重复跳转 |
+| 15 | `api/auth.py` | 签名回退路径 `open()` → `aiofiles.open()` |
+| 16 | `api/templates.py` | 文件模板上传 `open()` → `aiofiles.open()` |
+
+- **验证**: pytest 190/190 ✅, vue-tsc 0 errors ✅

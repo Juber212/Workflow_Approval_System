@@ -20,6 +20,8 @@ class CurrentUser:
         self.username: str = payload.get("username", "")
         self.roles: list[str] = payload.get("roles", [])
         self.organization_id: int | None = payload.get("org_id")
+        self.jti: str = payload.get("jti", "")  # JWT 唯一 ID，用于黑名单吊销
+        self.iat: int = payload.get("iat", 0)   # 签发时间（Unix 时间戳）
 
     def has_role(self, role_code: str) -> bool:
         """检查是否拥有指定角色"""

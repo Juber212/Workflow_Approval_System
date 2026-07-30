@@ -40,6 +40,9 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     localStorage.removeItem('token')
+    // 清除通知计数，避免下一个登录用户看到残留数据
+    const { useNotificationStore } = await import('@/stores/notification')
+    useNotificationStore().clearAll()
   }
 
   /** 清除登录态（不调 API，用于 Token 过期等场景） */
@@ -47,6 +50,8 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     localStorage.removeItem('token')
+    // 清除通知计数
+    import('@/stores/notification').then(m => m.useNotificationStore().clearAll())
   }
 
   return { token, userInfo, isLoggedIn, isManager, isAdmin, login, fetchUserInfo, logout, clearToken }

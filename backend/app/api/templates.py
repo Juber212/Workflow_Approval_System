@@ -583,8 +583,9 @@ async def admin_upload_document_template(
     final_type = ext_stripped
     safe_name = f"org{organization_id}_{uuid.uuid4().hex[:8]}{ext}"
     file_path = os.path.join(upload_dir, safe_name)
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    import aiofiles
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(contents)
 
     # 旧版 .doc 转换
     final_path = file_path

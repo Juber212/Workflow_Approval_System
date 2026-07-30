@@ -12,6 +12,8 @@ from app.core.logging import setup_logging
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.token_blacklist import TokenBlacklistMiddleware
+from app.core.auth_middleware import MustChangePasswordMiddleware
 from app.schemas.common import ApiResponse
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
@@ -57,8 +59,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # 关闭桥接器
+    # 关闭桥接器 + Token 黑名单 Redis 连接
     await stop_bridge()
+    from app.core.redis import close_token_blacklist_redis
+    await close_token_blacklist_redis()
     # 关闭时主动释放数据库连接池，避免事件循环关闭后 aiomysql 清理报错
     await engine.dispose()
 
@@ -82,6 +86,12 @@ app.add_middleware(
 
 # API 限流中间件（CORS 之后加载，确保跨域请求也能被限流）
 app.add_middleware(RateLimitMiddleware)
+
+# Token 黑名单中间件（限流之后，拦截已吊销的 JWT）
+app.add_middleware(TokenBlacklistMiddleware)
+
+# 强制改密码中间件（黑名单之后，拦截 must_change_password 用户）
+app.add_middleware(MustChangePasswordMiddleware)
 
 
 # ================= 全局异常处理器 =================

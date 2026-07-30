@@ -37,6 +37,7 @@ export async function getMeApi(): Promise<{
   organization_id: number | null
   organization_name: string | null
   has_signature: boolean
+  must_change_password: boolean
 }> {
   const res = await request.get('/auth/me')
   return res.data

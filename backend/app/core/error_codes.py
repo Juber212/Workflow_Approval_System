@@ -25,6 +25,7 @@ class ErrorCode(IntEnum):
     NOT_ASSIGNEE = 40302        # 预留（Service 层可替换泛型 FORBIDDEN）
     NOT_APPROVER = 40303        # 预留（Service 层可替换泛型 FORBIDDEN）
     NOT_CHECKER = 40304         # 预留（Service 层可替换泛型 FORBIDDEN）
+    MUST_CHANGE_PASSWORD = 40310  # 首次登录/重置密码后必须修改密码
 
     # 资源冲突 (409xx)
     CONFLICT = 40900

@@ -1,6 +1,8 @@
 """安全工具：JWT Token 生成/校验 + 密码哈希 + 密码强度校验"""
 
 import re
+import uuid
+import time as _time
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -37,12 +39,19 @@ def validate_password_strength(password: str, username: str) -> None:
 
 
 def create_access_token(data: dict, expires_minutes: int | None = None) -> str:
-    """生成 JWT Access Token"""
+    """生成 JWT Access Token，自动注入 jti（唯一ID）和 iat（签发时间）
+
+    jti 用于登出/禁用时的 Token 黑名单机制（Redis SET + TTL）。
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "iat": int(_time.time()),           # 签发时间（Unix 时间戳）
+        "jti": uuid.uuid4().hex,            # JWT 唯一 ID，用于黑名单
+    })
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 

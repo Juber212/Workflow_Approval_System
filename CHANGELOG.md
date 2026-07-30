@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-07-30 — 第五轮架构增强：JWT 黑名单 + 强制改密 + 401 状态保持 + 低危清零（Phase 16）
+
+> 3 项架构改动 + 低危项清零，部署前一次性修完。
+
+### 🔐 JWT Token 黑名单（Redis DB 2）
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 1 | `create_access_token` 自动注入 `jti`（uuid）+ `iat`（时间戳），支持 Token 级吊销 | `core/security.py` |
+| 2 | Redis DB 2 连接管理（Token 黑名单专用，惰性单例） | `core/redis.py` |
+| 3 | 黑名单增删查 + `TokenBlacklistMiddleware` 中间件（白名单路径放行，其余检查 jti） | `core/token_blacklist.py`（新） |
+| 4 | 登出端点将 Token 加入黑名单（TTL = 剩余有效时间，自动过期） | `api/auth.py` |
+| 5 | 中间件注册 + lifespan 清理 | `main.py` |
+
+### 🔒 must_change_password 强制改密（前后端双重拦截）
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 6 | `MustChangePasswordMiddleware` 中间件 —— 白名单路径（登录/改密/登出/me/文档）放行，其余查询 DB `must_change_password` → 403 | `core/auth_middleware.py`（新） |
+| 7 | 错误码 `MUST_CHANGE_PASSWORD = 40310` | `core/error_codes.py` |
+| 8 | `/auth/me` 响应新增 `must_change_password` 字段 | `api/auth.py`, `schemas/auth.py` |
+| 9 | 路由守卫：`must_change_password=True` 时非登录页 → 重定向登录（前端兜底） | `router/guards.ts` |
+| 10 | `userStore.logout()` / `clearToken()` 同步清 `notificationStore`，防数据残留 | `stores/user.ts` |
+| 11 | `getMeApi` 返回类型补 `must_change_password` | `api/auth.ts` |
+
+### 🔗 401 跳转状态保持
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 12 | 401 响应跳转登录页时携带 `?redirect=当前路径`，登录后恢复 | `api/request.ts` |
+| 13 | 加 `_isRedirecting` 防并发 401 多次跳转 | `api/request.ts` |
+
+### 🧹 低危项清零
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 14 | 签名图片压缩失败回退路径 `open()` → `aiofiles.open()` | `api/auth.py` |
+| 15 | 文件模板上传 `open()` → `aiofiles.open()` | `api/templates.py` |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 190 | 全部通过，零回归 |
+| 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |
+
+---
+
 ## 2026-07-27 — 签批功能增强（Step 2~4）
 
 ### 新增功能

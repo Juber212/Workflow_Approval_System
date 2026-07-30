@@ -67,6 +67,14 @@ export function setupRouterGuards(router: Router) {
       }
     }
 
+    // ========== 4.5. 强制改密码检查 ==========
+    // 用户 must_change_password=True 时，只能访问登录页（登录页会弹出改密码弹窗）
+    // 后端中间件会同步拦截非白名单 API，此处为前端路由层兜底
+    if (userStore.userInfo?.must_change_password && to.path !== '/login') {
+      next({ path: '/login', query: { redirect: to.fullPath } })
+      return
+    }
+
     // ========== 5. 角色权限校验 ==========
     const requiredRoles = to.meta.roles as string[] | undefined
     if (requiredRoles && requiredRoles.length > 0) {
