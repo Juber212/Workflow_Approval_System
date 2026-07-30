@@ -741,8 +741,8 @@ async function handleDelete(id: number) {
 .row--priority-high td { background: #fef3e2 !important; }
 
 /* 状态行背景色 */
-.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
-.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
-.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
-.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
+tr.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
+tr.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
+tr.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
+tr.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
 </style>
