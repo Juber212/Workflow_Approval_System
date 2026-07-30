@@ -52,6 +52,19 @@
 
 ---
 
+## 2026-07-30 — 优先级行色对齐 + 已完成绿行 + 通知跳转修复
+
+### 修复
+
+| # | 问题 | 涉及文件 |
+|---|------|------|
+| 1 | 优先级「普通」和「低」徽标颜色几乎相同 → 对齐首页 dashboard 配色，蓝/灰区分明显 | `FlowManagement.vue`, `OrgHome.vue` |
+| 2 | 已完成/已终止流程无视觉区分 → 列表加绿色行底(`#eafaf1`)/灰色行底(`#f2f3f5`) | 4 个列表页 |
+| 3 | 全局斑马纹 `!important` 覆盖行标色 → 改为高特异性无 `!important`，行标色正常显示 | `common.scss` |
+| 4 | 任务处理页内点击通知跳转到另一个任务不生效 → 4 处理页加 `watch` 路由参数自动重载 | `TaskDetail.vue`, `CheckDetail.vue`, `ApprovalDetail.vue`, `EndorseDetail.vue` |
+
+---
+
 ## 2026-07-27 — 签批功能增强（Step 2~4）
 
 ### 新增功能
