@@ -539,3 +539,12 @@
 |------|:--:|------|
 | 后端全量 | 145 | 全部通过，零回归 |
 | 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |
+
+### Phase 15 修正（同日）
+
+| # | 修正内容 | 原因 |
+|---|------|------|
+| H5 | isolation_level 改用事件监听 `SET SESSION` | aiomysql 不支持 URL/connect_args 传参 |
+| M23 | 回滚：校验人和审批人恢复为必须同时配置 | 业务规则：节点标准流程含校验+审批两环节 |
+| F3 | 回滚：移除无校验+无审批人→Endorsement 跳过路径 | 双强制约束下此路径不应存在 |
+| — | FlowCanvas 边类型 polyline → bezier | UI 优化，不影响功能 |
