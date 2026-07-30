@@ -149,6 +149,8 @@ async def convert_all_files_job(ctx, file_ids: list[int], task_id: int, user_id:
     此任务在所有 convert_file_job 之后执行（带延迟），
     检查所有 file_ids 的状态，然后发布 Pub/Sub 消息。
     """
+    # 1. 先在 DB 事务内计算状态并 commit
+    message: dict | None = None
     async with async_session_factory() as db:
         try:
             files = (await db.execute(select(File).where(File.id.in_(file_ids)))).scalars().all()
@@ -180,22 +182,23 @@ async def convert_all_files_job(ctx, file_ids: list[int], task_id: int, user_id:
             }
             logger.info(f"[PDF转换] 全部完成: task_id={task_id}, status={status}")
 
-            # 发布 Redis Pub/Sub 消息（供 ws_bridge 转发到 WebSocket）
-            pubsub_redis = AsyncRedis.from_url(
-                get_pubsub_redis_url(),
-                encoding="utf-8",
-                decode_responses=True,
-            )
-            try:
-                await pubsub_redis.publish(
-                    f"conversion:user:{user_id}",
-                    json.dumps(message),
-                )
-            finally:
-                await pubsub_redis.close()
-
-            return message
-
         except Exception as e:
             logger.error(f"[PDF转换] 聚合检查异常: task_id={task_id}, err={e}", exc_info=True)
             return {"task_id": task_id, "status": "error", "error": str(e)[:200]}
+
+    # 2. DB 事务提交成功后，发送 Pub/Sub 通知前端（避免 commit 失败时前端已收到通知）
+    if message:
+        pubsub_redis = AsyncRedis.from_url(
+            get_pubsub_redis_url(),
+            encoding="utf-8",
+            decode_responses=True,
+        )
+        try:
+            await pubsub_redis.publish(
+                f"conversion:user:{user_id}",
+                json.dumps(message),
+            )
+        finally:
+            await pubsub_redis.close()
+
+    return message

@@ -54,7 +54,10 @@ async def pass_check(
     """校验通过 —— 全部通过后触发审批生成"""
     result = await check_service.pass_check(db, check_id, current_user.id, data.opinion, data.signatures)
     await db.commit()
-    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
+    # post-commit hook：commit 成功后才写入 PDF，避免磁盘与 DB 状态不一致
+    from app.services.pdf_signature import apply_signatures_after_commit
+    await apply_signatures_after_commit(result.get("_pending_sig_ids", []))
+    await send_refresh_signal(current_user.id)
     return ApiResponse.ok(result, message=result.get("message", "校验通过"))
 
 

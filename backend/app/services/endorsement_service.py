@@ -344,13 +344,8 @@ async def endorse(
     if inst is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联项目不存在")
 
-    # 7. 签名上PDF
-    if node.require_endorser_signature and sig_ids:
-        # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
-        # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
-        # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
-        from app.services.pdf_signature import apply_signatures_to_files
-        await apply_signatures_to_files(db, sig_ids)
+    # 7. 收集签名 ID（由 API 层在 commit 后统一写入 PDF）
+    _pending_signature_ids = sig_ids if (node.require_endorser_signature and sig_ids) else []
 
     e.signature_applied = True
 
@@ -376,7 +371,7 @@ async def endorse(
         node.completed_at = now
         inst.status = InstanceStatus.COMPLETED
         inst.completed_at = now
-        return {"message": "批准通过，项目已完成"}
+        return {"message": "批准通过，项目已完成", "_pending_sig_ids": _pending_signature_ids}
 
     # 10. 普通节点 → finished → 传播到下游
     node.status = InstanceNodeStatus.FINISHED
@@ -388,7 +383,7 @@ async def endorse(
         node.id, node.name, e.instance_id, node.id,
     )
     await propagate_from_node(db, e.instance_id, node.id)
-    return {"message": "批准通过，流程已推进到下一节点"}
+    return {"message": "批准通过，流程已推进到下一节点", "_pending_sig_ids": _pending_signature_ids}
 
 
 async def endorse_reject(

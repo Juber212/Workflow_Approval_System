@@ -414,8 +414,9 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     # ========== PDF 转换（并发 + 限流） ==========
     await _convert_files_to_pdf(task_id, node.round, db)
 
-    # ========== 负责人签批：即时写入 PDF ==========
+    # ========== 负责人签批（由 API 层 commit 后统一写入 PDF）==========
     _sig_ids: list[int] = []
+    _pending_sig_ids: list[int] = []  # post-commit hook 需要用到的签名 ID
     if data.signatures and node.require_assignee_signature:
         # 设置 signer_id 后再调用统一 helper
         for sig in data.signatures:
@@ -431,12 +432,8 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
             default_signature_page=node.signature_page,
         )
 
-        if _sig_ids:
-            # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
-            # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
-            # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
-            from app.services.pdf_signature import apply_signatures_to_files
-            await apply_signatures_to_files(db, _sig_ids)
+        # 收集签名 ID，由 API 层在 commit 后统一写入 PDF（post-commit hook）
+        _pending_sig_ids = list(_sig_ids) if _sig_ids else []
 
     # ========== 按 checkers 创建 CheckRecord ==========
     checkers = node.checkers or []
@@ -537,7 +534,7 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
         types=["task_assigned", "check_returned", "approval_rejected", "final_rejected"],
     )
 
-    return {"message": "任务已提交，等待校验" if checkers else "任务已提交，等待审批"}
+    return {"message": "任务已提交，等待校验" if checkers else "任务已提交，等待审批", "_pending_sig_ids": _pending_sig_ids}
 
 
 # ==================== 内部辅助函数 ====================

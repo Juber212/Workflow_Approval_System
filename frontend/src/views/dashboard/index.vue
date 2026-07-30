@@ -231,7 +231,7 @@ function deadlineRowClass({ row }: any): string {
 
 /** 点击待办行 → 跳转对应处理页 */
 function handleMyTaskClick(row: { type: string; id: number }) {
-  const routeMap: Record<string, string> = { task: 'TaskDetail', check: 'CheckDetail', approval: 'ApprovalDetail', endorse: 'EndorseDetail' }
+  const routeMap: Record<string, string> = { task: 'TaskDetail', check: 'CheckDetail', approval: 'ApprovalDetail', endorse: 'EndorseDetail', endorsement: 'EndorseDetail' }
   const routeName = routeMap[row.type]
   if (routeName) router.push({ name: routeName, params: { id: row.id } })
 }

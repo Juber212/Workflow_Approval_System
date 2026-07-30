@@ -62,7 +62,10 @@ async def approve(
         signature_page=data.signature_page,
     )
     await db.commit()
-    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
+    # post-commit hook：commit 成功后才写入 PDF，避免磁盘与 DB 状态不一致
+    from app.services.pdf_signature import apply_signatures_after_commit
+    await apply_signatures_after_commit(result.get("_pending_sig_ids", []))
+    await send_refresh_signal(current_user.id)
     return ApiResponse.ok(result, message=result.get("message", "审批通过"))
 
 

@@ -423,8 +423,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     if signature_page is not None:
         a.signature_page = signature_page
 
-    # 新版：多签名存入 signatures 表（暂不写 PDF，等全部审批通过后批量写入）
+    # 新版：多签名存入 signatures 表（暂不写 PDF，由 API 层 commit 后统一写入）
     sig_ids: list[int] = []
+    _pending_signature_ids: list[int] = []  # post-commit hook 需要用到的签名 ID
     if signatures:
         # 设置 signer_id 后再调用统一 helper
         for sig in signatures:
@@ -443,7 +444,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         if node is None:
             raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
         pdf_files = (await db.execute(
-            select(File).where(File.node_id == a.node_id).limit(1)
+            select(File).where(File.node_id == a.node_id, File.round == node.round).limit(1)  # 限定当前轮次
         )).scalars().all()
         if pdf_files:
             sig_record = Signature(
@@ -505,7 +506,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         )
         remaining = pending_apprs.scalars().all()
         if remaining:
-            return {"all_approved": False, "message": "审批通过，等待其他审批人"}
+            return {"all_approved": False, "message": "审批通过，等待其他审批人", "_pending_sig_ids": _pending_signature_ids}
 
     # 全部审批通过 → 标记当前节点的 Task 为 completed
     if a.task_id:
@@ -526,11 +527,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         )
         pending_sigs = pending_sigs_result.scalars().all()
         if pending_sigs:
-            # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
-            # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
-            # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
-            from app.services.pdf_signature import apply_signatures_to_files
-            await apply_signatures_to_files(db, [s.id for s in pending_sigs])
+            # 收集签名 ID，由 API 层在 commit 后统一写入 PDF（post-commit hook）
+            # 避免 PDF 文件修改在 DB 事务内 → 回滚后 PDF 与 DB 状态不一致
+            _pending_signature_ids = [s.id for s in pending_sigs]
 
         # 兼容旧版：标记 Approval 的旧签名字段
         await db.execute(
@@ -589,7 +588,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             link=f"/profile/endorse/{endorsement.id}",
         )
 
-        return {"all_approved": True, "waiting_endorsement": True, "message": "全部审批通过，等待批准人审核"}
+        return {"all_approved": True, "waiting_endorsement": True, "message": "全部审批通过，等待批准人审核", "_pending_sig_ids": _pending_signature_ids}
 
     # 普通节点 → finished → 传播到下游
     node.status = InstanceNodeStatus.FINISHED
@@ -598,7 +597,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
 
     # 推进下游节点
     await propagate_from_node(db, a.instance_id, node.id)
-    return {"all_approved": True, "message": "全部审批通过，流程已推进到下一节点"}
+    return {"all_approved": True, "message": "全部审批通过，流程已推进到下一节点", "_pending_sig_ids": _pending_signature_ids}
 
 
 async def reject(
@@ -735,8 +734,8 @@ async def reject(
 
         # ---- 通知：目标节点负责人，终审总驳回需重新处理 (#9) ----
 
-        new_task_id = new_task.id if (target_node.assignee_id and 'new_task' in dir()) else None
-        if target_node.assignee_id and new_task_id:
+        new_task_id = getattr(new_task, 'id', None) if target_node.assignee_id else None
+        if new_task_id:
             await create_notification(
                 db, user_id=target_node.assignee_id, type="final_rejected",
                 title="终审总驳回",

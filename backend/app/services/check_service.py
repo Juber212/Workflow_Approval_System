@@ -287,8 +287,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     c.opinion = opinion
     c.decided_at = now
 
-    # 保存签名记录到 signatures 表（暂不写 PDF，等全部校验通过后批量写入）
+    # 保存签名记录到 signatures 表（暂不写 PDF，由 API 层 commit 后统一写入）
     sig_ids: list[int] = []
+    _pending_signature_ids: list[int] = []  # post-commit hook 需要用到的签名 ID
     if signatures:
         # 设置 signer_id 后再调用统一 helper
         for sig in signatures:
@@ -339,11 +340,8 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             )
             all_checker_sigs = all_checker_sigs_result.scalars().all()
             if all_checker_sigs:
-                # ⚠️ PDF 文件修改在 DB 事务内执行：若后续 commit 失败，PDF 已修改但 DB 回滚
-                # 缓解措施：Signature.applied 标志由 DB 事务保护，回滚后自动恢复为 False
-                # TODO: 引入 post-commit hook（arq 任务队列）彻底解决 PDF 修改与 DB 事务解耦
-                from app.services.pdf_signature import apply_signatures_to_files
-                await apply_signatures_to_files(db, [s.id for s in all_checker_sigs])
+                # 收集签名 ID，由 API 层在 commit 后统一写入 PDF（post-commit hook）
+                _pending_signature_ids = [s.id for s in all_checker_sigs]
 
         # 推进到审批阶段
         task = (await db.execute(select(Task).where(Task.id == c.task_id))).scalar_one_or_none()
@@ -382,7 +380,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     link=f"/profile/endorse/{endorsement.id}",
                 )
                 await clear_related(db, user_id=current_user_id, types=["check_assigned"])
-                return {"all_passed": True, "message": "全部校验通过（无审批人），已进入批准阶段"}
+                return {"all_passed": True, "message": "全部校验通过（无审批人），已进入批准阶段", "_pending_sig_ids": _pending_signature_ids}
 
             # 无审批人且不需要批准 → 跳过审批，直接完成节点
             task.status = TaskStatus.COMPLETED
@@ -440,9 +438,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             db, user_id=current_user_id, types=["check_assigned"],
         )
 
-        return {"all_passed": True, "message": "全部校验通过，已进入审批阶段"}
+        return {"all_passed": True, "message": "全部校验通过，已进入审批阶段", "_pending_sig_ids": _pending_signature_ids}
 
-    return {"all_passed": False, "message": "校验通过，等待其他校验人"}
+    return {"all_passed": False, "message": "校验通过，等待其他校验人", "_pending_sig_ids": _pending_signature_ids}
 
 
 async def return_check(db: AsyncSession, check_id: int, current_user_id: int, opinion: str) -> dict:

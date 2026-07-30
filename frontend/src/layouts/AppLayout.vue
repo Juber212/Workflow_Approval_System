@@ -227,14 +227,15 @@ async function refreshUserInfoDetail() {
     userInfoDetail.value = data
     userStore.userInfo = toUserInfo(data)
   } catch {
-    if (userStore.userInfo) {
+    // 接口失败时不覆盖已有数据，避免签名状态等信息被错误置为 false
+    if (userStore.userInfo && !userInfoDetail.value) {
       userInfoDetail.value = {
         user_id: userStore.userInfo.id, username: userStore.userInfo.username,
         real_name: userStore.userInfo.real_name, email: userStore.userInfo.email,
         phone: userStore.userInfo.phone, roles: userStore.userInfo.roles,
         organization_id: userStore.userInfo.organization_id,
         organization_name: userStore.userInfo.organization_name,
-        has_signature: false,
+        has_signature: !!userStore.userInfo.signature_image,  // 从 store 中推断
       }
     }
   }

@@ -436,6 +436,26 @@ async def apply_signatures_to_files(
     return signed_count
 
 
+async def apply_signatures_after_commit(signature_ids: list[int]) -> None:
+    """事务提交后异步写入签名到 PDF（独立会话，失败不影响已提交的审批）
+
+    解决 PDF 文件修改在 DB 事务内执行的问题：
+    - 若 commit 失败 → 磁盘 PDF 不会残留半截修改
+    - 若 commit 成功但 PDF 写入失败 → Signature.applied 保持 False，可重试
+    """
+    if not signature_ids:
+        return
+    from app.core.database import async_session_factory
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        async with async_session_factory() as db:
+            await apply_signatures_to_files(db, signature_ids)
+            await db.commit()
+    except Exception as e:
+        logger.error("[签名] post-commit 签名写入失败（重试即可）: %s", e, exc_info=True)
+
+
 # ─── 中文日期字体查找 ────────────────────────────────────────────
 
 def _get_cjk_font_path() -> str | None:

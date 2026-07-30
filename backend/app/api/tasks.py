@@ -84,7 +84,10 @@ async def submit_task(
     """提交任务 —— PDF 转换 + 签批 + 生成校验/审批记录"""
     result = await task_service.submit_task(db, task_id, current_user.id, data)
     await db.commit()
-    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
+    # post-commit hook：commit 成功后才写入 PDF，避免磁盘与 DB 状态不一致
+    from app.services.pdf_signature import apply_signatures_after_commit
+    await apply_signatures_after_commit(result.get("_pending_sig_ids", []))
+    await send_refresh_signal(current_user.id)
     return ApiResponse.ok(message=result["message"])
 
 
