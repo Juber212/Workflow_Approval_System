@@ -93,8 +93,8 @@ const stepRefs: Record<number, HTMLElement> = {}
 const parallelRefs: Record<number, HTMLElement> = {}
 
 // ========== SVG 数据 ==========
-interface ForkData { height: number; srcDotY: number; nodeDotYs: number[] }
-interface JoinData { height: number; dstDotY: number; nodeDotYs: number[] }
+interface ForkData { height: number; srcDotY: number; nodeDotYs: number[]; marginTop: number }
+interface JoinData { height: number; dstDotY: number; nodeDotYs: number[]; marginTop: number }
 
 const forkData = ref<Record<number, ForkData>>({})
 const joinData = ref<Record<number, JoinData>>({})
@@ -175,61 +175,86 @@ onMounted(() => {
       (el as HTMLElement).style.marginTop = `${lineMargin + 13}px`
     })
 
-    // --- Step 3: 读 offsetTop，计算 SVG 数据 ---
+    // --- Step 3: 用 getBoundingClientRect 统一坐标系，计算 SVG 数据 + marginTop ---
+    const trackTop = trackRef.value!.getBoundingClientRect().top
     const fd: Record<number, ForkData> = {}
     const jd: Record<number, JoinData> = {}
+
+    /** 获取 track 坐标系中的圆心 Y（统一用 getBoundingClientRect + 真实圆点高度/2） */
+    const dotYInTrack = (stepEl: HTMLElement) => {
+      const dot = stepEl.querySelector<HTMLElement>('.step-dot')
+      const dotHeight = dot ? dot.offsetHeight : 28  // offsetHeight 含 border，比固定 +14 更准
+      return stepEl.getBoundingClientRect().top - trackTop + dotHeight / 2
+    }
 
     groups.forEach((group, gIdx) => {
       // Fork: 单节点 gIdx-1 → 并行组 gIdx
       if (gIdx > 0 && group.length > 1) {
-        const data = calcFork(gIdx)
+        const data = calcFork(gIdx, dotYInTrack)
         if (data) fd[gIdx] = data
       }
       // Join: 并行组 gIdx-1 → 单节点 gIdx
       if (gIdx > 0 && groups[gIdx - 1].length > 1) {
-        const data = calcJoin(gIdx)
+        const data = calcJoin(gIdx, dotYInTrack)
         if (data) jd[gIdx] = data
       }
     })
 
     forkData.value = fd
     joinData.value = jd
+
+    // --- Step 4: 给 SVG 元素设置 marginTop，对齐 viewBox 原点与 track 坐标系 ---
+    // SVG 在 DOM 中的顺序与 groups 中 gIdx>0 且有 fork/join 的组一一对应
+    const svgs = trackRef.value!.querySelectorAll<HTMLElement>('.conn-svg')
+    let svgIdx = 0
+    for (let g = 1; g < groups.length; g++) {
+      const isFork = groups[g].length > 1
+      const isJoin = groups[g - 1].length > 1
+      if (isFork || isJoin) {
+        const data = isFork ? fd[g] : jd[g]
+        if (data && svgIdx < svgs.length) {
+          svgs[svgIdx].style.marginTop = `${data.marginTop}px`
+        }
+        svgIdx++
+      }
+    }
   })
 })
 
-/** 计算 fork SVG 数据 */
-function calcFork(gIdx: number): ForkData | null {
+/** 计算 fork SVG 数据（所有 Y 坐标统一用 getBoundingClientRect → track 坐标系） */
+function calcFork(gIdx: number, dotY: (el: HTMLElement) => number): ForkData | null {
   const srcEl = stepRefs[gIdx - 1]
   const parEl = parallelRefs[gIdx]
   if (!srcEl || !parEl) return null
 
-  const srcDotY = srcEl.offsetTop + 14  // 源节点圆心
+  const srcDotY = dotY(srcEl)
   const nodeEls = parEl.querySelectorAll<HTMLElement>('.progress-step')
-  const nodeDotYs = Array.from(nodeEls).map(el => el.offsetTop + 14)
+  const nodeDotYs = Array.from(nodeEls).map(el => dotY(el))
 
   const allY = [srcDotY, ...nodeDotYs]
   const minY = Math.min(...allY)
   const maxY = Math.max(...allY)
   const pad = 10
   const height = maxY - minY + pad * 2
-  const offset = minY - pad
+  const offset = minY - pad                       // viewBox 原点在 track 中的 Y 位置
 
   return {
     height,
     srcDotY: srcDotY - offset,
     nodeDotYs: nodeDotYs.map(y => y - offset),
+    marginTop: offset,                            // SVG 顶部对齐到 track 的 offset 处
   }
 }
 
-/** 计算 join SVG 数据 */
-function calcJoin(gIdx: number): JoinData | null {
+/** 计算 join SVG 数据（所有 Y 坐标统一用 getBoundingClientRect → track 坐标系） */
+function calcJoin(gIdx: number, dotY: (el: HTMLElement) => number): JoinData | null {
   const dstEl = stepRefs[gIdx]
   const parEl = parallelRefs[gIdx - 1]
   if (!dstEl || !parEl) return null
 
-  const dstDotY = dstEl.offsetTop + 14  // 目标节点圆心
+  const dstDotY = dotY(dstEl)
   const nodeEls = parEl.querySelectorAll<HTMLElement>('.progress-step')
-  const nodeDotYs = Array.from(nodeEls).map(el => el.offsetTop + 14)
+  const nodeDotYs = Array.from(nodeEls).map(el => dotY(el))
 
   const allY = [dstDotY, ...nodeDotYs]
   const minY = Math.min(...allY)
@@ -242,6 +267,7 @@ function calcJoin(gIdx: number): JoinData | null {
     height,
     dstDotY: dstDotY - offset,
     nodeDotYs: nodeDotYs.map(y => y - offset),
+    marginTop: offset,                            // SVG 顶部对齐到 track 的 offset 处
   }
 }
 </script>

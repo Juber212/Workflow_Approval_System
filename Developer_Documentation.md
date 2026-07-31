@@ -30,6 +30,8 @@ Workflow_Approval_System/
 │   │   │   ├── token_blacklist.py   # TokenBlacklistMiddleware（JWT 黑名单，Redis DB 2）
 │   │   │   ├── rate_limit.py        # RateLimitMiddleware（API 三层限流）
 │   │   │   ├── redis.py             # Redis 连接管理（DB 0 ARQ / DB 1 PubSub / DB 2 黑名单）
+│   │   │   ├── seed.py              # 生产种子数据（角色/组织/管理员/系统配置）
+│   │   │   ├── seed_test_data.py    # 测试种子数据（22实例全边界覆盖，幂等可重复）
 │   │   │   └── ...
 │   ├── alembic/                # 数据库迁移（versions/ 下 20+ 个迁移文件）
 │   ├── tests/                  # 190 条测试（unit / integration / mysql）
@@ -128,6 +130,11 @@ npm run build
 cd backend
 pytest tests/ -v                 # Mock 测试（190 条，13s）
 pytest tests/mysql/ -v           # MySQL 真实数据库测试（需要 workflow_approval_test 库）
+
+# ── 测试数据（边界场景覆盖） ──
+cd backend
+python -m app.core.seed_test_data   # 写入 22 个测试实例（幂等，重复运行先清后插）
+# 仅清理测试数据：见脚本源码 cleanup_test_data() 或手动 DELETE WHERE name LIKE '[测试]%'
 
 # ── 数据库迁移 ──
 cd backend
