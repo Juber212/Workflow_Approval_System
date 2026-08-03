@@ -12,7 +12,7 @@ from app.services.designer_service import (
     save_design_data, add_node, update_node, delete_node,
     add_edge, delete_edge,
 )
-from app.models import FlowTemplate
+from app.models import FlowTemplate, TemplateNode
 
 from tests.conftest import MockResult
 
@@ -103,7 +103,7 @@ class TestNodeOperations:
         mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=None))
 
         with pytest.raises(AppException) as exc:
-            await delete_node(mock_db, node_id=999)
+            await delete_node(mock_db, template_id=1, node_id=999)
         assert exc.value.code == ErrorCode.NOT_FOUND
 
     @pytest.mark.asyncio
@@ -112,7 +112,59 @@ class TestNodeOperations:
         mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=None))
 
         with pytest.raises(AppException) as exc:
-            await update_node(mock_db, node_id=999, data={})
+            await update_node(mock_db, template_id=1, node_id=999, data={})
+        assert exc.value.code == ErrorCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_update_node_success(self, mock_db):
+        """节点属于当前模板 → 更新成功"""
+        node = TemplateNode(id=5, template_id=1, name="旧名")
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=node),  # 查询节点（id=5 AND template_id=1）→ 命中
+        ]
+
+        result = await update_node(mock_db, template_id=1, node_id=5, data={"name": "新名"})
+
+        assert result["name"] == "新名"
+        assert node.name == "新名"
+
+    @pytest.mark.asyncio
+    async def test_update_node_cross_template_not_found(self, mock_db):
+        """节点属于其他模板 → 按本模板查询无结果 → 404（防跨模板越权）"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=None),  # 查询（id=5 AND template_id=1）→ 无（该节点实际属于模板2）
+        ]
+
+        with pytest.raises(AppException) as exc:
+            await update_node(mock_db, template_id=1, node_id=5, data={"name": "x"})
+        assert exc.value.code == ErrorCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_delete_node_success(self, mock_db):
+        """节点属于当前模板且非系统节点 → 删除成功，关联连线清除"""
+        node = TemplateNode(id=5, template_id=1, name="工作节点", is_start=False, is_end=False)
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=node),  # 查询节点 → 命中
+            MagicMock(),                  # DELETE 关联连线
+        ]
+
+        await delete_node(mock_db, template_id=1, node_id=5)
+
+        mock_db.delete.assert_called_once_with(node)
+
+    @pytest.mark.asyncio
+    async def test_delete_node_cross_template_not_found(self, mock_db):
+        """节点属于其他模板 → 按本模板查询无结果 → 404（防跨模板越权）"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=None),  # 查询（id=5 AND template_id=1）→ 无
+        ]
+
+        with pytest.raises(AppException) as exc:
+            await delete_node(mock_db, template_id=1, node_id=5)
         assert exc.value.code == ErrorCode.NOT_FOUND
 
 

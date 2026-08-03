@@ -186,14 +186,19 @@ async def _create_node(db: AsyncSession, template_id: int, data: dict) -> Templa
     return node
 
 
-async def _update_node(db: AsyncSession, node_id: int, data: dict) -> None:
-    """更新已有节点"""
-    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one_or_none()
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, f"节点 ID={node_id} 不存在")
+def _apply_node_fields(node: TemplateNode, data: dict) -> None:
+    """批量写入节点可更新字段（供批量保存与单节点更新复用）"""
     for field in _NODE_UPDATABLE_FIELDS:
         if field in data:
             setattr(node, field, data[field])
+
+
+async def _update_node(db: AsyncSession, node_id: int, data: dict) -> None:
+    """更新已有节点（批量保存内部使用）"""
+    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, f"节点 ID={node_id} 不存在")
+    _apply_node_fields(node, data)
 
 
 async def _create_edge(db: AsyncSession, template_id: int, source_id: int, target_id: int, points: str | None = None) -> TemplateEdge:
@@ -278,9 +283,14 @@ async def add_node(db: AsyncSession, template_id: int, data: dict) -> dict:
     return {"id": node.id, "name": node.name, "position_x": node.position_x, "position_y": node.position_y}
 
 
-async def update_node(db: AsyncSession, node_id: int, data: dict) -> dict:
-    """更新单个节点"""
-    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one_or_none()
+async def update_node(db: AsyncSession, template_id: int, node_id: int, data: dict) -> dict:
+    """更新单个节点 —— 节点必须属于指定模板（防跨模板越权）"""
+    node = (await db.execute(
+        select(TemplateNode).where(
+            TemplateNode.id == node_id,
+            TemplateNode.template_id == template_id,
+        )
+    )).scalar_one_or_none()
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "节点不存在")
 
@@ -290,13 +300,19 @@ async def update_node(db: AsyncSession, node_id: int, data: dict) -> dict:
     if "is_end" in data and node.is_end != data["is_end"]:
         raise AppException(ErrorCode.FORBIDDEN, "结束节点不可变更类型")
 
-    await _update_node(db, node_id, data)
+    # 直接更新已命中的节点，避免二次查询
+    _apply_node_fields(node, data)
     return {"id": node.id, "name": data.get("name", node.name)}
 
 
-async def delete_node(db: AsyncSession, node_id: int) -> None:
-    """删除单个节点 —— 系统节点不可删除，关联连线自动清除"""
-    node = (await db.execute(select(TemplateNode).where(TemplateNode.id == node_id))).scalar_one_or_none()
+async def delete_node(db: AsyncSession, template_id: int, node_id: int) -> None:
+    """删除单个节点 —— 节点必须属于指定模板（防跨模板越权）；系统节点不可删除，关联连线自动清除"""
+    node = (await db.execute(
+        select(TemplateNode).where(
+            TemplateNode.id == node_id,
+            TemplateNode.template_id == template_id,
+        )
+    )).scalar_one_or_none()
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "节点不存在")
     if node.is_start or node.is_end:
@@ -304,7 +320,7 @@ async def delete_node(db: AsyncSession, node_id: int) -> None:
 
     await db.execute(
         delete(TemplateEdge).where(
-            TemplateEdge.template_id == node.template_id,
+            TemplateEdge.template_id == template_id,
             (TemplateEdge.source_node_id == node_id) | (TemplateEdge.target_node_id == node_id),
         )
     )

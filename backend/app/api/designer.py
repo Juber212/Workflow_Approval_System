@@ -63,7 +63,7 @@ async def put_node(
 ):
     """更新单个节点 —— 仅本所所长可操作"""
     await _check_template_ownership(db, template_id, current_user)
-    result = await update_node(db, node_id, data)
+    result = await update_node(db, template_id, node_id, data)
     await db.commit()
     return ApiResponse.ok(result, message="节点已更新")
 
@@ -76,7 +76,7 @@ async def del_node(
 ):
     """删除节点 —— 仅本所所长可操作"""
     await _check_template_ownership(db, template_id, current_user)
-    await delete_node(db, node_id)
+    await delete_node(db, template_id, node_id)
     await db.commit()
     return ApiResponse.ok(message="节点已删除")
 
