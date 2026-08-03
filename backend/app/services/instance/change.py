@@ -135,6 +135,26 @@ async def change_personnel(
         )).scalars().all()
         id_name_map = {u.id: (u.real_name or u.username) for u in user_rows}
 
+    # ========== 2b. waiting 节点换负责人后预激活（P1-18） ==========
+    # 场景：工作节点发起时未配置负责人，propagate 激活被「无负责人守卫」拒绝，
+    # 节点停在 waiting（arrived_count 已满但状态不变）。此时若一并换校验人/审批人，
+    # 会因节点无 Task 导致 CheckRecord/Approval 的 task_id 为 NULL 违反 NOT NULL 约束。
+    # 因此先预激活：更新负责人 + 生成 Task，后续角色分支的 _get_active_task 才能查到。
+    # 未满足激活条件（还在等上游）的 waiting 节点不预激活，等 propagate 正常激活。
+    if (
+        body.assignee_id is not None
+        and not node.is_end  # 结束节点无 Task，不应预激活
+        and (node.status or "").lower() == "waiting"
+        and node.arrived_count >= (node.incoming_count or 0)
+    ):
+        if _old_assignee_id:
+            removed_users.add(_old_assignee_id)
+        old_name = id_name_map.get(_old_assignee_id) if _old_assignee_id else "无"
+        node.assignee_id = body.assignee_id
+        await activate_work_node(db, instance_id, node)
+        changes.append(f"负责人: {old_name} → {id_name_map.get(body.assignee_id) or f'ID:{body.assignee_id}'}")
+        changes.append(f"节点「{node.name}」已激活（原无负责人，补配后自动激活）")
+
     # ========== 3. 处理校验人变更 ==========
     if body.checkers is not None:
         # 校验已通过（节点进入等待审批/批准）后校验人不可更换
@@ -163,18 +183,19 @@ async def change_personnel(
                 .values(status="terminated", decided_at=now)
             )
 
-            # 新校验人生成 CheckRecord（查询当前节点的活跃 Task 获取 task_id，含 WAITING_* 状态）
+            # 新校验人生成 CheckRecord（waiting 未激活节点无 Task 时不创建，
+            # 待节点激活、负责人提交时按 node.checkers 自动生成，见 P1-18）
             active_task = await _get_active_task(db, node_id)
-            task_id_for_check = active_task.id if active_task else None
-            for uid in added:
-                db.add(CheckRecord(
-                    instance_id=instance_id,
-                    node_id=node_id,
-                    task_id=task_id_for_check,
-                    checker_id=uid,
-                    status="pending",
-                    round=node.round,  # 记录当前节点轮次
-                ))
+            if active_task:
+                for uid in added:
+                    db.add(CheckRecord(
+                        instance_id=instance_id,
+                        node_id=node_id,
+                        task_id=active_task.id,
+                        checker_id=uid,
+                        status="pending",
+                        round=node.round,  # 记录当前节点轮次
+                    ))
 
             changes.append(f"校验人: {_describe_change(old_ids, new_ids, id_name_map)}")
             node.checkers = new_checkers
@@ -207,17 +228,18 @@ async def change_personnel(
                 .values(status="terminated", decided_at=now)
             )
 
-            # 新审批人生成 Approval（task_id 关联当前活跃任务，避免坏记录）
+            # 新审批人生成 Approval（waiting 未激活节点无 Task 时不创建，见 P1-18）
             active_task = await _get_active_task(db, node_id)
-            for uid in added:
-                db.add(Approval(
-                    instance_id=instance_id,
-                    node_id=node_id,
-                    task_id=active_task.id if active_task else None,
-                    approver_id=uid,
-                    status="pending",
-                    round=node.round,  # 记录当前节点轮次
-                ))
+            if active_task:
+                for uid in added:
+                    db.add(Approval(
+                        instance_id=instance_id,
+                        node_id=node_id,
+                        task_id=active_task.id,
+                        approver_id=uid,
+                        status="pending",
+                        round=node.round,  # 记录当前节点轮次
+                    ))
 
             changes.append(f"审批人: {_describe_change(old_ids, new_ids, id_name_map)}")
             node.approvers = new_approvers
@@ -232,17 +254,18 @@ async def change_personnel(
                        Endorsement.status == "pending")
                 .values(status="terminated", decided_at=now)
             )
-        # 创建新批准人的 Endorsement（task_id 关联当前活跃任务，避免坏记录）
+        # 创建新批准人的 Endorsement（waiting 未激活节点无 Task 时不创建，见 P1-18）
         if body.endorser_id:
             active_task = await _get_active_task(db, node_id)
-            db.add(Endorsement(
-                instance_id=instance_id,
-                node_id=node_id,
-                task_id=active_task.id if active_task else None,
-                endorser_id=body.endorser_id,
-                status="pending",
-                round=node.round,
-            ))
+            if active_task:
+                db.add(Endorsement(
+                    instance_id=instance_id,
+                    node_id=node_id,
+                    task_id=active_task.id,
+                    endorser_id=body.endorser_id,
+                    status="pending",
+                    round=node.round,
+                ))
         node.endorser_id = body.endorser_id
         if _old_endorser_id:
             removed_users.add(_old_endorser_id)
@@ -273,21 +296,6 @@ async def change_personnel(
             )
             .values(assignee_id=body.assignee_id)
         )
-
-    # ========== 5b. waiting 节点换人后激活（P1-18） ==========
-    # 场景：工作节点发起时未配置负责人，propagate 激活被「无负责人守卫」拒绝，
-    # 节点停在 waiting（arrived_count 已满但状态不变）。此时换负责人只更新了
-    # assignee_id，不会触发 propagate，流程永久死锁。
-    # 检测到本次配了负责人 + waiting + 所有上游已到达 → 立即激活生成 Task。
-    # 激活后的通知由下方统一的「负责人变更通知段」负责（_get_active_task 可查到新 Task）。
-    if (
-        body.assignee_id is not None
-        and node.assignee_id  # 换人后负责人已非空
-        and (node.status or "").lower() == "waiting"
-        and node.arrived_count >= (node.incoming_count or 0)
-    ):
-        await activate_work_node(db, instance_id, node)
-        changes.append(f"节点「{node.name}」已激活（原无负责人，补配后自动激活）")
 
     # ========== 6. 无变更时返回 ==========
     if not changes:

@@ -281,13 +281,11 @@ class TestChangePersonnel:
             if i == 2:
                 return MockResult(scalars_all=[])       # SELECT User（id_name_map）
             if i == 3:
-                return None                              # update Task（waiting 无任务，影响0行）
-            if i == 4:
                 return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
-            if i == 5:
+            if i == 4:
                 return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
-            if i == 6:
-                return MockResult(scalar_one=new_task)  # _get_active_task（激活后的新任务）
+            if i == 5:
+                return MockResult(scalar_one=new_task)  # 通知段：_get_active_task（预激活后的新任务）
             return None
 
         mock_db.execute = _fake_execute
@@ -305,6 +303,67 @@ class TestChangePersonnel:
         added_tasks = [a[0][0] for a in mock_db.add.call_args_list if isinstance(a[0][0], Task)]
         assert any(t.assignee_id == 9 and t.status == TaskStatus.PENDING for t in added_tasks)
         # 变更记录包含激活说明
+        assert any("已激活" in c for c in result["changes"])
+
+    @pytest.mark.asyncio
+    async def test_change_all_roles_on_waiting_node(self, mock_db):
+        """P1-18：waiting 无负责人节点三字段一起改（负责人+校验人+审批人）不崩溃
+
+        回归：waiting 未激活节点无 Task，三字段一起改时校验/审批分支拿不到 task_id，
+        曾导致 CheckRecord.task_id=NULL 违反 NOT NULL 约束（autoflush 报错 500）。
+        修复后：预激活先生成 Task，CheckRecord/Approval 关联新 Task。
+        """
+        from app.models import Task, CheckRecord, Approval
+        from app.models.enums import TaskStatus
+        inst = make_instance(id=1, initiator_id=1, status=InstanceNodeStatus.RUNNING)
+        node = make_node(id=5, instance_id=1, status=InstanceNodeStatus.WAITING,
+                         assignee_id=None, arrived_count=1, incoming_count=1)
+        new_task = make_task(id=10, node_id=5, instance_id=1, assignee_id=7,
+                             status=TaskStatus.PENDING)
+
+        captured = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=inst)       # SELECT instance
+            if i == 1:
+                return MockResult(scalar_one=node)       # SELECT node
+            if i == 2:
+                return MockResult(scalars_all=[])        # SELECT User（id_name_map）
+            if i in (3, 5):
+                return None                               # UPDATE（removed 为空也执行）
+            if i in (4, 6, 9):
+                return MockResult(scalar_one=new_task)   # _get_active_task（校验/审批分支、通知段）
+            if i in (7, 8):
+                return MockResult(scalars_all=[])        # 通知段：new_checks / new_apprs → 空
+            return None
+
+        mock_db.execute = _fake_execute
+
+        from app.schemas.instance import ChangePersonnelRequest
+        body = ChangePersonnelRequest(
+            assignee_id=7,
+            checkers=[{"user_id": 3}, {"user_id": 6}],
+            approvers=[{"user_id": 4}, {"user_id": 5}],
+        )
+
+        result = await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
+                                        current_user=FakeUser(id=1))
+
+        # 预激活：节点 running + 负责人更新
+        assert node.status == InstanceNodeStatus.RUNNING
+        assert node.assignee_id == 7
+        # 校验人/审批人配置更新
+        assert any(c.get("user_id") == 6 for c in (node.checkers or []))
+        assert any(a.get("user_id") == 5 for a in (node.approvers or []))
+        # 生成 Task，CheckRecord/Approval 关联新 Task（task_id 非空）
+        added = [a[0][0] for a in mock_db.add.call_args_list]
+        assert any(isinstance(x, Task) and x.assignee_id == 7 and x.status == TaskStatus.PENDING for x in added)
+        assert any(isinstance(x, CheckRecord) and x.checker_id == 6 and x.task_id == 10 for x in added)
+        assert any(isinstance(x, Approval) and x.approver_id == 5 and x.task_id == 10 for x in added)
+        # 变更记录含激活说明
         assert any("已激活" in c for c in result["changes"])
 
 
