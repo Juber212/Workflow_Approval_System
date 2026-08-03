@@ -43,6 +43,21 @@ export function setupRouterGuards(router: Router) {
     if (publicPaths.includes(to.path)) {
       // 已登录用户访问登录页 → 重定向到 Dashboard
       if (to.path === '/login' && userStore.isLoggedIn) {
+        // 页面刷新后 userInfo 为空，先恢复以判断是否需强制改密（避免误跳 Dashboard 造成循环）
+        if (!userStore.userInfo) {
+          try {
+            await userStore.fetchUserInfo()
+          } catch {
+            userStore.clearToken()
+            next()
+            return
+          }
+        }
+        // 需强制改密 → 停在登录页（由登录页 onMounted 弹出改密对话框），不重定向
+        if (userStore.userInfo?.must_change_password) {
+          next()
+          return
+        }
         next('/dashboard')
         return
       }

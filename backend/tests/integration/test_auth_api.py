@@ -21,6 +21,10 @@ def client():
     mock_db.add = MagicMock()
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=_nested_ctx)
 
     async def override_get_db():
         yield mock_db
@@ -101,3 +105,71 @@ class TestProfile:
             "email": "only-email@test.com",
         }, headers={"Authorization": "Bearer fake-token"})
         assert resp.status_code == 401  # JWT 解码失败，但 schema 校验通过
+
+
+class TestChangePassword:
+    """修改密码 API 测试（P0-6：强制改密场景允许省略旧密码）"""
+
+    def _mock_current_user(self, user_id=1, username="test"):
+        """override 认证依赖，返回固定当前用户（绕过 JWT 解码）"""
+        from app.api.deps import get_current_active_user, CurrentUser
+        app.dependency_overrides[get_current_active_user] = \
+            lambda: CurrentUser({"sub": str(user_id), "username": username, "roles": ["user"]})
+
+    def _cleanup(self):
+        from app.api.deps import get_current_active_user
+        app.dependency_overrides.pop(get_current_active_user, None)
+
+    def _make_user(self, must_change: bool, raw_password: str):
+        """构造一个 bcrypt 密码可验证的 User 实例"""
+        from app.core.security import hash_password
+        return User(id=1, username="test", real_name="测试",
+                    password_hash=hash_password(raw_password),
+                    organization_id=1, is_active=True, must_change_password=must_change)
+
+    def test_force_change_password_no_old_pwd(self, client):
+        """强制改密用户省略旧密码 → 200 且清除强制改密标记"""
+        user = self._make_user(must_change=True, raw_password="temp123")
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+        self._mock_current_user()
+        try:
+            resp = client.put("/api/v1/auth/password", json={"new_password": "newpass123"})
+            assert resp.status_code == 200
+            assert user.must_change_password is False
+        finally:
+            self._cleanup()
+
+    def test_force_change_password_wrong_old_pwd(self, client):
+        """强制改密用户仍传了错误旧密码 → 403（传了就要校验）"""
+        user = self._make_user(must_change=True, raw_password="temp123")
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+        self._mock_current_user()
+        try:
+            resp = client.put("/api/v1/auth/password", json={
+                "old_password": "wrong", "new_password": "newpass123"})
+            assert resp.status_code == 403
+        finally:
+            self._cleanup()
+
+    def test_normal_change_password_no_old_pwd(self, client):
+        """非强制改密用户省略旧密码 → 400"""
+        user = self._make_user(must_change=False, raw_password="correct")
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+        self._mock_current_user()
+        try:
+            resp = client.put("/api/v1/auth/password", json={"new_password": "newpass123"})
+            assert resp.status_code == 400
+        finally:
+            self._cleanup()
+
+    def test_normal_change_password_wrong_old_pwd(self, client):
+        """非强制改密用户错误旧密码 → 403"""
+        user = self._make_user(must_change=False, raw_password="correct")
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+        self._mock_current_user()
+        try:
+            resp = client.put("/api/v1/auth/password", json={
+                "old_password": "wrong", "new_password": "newpass123"})
+            assert resp.status_code == 403
+        finally:
+            self._cleanup()

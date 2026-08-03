@@ -48,8 +48,8 @@ export async function logoutApi(): Promise<void> {
   await request.post('/auth/logout')
 }
 
-/** 修改自己的密码 */
-export async function changePasswordApi(data: { old_password: string; new_password: string }): Promise<void> {
+/** 修改自己的密码（强制改密场景可省略旧密码） */
+export async function changePasswordApi(data: { old_password?: string; new_password: string }): Promise<void> {
   await request.put('/auth/password', data)
 }
 

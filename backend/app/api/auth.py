@@ -129,13 +129,22 @@ async def change_password(
     if user is None:
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
-    # 验证原密码
-    if not verify_password(req.old_password, user.password_hash):
-        raise AppException(ErrorCode.FORBIDDEN, "原密码错误")
-
-    # 新旧密码不能相同
-    if req.old_password == req.new_password:
-        raise AppException(ErrorCode.BAD_REQUEST, "新密码不能与旧密码相同")
+    # 验证原密码：强制改密场景（管理员重置密码后首次登录）允许省略旧密码
+    if user.must_change_password:
+        # 若仍传了旧密码则校验正确性，避免以错误旧密码通过
+        if req.old_password:
+            if not verify_password(req.old_password, user.password_hash):
+                raise AppException(ErrorCode.FORBIDDEN, "原密码错误")
+            if req.old_password == req.new_password:
+                raise AppException(ErrorCode.BAD_REQUEST, "新密码不能与旧密码相同")
+    else:
+        # 非强制改密：旧密码必填且必须正确
+        if not req.old_password:
+            raise AppException(ErrorCode.BAD_REQUEST, "请输入原密码")
+        if not verify_password(req.old_password, user.password_hash):
+            raise AppException(ErrorCode.FORBIDDEN, "原密码错误")
+        if req.old_password == req.new_password:
+            raise AppException(ErrorCode.BAD_REQUEST, "新密码不能与旧密码相同")
 
     # 密码强度校验（≥8位 + 含字母数字 + 不能与用户名相同）
     validate_password_strength(req.new_password, current_user.username)

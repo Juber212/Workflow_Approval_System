@@ -131,6 +131,8 @@ onMounted(() => {
     form.username = saved
     form.remember = true
   }
+  // 注意：被重置密码的用户被守卫踢回本页时，不自动弹改密窗，
+  // 需先输入重置后的密码重新登录，登录成功后（must_change_password=true）再弹改密窗
 })
 
 // ========== 首次登录强制改密码 ==========
@@ -172,7 +174,8 @@ async function handleForceChangePassword() {
   changingPwd.value = true
   try {
     await changePasswordApi({
-      old_password: form.password,  // 用登录时输入的密码作为原密码
+      // 强制改密场景（首次登录/管理员重置后）无需旧密码：
+      // 后端在 must_change_password=True 时允许省略，这里不依赖登录表单的密码值
       new_password: forcePwdForm.new_password,
     })
     ElMessage.success('密码修改成功')

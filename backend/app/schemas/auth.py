@@ -36,7 +36,7 @@ class UserInfoResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     """用户修改自己的密码（密码强度由后端 validate_password_strength 校验）"""
-    old_password: str = Field(..., min_length=1, description="原密码")
+    old_password: str | None = Field(None, description="原密码（强制改密场景可省略）")
     new_password: str = Field(..., min_length=8, max_length=128, description="新密码（≥8位，含字母和数字）")
 
 
