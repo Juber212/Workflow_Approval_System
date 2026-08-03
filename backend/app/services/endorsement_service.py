@@ -306,20 +306,36 @@ async def endorse(
             node_id=e.node_id,
             signatures=signatures,
         )
-    elif signature_x is not None:  # 旧版单签名兼容（file_id=None 场景）
-        s = Signature(
-            file_id=None,
-            node_id=e.node_id,
-            role_type="endorser",
-            source_id=e.id,
-            signer_id=current_user_id,
-            signature_x=signature_x,
-            signature_y=signature_y or 100,
-            signature_page=signature_page or -1,
-        )
-        db.add(s)
-        await db.flush()
-        sig_ids.append(s.id)
+    elif signature_x is not None:  # 旧版单签名兼容（P1-13：补 file_id 到当前轮次首 PDF）
+        # 对齐 approve 旧版兼容分支：默认签在节点当前轮次第一个 PDF 上，
+        # 找不到 PDF 则不创建签名（避免 file_id=None 坏记录，签名永不落盘）
+        sig_node = (await db.execute(
+            select(InstanceNode).where(InstanceNode.id == e.node_id)
+        )).scalar_one_or_none()
+        if sig_node is None:
+            raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+        pdf_files = (await db.execute(
+            select(File).where(
+                File.node_id == e.node_id,
+                File.round == sig_node.round,
+            ).limit(1)
+        )).scalars().all()
+        if pdf_files:
+            s = Signature(
+                file_id=pdf_files[0].id,
+                node_id=e.node_id,
+                role_type="endorser",
+                source_id=e.id,
+                signer_id=current_user_id,
+                signature_x=signature_x,
+                signature_y=signature_y or 100,
+                signature_page=signature_page or -1,
+                applied=False,
+                sort_order=0,
+            )
+            db.add(s)
+            await db.flush()
+            sig_ids.append(s.id)
 
     # 5. 操作日志
     log = OperationLog(
@@ -348,7 +364,9 @@ async def endorse(
     # 7. 收集签名 ID（由 API 层在 commit 后统一写入 PDF）
     _pending_signature_ids = sig_ids if (node.require_endorser_signature and sig_ids) else []
 
-    e.signature_applied = True
+    # P1-13：signature_applied 按实际落盘结果标记——仅当存在待写入 PDF 的签名时才算已签名，
+    # 避免「无签名/无需签名却显示已签名」的假状态
+    e.signature_applied = bool(_pending_signature_ids)
 
     # 8. 标记 Task 为 completed
     if e.task_id:

@@ -80,6 +80,67 @@ class TestEndorse:
         assert "批准通过" in result["message"]
         assert e.status == EndorsementStatus.APPROVED
 
+    @pytest.mark.asyncio
+    async def test_endorse_legacy_signature_fills_file_id(self, mock_db, mocker):
+        """P1-13：旧版单签名兼容分支补 file_id（当前轮次首 PDF），签名待落盘"""
+        mocker.patch("app.services.endorsement_service.propagate_from_node", new=AsyncMock())
+
+        e = make_endorsement(id=1, status=EndorsementStatus.PENDING)
+        node = make_node(id=5, is_end=False, endorser_id=5, require_endorser_signature=True,
+                         status=InstanceNodeStatus.WAITING_ENDORSEMENT)
+        inst = make_instance(id=1, difficulty="4")
+        pdf = MagicMock()
+        pdf.id = 888
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=e),          # 0: SELECT endorsement FOR UPDATE
+            MagicMock(),                        # 1: clear_related
+            MockResult(scalar_one=node),       # 2: SELECT InstanceNode（旧版分支查轮次）
+            MockResult(scalars_all=[pdf]),     # 3: SELECT File（当前轮次 PDF）
+            MockResult(scalar_one=node),       # 4: _get_node
+            MockResult(scalar_one=inst),       # 5: SELECT FlowInstance
+            MagicMock(),                        # 6: UPDATE task → completed
+            MockResult(scalar_one=None),       # 7: SELECT FlowTemplate（非 proposal）
+        ]
+
+        result = await endorse(mock_db, endorsement_id=1, current_user_id=5, opinion="同意", signature_x=300)
+
+        # 旧版分支创建的签名记录：file_id 指向当前轮次 PDF，applied=False（待落盘）
+        created = next((a.args[0] for a in mock_db.add.call_args_list
+                        if a.args and a.args[0].__class__.__name__ == "Signature"), None)
+        assert created is not None, "未创建签名记录"
+        assert created.file_id == 888
+        assert created.applied is False
+        # 签名 ID 进入待落盘列表，signature_applied 按实际落盘结果置 True
+        assert len(result["_pending_sig_ids"]) == 1
+        assert e.signature_applied is True
+
+    @pytest.mark.asyncio
+    async def test_endorse_without_signature_not_applied(self, mock_db, mocker):
+        """P1-13：未签名时 signature_applied 保持 False（不假报已签名）"""
+        mocker.patch("app.services.endorsement_service.propagate_from_node", new=AsyncMock())
+
+        e = make_endorsement(id=1, status=EndorsementStatus.PENDING)
+        node = make_node(id=5, is_end=False, endorser_id=5, require_endorser_signature=True,
+                         status=InstanceNodeStatus.WAITING_ENDORSEMENT)
+        inst = make_instance(id=1, difficulty="4")
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=e),          # 0: SELECT endorsement FOR UPDATE
+            MagicMock(),                        # 1: clear_related
+            MockResult(scalar_one=node),       # 2: _get_node
+            MockResult(scalar_one=inst),       # 3: SELECT FlowInstance
+            MagicMock(),                        # 4: UPDATE task → completed
+            MockResult(scalar_one=None),       # 5: SELECT FlowTemplate（非 proposal）
+        ]
+
+        result = await endorse(mock_db, endorsement_id=1, current_user_id=5, opinion="同意")
+
+        assert e.signature_applied is False
+        assert result["_pending_sig_ids"] == []
+
 
 # ============================================================
 # endorse_reject —— 批准驳回
