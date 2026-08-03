@@ -72,6 +72,7 @@ async def cleanup(session: AsyncSession, prefixes: tuple = ALL_PREFIXES) -> None
             ("tasks", "instance_id", inst_ids),
             ("files", "instance_id", inst_ids),
             ("operation_logs", "instance_id", inst_ids),
+            ("notifications", "instance_id", inst_ids),  # P1-19 补：先清通知，防残留跳转已删任务 404
             ("instance_edges", "instance_id", inst_ids),
             ("instance_nodes", "instance_id", inst_ids),
             ("flow_instances", "id", inst_ids),
