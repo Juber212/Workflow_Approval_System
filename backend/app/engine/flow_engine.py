@@ -162,36 +162,19 @@ async def propagate_from_node(
 
         else:
             # 普通工作节点：激活为 running，生成 Task
-            # 守卫：无负责人时拒绝激活，避免节点 RUNNING 但无 Task 导致永久死锁
-            if not node.assignee_id:
+            created_task = await activate_work_node(db, instance_id, node)
+            if created_task is None:
+                # 无负责人守卫：避免节点 RUNNING 但无 Task 导致永久死锁
                 logger.error(
                     "propagate_from_node: 节点 #%d「%s」无负责人（assignee_id 为空），"
                     "无法激活，流程卡死！请管理员在实例详情中紧急换人",
                     node.id, node.name,
                 )
                 continue
-
-            now = datetime.now()
-            node.status = InstanceNodeStatus.RUNNING
-            node.started_at = now
             logger.info(
                 "propagate_from_node: 工作节点 #%d「%s」激活 → RUNNING（assignee_id=%s）",
                 node.id, node.name, node.assignee_id,
             )
-
-            # 兜底：若发起时未预计算 deadline，则按自然日估算（不跳过节假日）
-            # 正常流程在 create_instance 中已用 add_workdays 预计算，此处不应触发
-            if node.time_limit_days and not node.deadline:
-                node.deadline = now + timedelta(days=node.time_limit_days)
-
-            # 创建 Task（状态 pending，等待负责人处理）
-            created_task = Task(
-                instance_id=instance_id,
-                node_id=node.id,
-                assignee_id=node.assignee_id,
-                status=TaskStatus.PENDING,
-            )
-            db.add(created_task)
             # 收集创建的 Task 用于后续通知
             _tasks_for_notify.append((node, created_task))
 
@@ -239,6 +222,41 @@ async def propagate_from_node(
                 )
 
     return activated_ids
+
+
+async def activate_work_node(
+    db: AsyncSession,
+    instance_id: int,
+    node: InstanceNode,
+) -> Task | None:
+    """激活工作节点为 running 并生成 Task（供 propagate_from_node 与紧急换人复用）
+
+    调用前调用方需保证：节点 arrived_count >= incoming_count 且当前为 waiting。
+    返回创建的 Task；负责人为空（assignee_id 为 None）时返回 None，由调用方兜底。
+    通知由调用方负责：propagate 批量通知，change_personnel 走其统一通知段，避免重复。
+    """
+    if not node.assignee_id:
+        return None
+
+    now = datetime.now()
+    node.status = InstanceNodeStatus.RUNNING
+    node.started_at = now
+
+    # 兜底：若发起时未预计算 deadline，则按自然日估算（不跳过节假日）
+    # 正常流程在 create_instance 中已用 add_workdays 预计算，此处不应触发
+    if node.time_limit_days and not node.deadline:
+        node.deadline = now + timedelta(days=node.time_limit_days)
+
+    # 创建 Task（状态 pending，等待负责人处理）
+    task = Task(
+        instance_id=instance_id,
+        node_id=node.id,
+        assignee_id=node.assignee_id,
+        status=TaskStatus.PENDING,
+    )
+    db.add(task)
+    await db.flush()  # flush 以获取 task.id（后续通知链接依赖）
+    return task
 
 
 async def calculate_incoming_counts(db: AsyncSession, instance_id: int) -> None:

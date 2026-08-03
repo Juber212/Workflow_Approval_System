@@ -253,6 +253,60 @@ class TestChangePersonnel:
         assert "NOT IN" in sql
         assert "completed" in sql  # 终结状态被排除，活跃任务被覆盖
 
+    @pytest.mark.asyncio
+    async def test_change_assignee_activates_waiting_node(self, mock_db):
+        """P1-18：waiting 无负责人节点换负责人后自动激活（arrived 已满足激活条件）
+
+        场景：节点发起时未配负责人，propagate 激活被「无负责人守卫」拒绝停在 waiting，
+        arrived_count 已满。换负责人成功后若仍 waiting 且上游全到，须立即激活生成 Task，
+        否则流程永久死锁。
+        """
+        from app.models import Task
+        from app.models.enums import TaskStatus
+        inst = make_instance(id=1, initiator_id=1, status=InstanceNodeStatus.RUNNING)
+        node = make_node(id=5, instance_id=1, status=InstanceNodeStatus.WAITING,
+                         assignee_id=None, arrived_count=1, incoming_count=1)
+        new_task = make_task(id=9, node_id=5, instance_id=1, assignee_id=9,
+                             status=TaskStatus.PENDING)
+
+        captured = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=inst)      # SELECT instance
+            if i == 1:
+                return MockResult(scalar_one=node)      # SELECT node
+            if i == 2:
+                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
+            if i == 3:
+                return None                              # update Task（waiting 无任务，影响0行）
+            if i == 4:
+                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
+            if i == 5:
+                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+            if i == 6:
+                return MockResult(scalar_one=new_task)  # _get_active_task（激活后的新任务）
+            return None
+
+        mock_db.execute = _fake_execute
+
+        from app.schemas.instance import ChangePersonnelRequest
+        body = ChangePersonnelRequest(assignee_id=9)
+
+        result = await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
+                                        current_user=FakeUser(id=1))
+
+        # 核心断言：waiting 节点被激活为 running，负责人已更新
+        assert node.status == InstanceNodeStatus.RUNNING
+        assert node.assignee_id == 9
+        # activate_work_node 内部通过 db.add 创建了 Task（负责人=新负责人）
+        added_tasks = [a[0][0] for a in mock_db.add.call_args_list if isinstance(a[0][0], Task)]
+        assert any(t.assignee_id == 9 and t.status == TaskStatus.PENDING for t in added_tasks)
+        # 变更记录包含激活说明
+        assert any("已激活" in c for c in result["changes"])
+
 
 # ============================================================
 # list_instances —— 优先级排序 deadline 子查询（P1-16）

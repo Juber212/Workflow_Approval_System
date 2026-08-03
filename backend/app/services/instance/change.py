@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
+from app.engine.flow_engine import activate_work_node
 from app.models import (
     FlowInstance, InstanceNode,
     OperationLog,
@@ -272,6 +273,21 @@ async def change_personnel(
             )
             .values(assignee_id=body.assignee_id)
         )
+
+    # ========== 5b. waiting 节点换人后激活（P1-18） ==========
+    # 场景：工作节点发起时未配置负责人，propagate 激活被「无负责人守卫」拒绝，
+    # 节点停在 waiting（arrived_count 已满但状态不变）。此时换负责人只更新了
+    # assignee_id，不会触发 propagate，流程永久死锁。
+    # 检测到本次配了负责人 + waiting + 所有上游已到达 → 立即激活生成 Task。
+    # 激活后的通知由下方统一的「负责人变更通知段」负责（_get_active_task 可查到新 Task）。
+    if (
+        body.assignee_id is not None
+        and node.assignee_id  # 换人后负责人已非空
+        and (node.status or "").lower() == "waiting"
+        and node.arrived_count >= (node.incoming_count or 0)
+    ):
+        await activate_work_node(db, instance_id, node)
+        changes.append(f"节点「{node.name}」已激活（原无负责人，补配后自动激活）")
 
     # ========== 6. 无变更时返回 ==========
     if not changes:
