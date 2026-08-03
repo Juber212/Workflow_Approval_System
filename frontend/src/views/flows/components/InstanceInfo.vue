@@ -10,6 +10,7 @@
         <span class="priority-badge" :class="'priority--' + detail.priority">
           {{ priorityLabel }}
         </span>
+        <span class="diff-badge" :class="'diff--' + (detail.difficulty || '1')">{{ detail.difficulty || '1' }}级</span>
       </div>
       <div class="sticky-head__actions" v-if="showActions">
         <el-button
@@ -44,12 +45,6 @@
       <div class="info-grid__item">
         <div class="k">发起时间</div>
         <div class="v num">{{ formatTime(detail.initiated_at) }}</div>
-      </div>
-      <div class="info-grid__item">
-        <div class="k">难度</div>
-        <div class="v">
-          <span class="diff-badge" :class="'diff--' + (detail.difficulty || '1')">{{ detail.difficulty || '1' }}级</span>
-        </div>
       </div>
       <div class="info-grid__item" v-if="!isProposal">
         <div class="k">节点进度</div>
