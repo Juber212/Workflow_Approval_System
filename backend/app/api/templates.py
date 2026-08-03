@@ -226,6 +226,10 @@ async def list_document_templates(
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
 
+    # P1-4 修复：文件模板列表仅本所所长可查看（组织隔离，防其他组织/普通用户枚举）
+    require_manager(current_user)
+    require_same_org(current_user, tpl.organization_id)
+
     org_id = tpl.organization_id
 
     # ── 一次性查：本组织所有分类 + 已关联的分类（去重）──
