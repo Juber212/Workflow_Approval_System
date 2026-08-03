@@ -82,7 +82,7 @@ class TestCreateUser:
         from app.schemas.user import UserCreate
         data = UserCreate(
             username="admin", real_name="管理员", password="123456",
-            organization_id=1, role_ids=[1],
+            organization_id=1, role_id=1,
         )
 
         with pytest.raises(AppException) as exc:
@@ -96,14 +96,14 @@ class TestCreateUser:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalar_one=None),                 # 0: 用户名查重 → 无
-            MockResult(scalars_all=[mock_role]),          # 1: 角色查询 → 非管理员角色
+            MockResult(scalar_one=mock_role),            # 1: 角色查询 → 非管理员角色
             MockResult(scalar_one=None),                 # 2: 组织查询 → 不存在
         ]
 
         from app.schemas.user import UserCreate
         data = UserCreate(
             username="newuser", real_name="新用户",
-            organization_id=999, role_ids=[1],
+            organization_id=999, role_id=1,
         )
 
         with pytest.raises(AppException) as exc:
@@ -127,7 +127,7 @@ class TestUpdateUser:
         ]
 
         from app.schemas.user import UserUpdate
-        data = UserUpdate(real_name="x", organization_id=1, role_ids=[1])
+        data = UserUpdate(real_name="x", organization_id=1, role_id=1)
 
         with pytest.raises(AppException) as exc:
             await update_user(mock_db, user_id=999, data=data)
@@ -143,12 +143,12 @@ class TestUpdateUser:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalar_one=user),               # 0: 查找用户 → 存在
-            MockResult(scalars_all=[mock_role]),        # 1: 角色查询 → 非管理员角色
+            MockResult(scalar_one=mock_role),          # 1: 角色查询 → 非管理员角色
             MockResult(scalar_one=None),               # 2: 组织查询 → 不存在
         ]
 
         from app.schemas.user import UserUpdate
-        data = UserUpdate(real_name="x", organization_id=999, role_ids=[1])
+        data = UserUpdate(real_name="x", organization_id=999, role_id=1)
 
         with pytest.raises(AppException) as exc:
             await update_user(mock_db, user_id=1, data=data)

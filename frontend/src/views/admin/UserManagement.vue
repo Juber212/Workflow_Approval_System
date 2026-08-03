@@ -233,7 +233,7 @@ async function handleFormSubmit(data: any) {
     await updateUser(target.id, {
       real_name: data.real_name,
       organization_id: data.organization_id,
-      role_ids: data.role_ids,
+      role_id: data.role_id,
       email: data.email,
       phone: data.phone,
     })
@@ -243,7 +243,7 @@ async function handleFormSubmit(data: any) {
       username: data.username,
       real_name: data.real_name,
       organization_id: data.organization_id,
-      role_ids: data.role_ids,
+      role_id: data.role_id,
       email: data.email,
       phone: data.phone,
     })

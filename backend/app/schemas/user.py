@@ -38,7 +38,7 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=30, description="登录用户名")
     real_name: str = Field(..., min_length=1, max_length=20, description="真实姓名")
     organization_id: int | None = Field(None, description="所属组织 ID（管理员可选，其他角色必填）")
-    role_ids: list[int] = Field(..., min_length=1, description="角色 ID 列表")
+    role_id: int = Field(..., description="角色 ID（单选，一个用户只挂一个角色）")
     email: str | None = Field(None, max_length=100)
     phone: str | None = Field(None, max_length=20)
 
@@ -52,7 +52,7 @@ class UserUpdate(BaseModel):
 
     real_name: str = Field(..., min_length=1, max_length=20, description="真实姓名")
     organization_id: int | None = Field(None, description="所属组织 ID（管理员可选，其他角色必填）")
-    role_ids: list[int] = Field(..., min_length=1, description="角色 ID 列表")
+    role_id: int = Field(..., description="角色 ID（单选，一个用户只挂一个角色）")
     email: str | None = Field(None, max_length=100)
     phone: str | None = Field(None, max_length=20)
 

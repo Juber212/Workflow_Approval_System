@@ -91,20 +91,20 @@ async def list_users(
 
 
 async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
-    """新增用户 —— 校验唯一性 → 哈希密码 → 分配角色"""
+    """新增用户 —— 校验唯一性 → 哈希密码 → 分配角色（单选）"""
 
     # 用户名唯一性
     existing = (await db.execute(select(User).where(User.username == data.username))).scalar_one_or_none()
     if existing:
         raise AppException(ErrorCode.CONFLICT, f"用户名 '{data.username}' 已存在")
 
-    # 校验角色存在
-    roles = (await db.execute(select(Role).where(Role.id.in_(data.role_ids)))).scalars().all()
-    if len(roles) != len(data.role_ids):
-        raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
+    # 校验角色存在（单选：一个用户只挂一个角色）
+    role = (await db.execute(select(Role).where(Role.id == data.role_id))).scalar_one_or_none()
+    if role is None:
+        raise AppException(ErrorCode.VALIDATION_ERROR, "所选角色不存在")
 
-    # 判断是否包含管理员角色
-    is_admin = any(r.code == "system_admin" for r in roles)
+    # 判断是否管理员角色
+    is_admin = role.code == "system_admin"
 
     # 非管理员必须指定组织
     if not is_admin and data.organization_id is None:
@@ -130,9 +130,8 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
     db.add(user)
     await db.flush()  # 获取 user.id
 
-    # 分配角色
-    for role_id in data.role_ids:
-        db.add(UserRole(user_id=user.id, role_id=role_id))
+    # 分配角色（单选 → 单条 UserRole）
+    db.add(UserRole(user_id=user.id, role_id=role.id))
 
     await db.flush()
 
@@ -144,26 +143,26 @@ async def create_user(db: AsyncSession, data: UserCreate) -> UserDetail:
         phone=user.phone,
         organization_id=user.organization_id,
         organization_name=org.name if org else None,
-        roles=[r.code for r in roles],
+        roles=[role.code],
         is_active=user.is_active,
         created_at=user.created_at,
     )
 
 
 async def update_user(db: AsyncSession, user_id: int, data: UserUpdate) -> UserDetail:
-    """编辑用户 —— 不可改 username，更新基本信息和角色"""
+    """编辑用户 —— 不可改 username，更新基本信息和角色（单选覆盖）"""
 
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if user is None:
         raise AppException(ErrorCode.NOT_FOUND, "用户不存在")
 
-    # 校验角色存在
-    roles = (await db.execute(select(Role).where(Role.id.in_(data.role_ids)))).scalars().all()
-    if len(roles) != len(data.role_ids):
-        raise AppException(ErrorCode.VALIDATION_ERROR, "部分角色 ID 不存在")
+    # 校验角色存在（单选：一个用户只挂一个角色）
+    role = (await db.execute(select(Role).where(Role.id == data.role_id))).scalar_one_or_none()
+    if role is None:
+        raise AppException(ErrorCode.VALIDATION_ERROR, "所选角色不存在")
 
-    # 判断是否包含管理员角色
-    is_admin = any(r.code == "system_admin" for r in roles)
+    # 判断是否管理员角色
+    is_admin = role.code == "system_admin"
 
     # 非管理员必须指定组织
     if not is_admin and data.organization_id is None:
@@ -182,11 +181,10 @@ async def update_user(db: AsyncSession, user_id: int, data: UserUpdate) -> UserD
     user.email = data.email
     user.phone = data.phone
 
-    # 替换角色：先删后增（用 delete 语句批量删除，避免 async delete 兼容问题）
+    # 替换角色：先删后增（单选 → 仅写一条，天然覆盖历史多角色残留）
     from sqlalchemy import delete as sql_delete
     await db.execute(sql_delete(UserRole).where(UserRole.user_id == user_id))
-    for role_id in data.role_ids:
-        db.add(UserRole(user_id=user.id, role_id=role_id))
+    db.add(UserRole(user_id=user.id, role_id=role.id))
 
     await db.flush()
 
@@ -198,7 +196,7 @@ async def update_user(db: AsyncSession, user_id: int, data: UserUpdate) -> UserD
         phone=user.phone,
         organization_id=user.organization_id,
         organization_name=org.name if org else None,
-        roles=[r.code for r in roles],
+        roles=[role.code],
         is_active=user.is_active,
         created_at=user.created_at,
     )

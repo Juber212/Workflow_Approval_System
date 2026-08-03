@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-03 — 角色改单选（产品决策）
+
+### 变更
+- 角色体系从多选改为单选：一个用户只挂一个角色，系统管理员与业务角色天然互斥（管理员专职）
+- 数据层保留 `user_roles` 表结构；创建/更新用户接口字段 `role_ids: list[int]` → `role_id: int`
+- 新增迁移 `b0c1d2e3f4a5`：清理历史多角色数据，保留最高优先级（system_admin > manager > user）
+- 前端用户管理弹窗角色下拉由多选改单选
+
+### 涉及文件
+| 层 | 文件 |
+|----|------|
+| 后端 | `schemas/user.py`、`services/user_service.py`、`alembic/versions/b0c1d2e3f4a5_single_role_data_cleanup.py`（新） |
+| 前端 | `api/admin.ts`、`views/admin/UserManagement.vue`、`views/admin/components/UserFormDialog.vue` |
+| 测试 | `tests/unit/test_user_service.py`、`tests/mysql/test_single_role_cleanup.py`（新） |
+
+### 验证
+- 后端 208 passed（169 单元 + 39 集成）+ MySQL 迁移测试 1 passed
+- vue-tsc -b 0 errors；npm run build 通过
+
+---
+
 ## 2026-08-03 — P0 上线阻断项全量修复（第六轮全栈审查）
 
 ### 安全与越权
