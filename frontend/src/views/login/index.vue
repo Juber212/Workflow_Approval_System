@@ -173,7 +173,7 @@ async function handleForceChangePassword() {
 
   changingPwd.value = true
   try {
-    await changePasswordApi({
+    const data = await changePasswordApi({
       // 强制改密场景（首次登录/管理员重置后）无需旧密码：
       // 后端在 must_change_password=True 时允许省略，这里不依赖登录表单的密码值
       new_password: forcePwdForm.new_password,
@@ -183,6 +183,10 @@ async function handleForceChangePassword() {
     // 更新 store 中的标记
     if (userStore.userInfo) {
       userStore.userInfo.must_change_password = false
+    }
+    // 改密成功后端重新签发 token：替换本地会话，避免被新密码版本号吊销
+    if (data.token) {
+      userStore.setToken(data.token)
     }
     // 跳转
     const redirect = (route.query.redirect as string) || '/dashboard'

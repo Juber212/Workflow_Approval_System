@@ -157,7 +157,21 @@ async def change_password(
     user.must_change_password = False
     await db.commit()
 
-    return ApiResponse.ok(message="密码修改成功")
+    # P1-5：记录密码版本号，吊销该用户所有旧 token（含改密前各设备的会话）
+    from app.core.token_blacklist import set_password_version
+    await set_password_version(user.id)
+
+    # 改密成功后立即重新签发 token 返回：当前会话无缝续期，其他设备旧 token 已全部失效
+    new_token = create_access_token(
+        {
+            "sub": str(user.id),
+            "username": user.username,
+            "roles": current_user.roles,
+            "org_id": user.organization_id,
+        }
+    )
+
+    return ApiResponse.ok({"token": new_token}, message="密码修改成功")
 
 
 @router.put("/profile")

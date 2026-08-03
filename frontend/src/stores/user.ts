@@ -30,6 +30,12 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = toUserInfo(data)
   }
 
+  /** 替换 token（改密成功后端重新签发时调用，当前会话无缝续期） */
+  function setToken(newToken: string) {
+    token.value = newToken
+    localStorage.setItem('token', newToken)
+  }
+
   /** 退出登录：调用 API → 清除本地状态 */
   async function logout() {
     try {
@@ -54,5 +60,5 @@ export const useUserStore = defineStore('user', () => {
     import('@/stores/notification').then(m => m.useNotificationStore().clearAll())
   }
 
-  return { token, userInfo, isLoggedIn, isManager, isAdmin, login, fetchUserInfo, logout, clearToken }
+  return { token, userInfo, isLoggedIn, isManager, isAdmin, login, fetchUserInfo, setToken, logout, clearToken }
 })

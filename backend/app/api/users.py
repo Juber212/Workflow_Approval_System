@@ -111,6 +111,9 @@ async def put_user_reset_password(
 
     await reset_user_password(db, user_id)
     await db.commit()
+    # P1-5：记录密码版本号，吊销被重置用户所有旧 token，必须用新密码重新登录
+    from app.core.token_blacklist import set_password_version
+    await set_password_version(user_id)
     return ApiResponse.ok(message="密码已重置为默认初始密码")
 
 

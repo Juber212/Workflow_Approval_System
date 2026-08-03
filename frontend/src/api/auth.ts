@@ -48,9 +48,15 @@ export async function logoutApi(): Promise<void> {
   await request.post('/auth/logout')
 }
 
+/** 修改密码响应（改密成功后后端重新签发 token，用于当前会话无缝续期） */
+interface ChangePasswordData {
+  token?: string
+}
+
 /** 修改自己的密码（强制改密场景可省略旧密码） */
-export async function changePasswordApi(data: { old_password?: string; new_password: string }): Promise<void> {
-  await request.put('/auth/password', data)
+export async function changePasswordApi(data: { old_password?: string; new_password: string }): Promise<ChangePasswordData> {
+  const res = await request.put('/auth/password', data)
+  return res.data
 }
 
 /** 更新个人资料（邮箱/手机号） */

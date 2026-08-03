@@ -1,13 +1,15 @@
-"""Token 黑名单 —— JWT 登出 / 禁用用户后使 Token 即时失效
+"""Token 黑名单 —— JWT 登出 / 禁用用户 / 改密重置后使 Token 即时失效
 
 包含两部分：
 1. 黑名单增删查函数（add_to_blacklist / is_blacklisted）
-2. TokenBlacklistMiddleware —— FastAPI 中间件，拦截所有请求检查黑名单
+2. 密码版本号函数（set_password_version / get_password_version）—— 改密/重置密码后
+   按用户批量吊销其所有旧 token（版本号 = 最近一次改密时间戳，中间件对比 token.iat）
+3. TokenBlacklistMiddleware —— FastAPI 中间件，拦截所有请求检查黑名单
 
-使用 Redis DB 2 存储黑名单条目：
-- Key:  jti:<jti>
-- Value: "1"
-- TTL:  token 剩余有效时间（秒），过期后 Redis 自动删除
+使用 Redis DB 2 存储：
+- Key:  jti:<jti>           → 单个 token 已吊销（登出/禁用）
+- Key:  pwd_v:<user_id>     → 用户密码版本号（改密/重置时间戳，Unix 秒）
+- TTL:  token 最长有效时间，到期后 Redis 自动清理
 """
 
 import logging
@@ -15,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.core.config import settings
 from app.core.redis import get_token_blacklist_redis
 from app.core.security import decode_access_token
 
@@ -22,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 # Redis key 前缀，便于调试和监控
 _KEY_PREFIX = "jti:"
+# 密码版本号 key 前缀：pwd_v:<user_id> → 最近一次改密/重置密码时间戳
+_PWD_VERSION_PREFIX = "pwd_v:"
 
 
 async def add_to_blacklist(jti: str, ttl_seconds: int) -> None:
@@ -66,6 +71,41 @@ async def is_blacklisted(jti: str) -> bool:
         return False
 
 
+# ========== 密码版本号（按用户批量吊销） ==========
+
+async def set_password_version(user_id: int) -> None:
+    """记录密码版本号 —— 用户改密或管理员重置密码后调用
+
+    将 pwd_v:<user_id> 设为当前时间戳（Unix 秒），中间件对比 token.iat：
+    签发时间早于该时间戳的旧 token 一律失效，无需逐个枚举 jti。
+    TTL 取 token 最大有效时长，旧 token 全部自然过期后版本号自动清理。
+    """
+    import time as _time
+
+    ttl_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    try:
+        redis = await get_token_blacklist_redis()
+        key = f"{_PWD_VERSION_PREFIX}{user_id}"
+        await redis.set(key, int(_time.time()), ex=ttl_seconds)
+        logger.debug("密码版本号已更新: user_id=%d", user_id)
+    except Exception:
+        # 写入失败不影响主流程（最坏情况下旧 token 仍有效直到自然过期）
+        logger.warning("密码版本号写入失败: user_id=%d", user_id, exc_info=True)
+
+
+async def get_password_version(user_id: int) -> int | None:
+    """读取密码版本号 —— 返回最近一次改密/重置密码的时间戳，无记录返回 None"""
+    try:
+        redis = await get_token_blacklist_redis()
+        key = f"{_PWD_VERSION_PREFIX}{user_id}"
+        val = await redis.get(key)
+        return int(val) if val else None
+    except Exception:
+        # Redis 不可用时放行，避免整个系统不可用
+        logger.warning("密码版本号读取失败: user_id=%d", user_id, exc_info=True)
+        return None
+
+
 # ========== Token 黑名单中间件 ==========
 
 # 不检查黑名单的路径（无需认证或认证逻辑自处理）
@@ -90,10 +130,25 @@ def _path_in_whitelist(path: str) -> bool:
     return False
 
 
+def _token_rejected() -> JSONResponse:
+    """构造 token 已吊销的统一 401 响应"""
+    return JSONResponse(
+        status_code=401,
+        content={
+            "code": 40100,
+            "message": "Token 已失效，请重新登录",
+            "data": None,
+        },
+    )
+
+
 class TokenBlacklistMiddleware(BaseHTTPMiddleware):
     """Token 黑名单中间件 —— 在每次请求时检查 JWT 是否已被吊销
 
     注册在 RateLimitMiddleware 之后，利用 Redis DB 2 的 SET 查询。
+    双重校验：
+    1. jti 黑名单：登出/禁用时单条 token 已吊销
+    2. 密码版本号：改密/重置密码后，签发时间早于版本号的旧 token 全部失效
     白名单路径（登录/登出/健康检查/文档/WebSocket）直接放行。
     """
 
@@ -102,21 +157,23 @@ class TokenBlacklistMiddleware(BaseHTTPMiddleware):
         if _path_in_whitelist(request.url.path):
             return await call_next(request)
 
-        # 从 Authorization Header 提取 JWT 并解析 jti
+        # 从 Authorization Header 提取 JWT 并解析 payload
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
             token = auth[7:]
             payload = decode_access_token(token)
             if payload:
+                # ① 单条黑名单（登出/禁用）
                 jti = payload.get("jti", "")
                 if jti and await is_blacklisted(jti):
-                    return JSONResponse(
-                        status_code=401,
-                        content={
-                            "code": 40100,
-                            "message": "Token 已失效，请重新登录",
-                            "data": None,
-                        },
-                    )
+                    return _token_rejected()
+
+                # ② 密码版本号（改密/重置密码后按用户批量吊销）
+                sub = payload.get("sub")
+                iat = payload.get("iat", 0)
+                if sub and iat:
+                    pwd_version = await get_password_version(int(sub))
+                    if pwd_version and iat < pwd_version:
+                        return _token_rejected()
 
         return await call_next(request)
