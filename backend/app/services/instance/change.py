@@ -205,24 +205,26 @@ async def change_personnel(
 
     # ========== 5. 处理负责人变更 ==========
     if body.assignee_id is not None and body.assignee_id != node.assignee_id:
+        node_status = (node.status or "").lower()
+        # 负责人已提交（节点进入等待校验/审批/批准）后，禁止更换负责人：
+        # 此时负责人的工作已完成，改负责人会造成任务记录与处理人不符
+        if node_status in ("waiting_check", "waiting_approval", "waiting_endorsement"):
+            raise AppException(ErrorCode.VALIDATION_ERROR, "负责人已提交文件，不可更换负责人")
+
         old_name = f"ID:{node.assignee_id}" if node.assignee_id else "无"
         node.assignee_id = body.assignee_id
         changes.append(f"负责人: {old_name} → ID:{body.assignee_id}")
 
-        # 若节点未完成 → 更新 Task.assignee_id
-        # P1-8：覆盖 pending/processing 及 WAITING_*（等待校验/审批/批准）状态，
-        # 仅排除已终结状态，避免换负责人后新负责人没有任务
-        node_status = (node.status or "").lower()
-        if node_status in ("running", "pending", "processing", "waiting_check", "waiting_approval", "waiting_endorsement"):
-            await db.execute(
-                sql_update(Task)
-                .where(
-                    Task.instance_id == instance_id,
-                    Task.node_id == node_id,
-                    Task.status.notin_(_INACTIVE_TASK_STATUSES),
-                )
-                .values(assignee_id=body.assignee_id)
+        # 更新 Task.assignee_id 到新负责人（此处节点必处于负责人处理阶段）
+        await db.execute(
+            sql_update(Task)
+            .where(
+                Task.instance_id == instance_id,
+                Task.node_id == node_id,
+                Task.status.notin_(_INACTIVE_TASK_STATUSES),
             )
+            .values(assignee_id=body.assignee_id)
+        )
 
     # ========== 6. 无变更时返回 ==========
     if not changes:

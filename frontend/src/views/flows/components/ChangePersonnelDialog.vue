@@ -23,8 +23,10 @@
           :initial-options="assigneeInitialOptions"
           :placeholder="'选择负责人'"
           org-members
+          :disabled="assigneeLocked"
           style="width: 320px"
         />
+        <span v-if="assigneeLocked" class="personnel-edit__lock-tip">负责人已提交，不可更换</span>
       </div>
 
       <!-- 校验人 -->
@@ -101,6 +103,12 @@ const form = reactive<{
   assignee_id: undefined,
   checker_id: undefined,
   approver_id: undefined,
+})
+
+/** 负责人是否已提交（节点进入等待校验/审批/批准）→ 不可更换负责人 */
+const assigneeLocked = computed(() => {
+  const st = (props.node?.status || '').toLowerCase()
+  return ['waiting_check', 'waiting_approval', 'waiting_endorsement'].includes(st)
 })
 
 /** 负责人初始选项 —— 预填当前负责人姓名，避免 UserSelector 远程模式显示裸 ID */
@@ -219,6 +227,12 @@ function handleClose() {
     color: var(--el-text-color-secondary);
     width: 60px;
     flex-shrink: 0;
+  }
+
+  &__lock-tip {
+    font-size: 12px;
+    color: var(--el-color-warning);
+    white-space: nowrap;
   }
 }
 </style>

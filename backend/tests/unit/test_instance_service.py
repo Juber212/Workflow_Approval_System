@@ -149,14 +149,35 @@ class TestChangePersonnel:
         assert exc.value.code == ErrorCode.NOT_RUNNING
 
     @pytest.mark.asyncio
-    async def test_change_assignee_covers_waiting_task(self, mock_db):
-        """节点处于等待审批状态 → 换负责人时 Task 更新条件覆盖 WAITING_*（notin_ 终结状态）"""
-        from app.models.enums import TaskStatus
+    async def test_change_assignee_rejected_when_waiting(self, mock_db):
+        """负责人已提交（节点等待审批）→ 换负责人被拒绝"""
         inst = make_instance(id=1, initiator_id=1, status=InstanceStatus.RUNNING)
         node = make_node(id=5, instance_id=1, status=InstanceNodeStatus.WAITING_APPROVAL,
                          assignee_id=2)
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=inst),   # SELECT instance
+            MockResult(scalar_one=node),   # SELECT node
+        ]
+
+        from app.schemas.instance import ChangePersonnelRequest
+        body = ChangePersonnelRequest(assignee_id=9)
+
+        with pytest.raises(AppException) as exc:
+            await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
+                                   current_user=FakeUser(id=1))
+        assert exc.value.code == ErrorCode.VALIDATION_ERROR
+
+    @pytest.mark.asyncio
+    async def test_change_assignee_in_processing(self, mock_db):
+        """负责人处理中（节点 running）→ 换负责人成功，Task 更新条件覆盖非终结状态"""
+        from app.models.enums import TaskStatus
+        inst = make_instance(id=1, initiator_id=1, status=InstanceStatus.RUNNING)
+        node = make_node(id=5, instance_id=1, status=InstanceNodeStatus.RUNNING,
+                         assignee_id=2)
         task = make_task(id=7, node_id=5, instance_id=1, assignee_id=2,
-                         status=TaskStatus.WAITING_APPROVAL)
+                         status=TaskStatus.PROCESSING)
 
         captured = []
 
@@ -189,10 +210,10 @@ class TestChangePersonnel:
 
         # 负责人字段已更新
         assert node.assignee_id == 9
-        # Task 更新语句条件排除终结状态（含 notin_），而非只限 pending/processing
+        # Task 更新语句条件排除终结状态（含 notin_）
         from sqlalchemy.dialects import mysql
         update_stmt = captured[2]
         # literal_binds：NOT IN 列表默认参数化，这里把绑定的状态值渲染进 SQL 以便断言
         sql = str(update_stmt.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "NOT IN" in sql
-        assert "completed" in sql  # 终结状态被排除，WAITING_* 被覆盖
+        assert "completed" in sql  # 终结状态被排除，活跃任务被覆盖
