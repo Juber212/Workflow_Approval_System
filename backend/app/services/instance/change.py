@@ -11,7 +11,7 @@ from app.services.notification_service import create_notification, clear_related
 from app.models import (
     FlowInstance, InstanceNode,
     OperationLog,
-    Task, CheckRecord, Approval, Endorsement,
+    Task, CheckRecord, Approval, Endorsement, User,
 )
 from app.schemas.instance import (
     ChangePersonnelRequest,
@@ -24,6 +24,14 @@ from app.api.deps import CurrentUser
 # 其余状态（pending/processing/waiting_check/waiting_approval/waiting_endorsement）
 # 均视为活跃任务，换人需覆盖（P1-8：修复 WAITING_* 状态下换人不生效）。
 _INACTIVE_TASK_STATUSES = ["completed", "terminated", "rejected"]
+
+# 各角色「工作已完成」的节点状态（按节点所处阶段判断）——已完成阶段的人员不可更换：
+# 负责人：节点进入等待校验/审批/批准（已提交文件）后不可换
+# 校验人：节点进入等待审批/批准（校验已通过）后不可换
+# 审批人：节点进入等待批准（审批已通过）后不可换
+_ASSIGNEE_DONE_STATUSES = {"waiting_check", "waiting_approval", "waiting_endorsement"}
+_CHECKER_DONE_STATUSES = {"waiting_approval", "waiting_endorsement"}
+_APPROVER_DONE_STATUSES = {"waiting_endorsement"}
 
 
 async def _get_active_task(db: AsyncSession, node_id: int) -> Task | None:
@@ -101,9 +109,37 @@ async def change_personnel(
     _old_endorser_id = node.endorser_id
     _removed_checkers: set[int] = set()
     _removed_approvers: set[int] = set()
+    removed_users: set[int] = set()  # 被换掉的人员（旧负责人/被移除的校验人审批人/旧批准人），用于推送刷新
+
+    # 收集本次变更涉及的全部用户 → 真实姓名映射（changes 文案用人名而非裸 ID）
+    involved_ids: set[int] = set()
+    if _old_assignee_id:
+        involved_ids.add(_old_assignee_id)
+    if body.assignee_id:
+        involved_ids.add(body.assignee_id)
+    if body.checkers is not None:
+        involved_ids |= extract_user_ids(node.checkers)
+        involved_ids |= extract_user_ids(body.checkers)
+    if body.approvers is not None:
+        involved_ids |= extract_user_ids(node.approvers)
+        involved_ids |= extract_user_ids(body.approvers)
+    if body.endorser_id:
+        involved_ids.add(body.endorser_id)
+    if _old_endorser_id:
+        involved_ids.add(_old_endorser_id)
+    id_name_map: dict[int, str] = {}
+    if involved_ids:
+        user_rows = (await db.execute(
+            select(User).where(User.id.in_(involved_ids))
+        )).scalars().all()
+        id_name_map = {u.id: (u.real_name or u.username) for u in user_rows}
 
     # ========== 3. 处理校验人变更 ==========
     if body.checkers is not None:
+        # 校验已通过（节点进入等待审批/批准）后校验人不可更换
+        if (node.status or "").lower() in _CHECKER_DONE_STATUSES:
+            raise AppException(ErrorCode.VALIDATION_ERROR, "校验已完成，不可更换校验人")
+
         old_ids = extract_user_ids(node.checkers)
         new_checkers = _normalize_list(body.checkers)
         new_ids = extract_user_ids(new_checkers)
@@ -111,6 +147,7 @@ async def change_personnel(
         removed = old_ids - new_ids
         added = new_ids - old_ids
         _removed_checkers = removed  # 记录用于通知清除
+        removed_users |= removed
 
         if removed or added:
             # 不在新列表的 pending CheckRecord → terminated
@@ -138,11 +175,15 @@ async def change_personnel(
                     round=node.round,  # 记录当前节点轮次
                 ))
 
-            changes.append(f"校验人: {_describe_change(old_ids, new_ids)}")
+            changes.append(f"校验人: {_describe_change(old_ids, new_ids, id_name_map)}")
             node.checkers = new_checkers
 
     # ========== 4. 处理审批人变更 ==========
     if body.approvers is not None:
+        # 审批已通过（节点进入等待批准）后审批人不可更换
+        if (node.status or "").lower() in _APPROVER_DONE_STATUSES:
+            raise AppException(ErrorCode.VALIDATION_ERROR, "审批已完成，不可更换审批人")
+
         old_ids = extract_user_ids(node.approvers)
         new_approvers = _normalize_list(body.approvers)
         new_ids = extract_user_ids(new_approvers)
@@ -150,6 +191,7 @@ async def change_personnel(
         removed = old_ids - new_ids
         added = new_ids - old_ids
         _removed_approvers = removed  # 记录用于通知清除
+        removed_users |= removed
 
         if removed or added:
             # 不在新列表的 pending Approval → terminated
@@ -176,7 +218,7 @@ async def change_personnel(
                     round=node.round,  # 记录当前节点轮次
                 ))
 
-            changes.append(f"审批人: {_describe_change(old_ids, new_ids)}")
+            changes.append(f"审批人: {_describe_change(old_ids, new_ids, id_name_map)}")
             node.approvers = new_approvers
 
     # ========== 4b. 处理批准人变更（单人，直接更新） ==========
@@ -201,7 +243,10 @@ async def change_personnel(
                 round=node.round,
             ))
         node.endorser_id = body.endorser_id
-        changes.append(f"批准人: ID:{_old_endorser_id or '无'} → ID:{body.endorser_id}")
+        if _old_endorser_id:
+            removed_users.add(_old_endorser_id)
+        old_endorser_name = id_name_map.get(_old_endorser_id) if _old_endorser_id else None
+        changes.append(f"批准人: {old_endorser_name or '无'} → {id_name_map.get(body.endorser_id) or f'ID:{body.endorser_id}'}")
 
     # ========== 5. 处理负责人变更 ==========
     if body.assignee_id is not None and body.assignee_id != node.assignee_id:
@@ -211,9 +256,11 @@ async def change_personnel(
         if node_status in ("waiting_check", "waiting_approval", "waiting_endorsement"):
             raise AppException(ErrorCode.VALIDATION_ERROR, "负责人已提交文件，不可更换负责人")
 
-        old_name = f"ID:{node.assignee_id}" if node.assignee_id else "无"
+        if _old_assignee_id:
+            removed_users.add(_old_assignee_id)
+        old_name = id_name_map.get(_old_assignee_id) if _old_assignee_id else "无"
         node.assignee_id = body.assignee_id
-        changes.append(f"负责人: {old_name} → ID:{body.assignee_id}")
+        changes.append(f"负责人: {old_name} → {id_name_map.get(body.assignee_id) or f'ID:{body.assignee_id}'}")
 
         # 更新 Task.assignee_id 到新负责人（此处节点必处于负责人处理阶段）
         await db.execute(
@@ -327,6 +374,7 @@ async def change_personnel(
         "approvers": node.approvers,
         "endorser_id": node.endorser_id,
         "changes": changes,
+        "removed_users": sorted(removed_users),  # 被换掉的人员，供 API 层推送实时刷新
     }
 
 
@@ -343,18 +391,19 @@ def _normalize_list(raw: list | None) -> list[dict] | None:
     return result if result else None
 
 
-def _describe_change(old_ids: set[int], new_ids: set[int]) -> str:
-    """将人员变更描述为可读字符串"""
+def _describe_change(old_ids: set[int], new_ids: set[int], id_name_map: dict[int, str]) -> str:
+    """将人员变更描述为可读字符串（用人名，缺省回退 ID）"""
     parts = []
     if old_ids - new_ids:
-        parts.append(f"移除 {_ids_str(old_ids - new_ids)}")
+        parts.append(f"移除 {_ids_str(old_ids - new_ids, id_name_map)}")
     if new_ids - old_ids:
-        parts.append(f"新增 {_ids_str(new_ids - old_ids)}")
+        parts.append(f"新增 {_ids_str(new_ids - old_ids, id_name_map)}")
     return "、".join(parts)
 
 
-def _ids_str(ids: set[int]) -> str:
-    return "ID:" + ",ID:".join(str(i) for i in sorted(ids))
+def _ids_str(ids: set[int], id_name_map: dict[int, str]) -> str:
+    """人员 ID 列表 → 名字字符串（查不到名字时回退为 ID）"""
+    return "、".join(id_name_map.get(i) or f"ID:{i}" for i in sorted(ids))
 
 
 async def change_priority(

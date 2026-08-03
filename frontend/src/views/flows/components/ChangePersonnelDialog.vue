@@ -39,8 +39,10 @@
           :multiple="false"
           :placeholder="'选择校验人'"
           org-members
+          :disabled="checkerLocked"
           style="width: 320px"
         />
+        <span v-if="checkerLocked" class="personnel-edit__lock-tip">校验已完成，不可更换</span>
       </div>
 
       <!-- 审批人 -->
@@ -53,8 +55,10 @@
           :multiple="false"
           :placeholder="'选择审批人'"
           org-members
+          :disabled="approverLocked"
           style="width: 320px"
         />
+        <span v-if="approverLocked" class="personnel-edit__lock-tip">审批已完成，不可更换</span>
       </div>
     </div>
 
@@ -109,6 +113,18 @@ const form = reactive<{
 const assigneeLocked = computed(() => {
   const st = (props.node?.status || '').toLowerCase()
   return ['waiting_check', 'waiting_approval', 'waiting_endorsement'].includes(st)
+})
+
+/** 校验人是否已通过（节点进入等待审批/批准）→ 不可更换校验人 */
+const checkerLocked = computed(() => {
+  const st = (props.node?.status || '').toLowerCase()
+  return ['waiting_approval', 'waiting_endorsement'].includes(st)
+})
+
+/** 审批人是否已通过（节点进入等待批准）→ 不可更换审批人 */
+const approverLocked = computed(() => {
+  const st = (props.node?.status || '').toLowerCase()
+  return ['waiting_endorsement'].includes(st)
 })
 
 /** 负责人初始选项 —— 预填当前负责人姓名，避免 UserSelector 远程模式显示裸 ID */

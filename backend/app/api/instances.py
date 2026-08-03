@@ -240,7 +240,11 @@ async def change_node_personnel(
     """
     result = await change_personnel(db, instance_id, node_id, body, current_user)
     await db.commit()
-    await send_refresh_signal(current_user.id)  # commit 后推送，保证前端查询到最新数据
+    # 推送给发起人 + 所有被换掉的人员：他们的待办通知被清除，角标需实时刷新
+    refresh_users = set(result.get("removed_users") or [])
+    refresh_users.add(current_user.id)
+    for uid in refresh_users:
+        await send_refresh_signal(uid)  # commit 后推送，保证前端查询到最新数据
     return ApiResponse.ok(result, message="人员更换成功")
 
 
