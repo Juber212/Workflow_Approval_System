@@ -6,7 +6,7 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import select, func, update, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
@@ -247,7 +247,12 @@ async def clear_related(db: AsyncSession, *, user_id: int, types: list[str], ins
                 Notification.type.in_(types),
             ]
             if instance_id is not None:
-                conditions.append(Notification.instance_id == instance_id)
+                # P1-7 兼容：instance_id 为空的为旧代码遗留通知（无法归属实例），
+                # 一并清理，避免「按实例清理」匹配不到导致旧提醒卡在列表
+                conditions.append(or_(
+                    Notification.instance_id == instance_id,
+                    Notification.instance_id.is_(None),
+                ))
             await db.execute(
                 delete(Notification).where(*conditions)
             )

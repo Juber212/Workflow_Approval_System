@@ -50,6 +50,25 @@ async def test_clear_related_by_instance(notif_session):
 
 
 @pytest.mark.asyncio
+async def test_clear_related_by_instance_also_clears_legacy_null(notif_session):
+    """按实例清理时，历史 NULL 通知一并清（P1-7 兼容旧代码遗留数据）"""
+    notif_session.add_all([
+        Notification(user_id=1, type="approval_assigned", title="新实例-审批", content="A", instance_id=10),
+        Notification(user_id=1, type="approval_assigned", title="历史遗留-审批", content="B", instance_id=None),
+        Notification(user_id=2, type="approval_assigned", title="他用户-审批", content="C", instance_id=None),
+    ])
+    await notif_session.commit()
+
+    await clear_related(notif_session, user_id=1, types=["approval_assigned"], instance_id=10)
+    await notif_session.commit()
+
+    remaining = (await notif_session.execute(select(Notification))).scalars().all()
+    titles = {n.title for n in remaining}
+    # 用户1 的新实例通知 + 历史 NULL 通知都被清；其他用户的 NULL 通知保留（user_id 隔离）
+    assert titles == {"他用户-审批"}
+
+
+@pytest.mark.asyncio
 async def test_clear_related_without_instance_keeps_legacy(notif_session):
     """不传 instance_id → 保持原行为：按 user_id + 类型清理该用户该类型全部"""
     notif_session.add_all([
