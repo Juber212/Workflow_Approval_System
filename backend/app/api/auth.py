@@ -319,7 +319,15 @@ async def get_signature_image(
     current_user: CurrentUser = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取用户签名图片 —— 返回文件流，供前端 img 标签直接使用"""
+    """获取用户签名图片 —— 仅本人可访问（签名为个人笔迹，前端仅本人预览签名效果）
+
+    P1-6 收敛：四个详情接口（任务/校验/审批/批准）均「仅操作人本人可查看」，
+    current_signature_url 指向的正是查看者自己的签名素材，故这里仅放行本人，
+    防止任何登录用户枚举抓取他人签名笔迹。
+    """
+    if current_user.id != user_id:
+        raise AppException(ErrorCode.FORBIDDEN, "仅本人可查看签名图片")
+
     from fastapi.responses import FileResponse
 
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
