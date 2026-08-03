@@ -189,6 +189,17 @@ async def create_instance(
         node_id_map[tn.id] = inode.id
         instance_nodes.append(inode)
 
+    # ========== 5.5 难度4 强制批准人校验（P1-10）==========
+    # 难度4 的所有工作节点必须配置批准人（endorser_id），否则审批通过后
+    # 流程会跳过批准环节直接完成，难度4 形同虚设
+    if difficulty == "4":
+        missing = [n.name for n in instance_nodes if not n.is_start and not n.is_end and not n.endorser_id]
+        if missing:
+            raise AppException(
+                ErrorCode.VALIDATION_ERROR,
+                f"难度4流程的所有工作节点必须配置批准人，以下节点未配置：{'、'.join(missing)}",
+            )
+
     # ========== 6. 复制连线 ==========
     for te in tpl_edges:
         src = node_id_map.get(te.source_node_id)

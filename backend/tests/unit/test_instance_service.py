@@ -66,6 +66,35 @@ class TestCreateInstance:
             await create_instance(mock_db, req, FakeUser())
         assert exc.value.code == ErrorCode.VALIDATION_ERROR
 
+    @pytest.mark.asyncio
+    async def test_difficulty4_requires_endorser(self, mock_db):
+        """难度4 + 工作节点未配批准人 → 拒绝发起（P1-10）"""
+        from app.models import FlowTemplate, TemplateNode
+        tpl = FlowTemplate(id=1, name="难度4模板", organization_id=1, type="project")
+        nodes = [
+            TemplateNode(id=1, template_id=1, name="发起", is_start=True, is_end=False,
+                         sort_order=1, assignee_id=None, checkers=[], approvers=[]),
+            TemplateNode(id=2, template_id=1, name="设计", is_start=False, is_end=False,
+                         sort_order=2, assignee_id=1, checkers=[{"user_id": 3}],
+                         approvers=[{"user_id": 4}], endorser_id=None),
+            TemplateNode(id=3, template_id=1, name="终审", is_start=False, is_end=True,
+                         sort_order=3, assignee_id=None, checkers=[], approvers=[]),
+        ]
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=tpl),     # 0: SELECT template
+            MockResult(scalars_all=nodes),  # 1: SELECT template nodes
+            MockResult(scalars_all=[]),     # 2: SELECT template edges
+        ]
+
+        from app.schemas.instance import CreateInstanceRequest
+        req = CreateInstanceRequest(template_id=1, name="测试项目", difficulty="4")
+
+        with pytest.raises(AppException) as exc:
+            await create_instance(mock_db, req, FakeUser())
+        assert exc.value.code == ErrorCode.VALIDATION_ERROR
+        assert "设计" in exc.value.message  # 指出未配置批准人的节点
+
 
 # ============================================================
 # terminate_instance —— 终止实例
