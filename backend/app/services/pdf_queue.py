@@ -143,11 +143,19 @@ async def convert_file_job(ctx, file_id: int, file_path: str) -> dict:
             return {"file_id": file_id, "status": "failed", "error": str(e)[:200]}
 
 
-async def convert_all_files_job(ctx, file_ids: list[int], task_id: int, user_id: int) -> dict:
+# 聚合检查最大重试次数（每次延迟 3 秒，约 60 秒兜底，对齐前端轮询超时）
+# 防 convert_file_job 丢失/Worker 挂起时无限自重新入队
+_CONVERT_ALL_MAX_ATTEMPTS = 20
+
+
+async def convert_all_files_job(ctx, file_ids: list[int], task_id: int, user_id: int, attempt: int = 1) -> dict:
     """ARQ 聚合任务：检查所有文件是否转换完成，通过 Redis Pub/Sub 通知前端
 
     此任务在所有 convert_file_job 之后执行（带延迟），
     检查所有 file_ids 的状态，然后发布 Pub/Sub 消息。
+
+    attempt（P1-15）：自重新入队次数，超限后把仍卡在 pending/converting 的
+    文件标记 failed 并通知前端，避免无限重试消耗资源。
     """
     # 1. 先在 DB 事务内计算状态并 commit
     message: dict | None = None
@@ -160,15 +168,26 @@ async def convert_all_files_job(ctx, file_ids: list[int], task_id: int, user_id:
             failed = sum(1 for f in files if f.conversion_status == "failed")
             ready = sum(1 for f in files if f.conversion_status == "ready")
 
-            if pending > 0:
-                # 还有文件未完成，重新入队延迟检查
-                logger.info(f"[PDF转换] 聚合检查: {ready}/{len(file_ids)} ready, {pending} pending, 重新入队")
+            if pending > 0 and attempt < _CONVERT_ALL_MAX_ATTEMPTS:
+                # 还有文件未完成，重新入队延迟检查（attempt+1）
+                logger.info(f"[PDF转换] 聚合检查: {ready}/{len(file_ids)} ready, {pending} pending, 重新入队(第{attempt}次)")
                 await ctx["redis"].enqueue_job(
                     "convert_all_files_job",
-                    file_ids, task_id, user_id,
+                    file_ids, task_id, user_id, attempt + 1,
                     _defer_by=3,
                 )
                 return {"task_id": task_id, "status": "checking", "ready": ready, "pending": pending}
+
+            if pending > 0:
+                # 重试超限（P1-15）：仍卡在 pending/converting 的文件标记失败，停止无限重试
+                for f in files:
+                    if f.conversion_status in ("pending", "converting"):
+                        f.conversion_status = "failed"
+                        f.conversion_error = "转换超时，请重新提交文件"
+                await db.commit()
+                failed = sum(1 for f in files if f.conversion_status == "failed")
+                ready = sum(1 for f in files if f.conversion_status == "ready")
+                logger.warning(f"[PDF转换] 聚合检查超时: task_id={task_id}, {pending} 个文件标记转换失败")
 
             # 全部完成（无论成功或失败）
             status = "all_ready" if failed == 0 else "partial_failed"
