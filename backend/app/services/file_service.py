@@ -165,6 +165,8 @@ async def upload_file(
         file_path=file_path_rel,
         file_size=file_size,
         mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
+        # 非 PDF 文件上传后尚未转换（提交时才转 PDF），标记待转换，避免误显示 ready
+        conversion_status="ready" if upload_file_obj.content_type == "application/pdf" else "pending",
     )
     try:
         db.add(file_record)

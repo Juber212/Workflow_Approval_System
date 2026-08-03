@@ -307,6 +307,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
                 "round": f.round,
                 "node_id": f.node_id,
                 "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
+                "conversion_status": f.conversion_status or "ready",  # PDF 转换状态（上传后待转换/转换中/失败）
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in files
@@ -324,6 +325,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
                 "round": f.round,
                 "node_id": f.node_id,
                 "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
+                "conversion_status": f.conversion_status or "ready",
                 "created_at": f.created_at.isoformat() if f.created_at else None,
             }
             for f in files if f.node_id == t.node_id

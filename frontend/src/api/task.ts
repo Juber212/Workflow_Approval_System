@@ -90,6 +90,7 @@ export interface TaskFileItem {
   round: number
   node_id: number | null   // 所属节点 ID
   node_name: string        // 所属节点名称
+  conversion_status?: string  // PDF 转换状态（上传后 pending 待转换，提交后才转）
   created_at: string | null
 }
 

@@ -168,8 +168,9 @@
             <div class="file-list" v-if="getFolderFiles(folder.name).length > 0">
               <div v-for="f in getFolderFiles(folder.name)" :key="f.id" class="file-row">
                 <span>{{ f.original_name }}</span>
+                <span v-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
                 <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
-                <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                <el-button v-if="canPreview(f)" text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                 <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                 <el-button text type="danger" size="small" @click="handleDeleteFile(f.id)">删除</el-button>
               </div>
@@ -199,8 +200,9 @@
           <div class="file-list" v-if="currentNodeFiles.length > 0">
             <div v-for="f in currentNodeFiles" :key="f.id" class="file-row">
               <span>{{ f.original_name }}</span>
+              <span v-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
               <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
-              <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+              <el-button v-if="canPreview(f)" text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
               <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
               <el-button text type="danger" size="small" @click="handleDeleteFile(f.id)">删除</el-button>
             </div>
@@ -283,6 +285,21 @@ const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
 const AUTH_TOKEN = () => getToken() || ''
+
+/** 文件转换状态标签（上传后 pending 待转换，提交时才转 PDF） */
+function conversionLabel(f: TaskFileItem): string {
+  const s = f.conversion_status
+  if (s === 'pending') return '待转换'
+  if (s === 'converting') return '转换中'
+  if (s === 'failed') return '转换失败'
+  return ''
+}
+
+/** 文件是否可在线预览（转换完成或未标注状态才可，未转/转换中/失败均不可） */
+function canPreview(f: TaskFileItem): boolean {
+  const s = f.conversion_status
+  return !s || s === 'ready'
+}
 
 const loading = ref(false)
 const detail = ref<TaskDetail | null>(null)
@@ -731,6 +748,19 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
 /* 文件列表 */
 .file-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .file-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--el-bg-color-page); border-radius: 6px; font-size: 13px; }
+// 文件转换状态标签
+.conv-tag {
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+
+  &--pending { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
+  &--converting { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
+  &--failed { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+}
 .file-size { color: var(--el-text-color-secondary); font-size: 12px; flex: 1; }
 .upload-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 6px; }
 .empty-hint { font-size: 13px; color: var(--el-text-color-placeholder); text-align: center; padding: 12px; }
