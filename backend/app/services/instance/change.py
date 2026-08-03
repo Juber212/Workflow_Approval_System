@@ -20,6 +20,26 @@ from app.schemas.instance import (
 from app.api.deps import CurrentUser
 
 
+# 任务「非活跃」状态：已完成/已终止/已驳回 → 换人时不再处理。
+# 其余状态（pending/processing/waiting_check/waiting_approval/waiting_endorsement）
+# 均视为活跃任务，换人需覆盖（P1-8：修复 WAITING_* 状态下换人不生效）。
+_INACTIVE_TASK_STATUSES = ["completed", "terminated", "rejected"]
+
+
+async def _get_active_task(db: AsyncSession, node_id: int) -> Task | None:
+    """查询节点当前活跃任务（含等待校验/审批/批准状态）
+
+    P1-8：原只查 pending/processing，WAITING_* 状态的任务查不到，
+    导致换校验人/审批人/批准人时新记录 task_id=None（坏记录）。
+    """
+    result = await db.execute(
+        select(Task).where(
+            Task.node_id == node_id,
+            Task.status.notin_(_INACTIVE_TASK_STATUSES),
+        )
+    )
+    return result.scalar_one_or_none()
+
 
 async def change_personnel(
     db: AsyncSession,
@@ -105,13 +125,8 @@ async def change_personnel(
                 .values(status="terminated", decided_at=now)
             )
 
-            # 新校验人生成 CheckRecord（查询当前节点的活跃 Task 获取 task_id）
-            active_task = (await db.execute(
-                select(Task).where(
-                    Task.node_id == node_id,
-                    Task.status.in_(["pending", "processing"]),
-                )
-            )).scalar_one_or_none()
+            # 新校验人生成 CheckRecord（查询当前节点的活跃 Task 获取 task_id，含 WAITING_* 状态）
+            active_task = await _get_active_task(db, node_id)
             task_id_for_check = active_task.id if active_task else None
             for uid in added:
                 db.add(CheckRecord(
@@ -149,12 +164,13 @@ async def change_personnel(
                 .values(status="terminated", decided_at=now)
             )
 
-            # 新审批人生成 Approval
+            # 新审批人生成 Approval（task_id 关联当前活跃任务，避免坏记录）
+            active_task = await _get_active_task(db, node_id)
             for uid in added:
                 db.add(Approval(
                     instance_id=instance_id,
                     node_id=node_id,
-                    task_id=None,
+                    task_id=active_task.id if active_task else None,
                     approver_id=uid,
                     status="pending",
                     round=node.round,  # 记录当前节点轮次
@@ -173,12 +189,13 @@ async def change_personnel(
                        Endorsement.status == "pending")
                 .values(status="terminated", decided_at=now)
             )
-        # 创建新批准人的 Endorsement（如果节点处于等待批准状态）
+        # 创建新批准人的 Endorsement（task_id 关联当前活跃任务，避免坏记录）
         if body.endorser_id:
+            active_task = await _get_active_task(db, node_id)
             db.add(Endorsement(
                 instance_id=instance_id,
                 node_id=node_id,
-                task_id=None,
+                task_id=active_task.id if active_task else None,
                 endorser_id=body.endorser_id,
                 status="pending",
                 round=node.round,
@@ -192,15 +209,17 @@ async def change_personnel(
         node.assignee_id = body.assignee_id
         changes.append(f"负责人: {old_name} → ID:{body.assignee_id}")
 
-        # 若节点正运行且只有负责人变更 → 更新 Task.assignee_id
+        # 若节点未完成 → 更新 Task.assignee_id
+        # P1-8：覆盖 pending/processing 及 WAITING_*（等待校验/审批/批准）状态，
+        # 仅排除已终结状态，避免换负责人后新负责人没有任务
         node_status = (node.status or "").lower()
-        if node_status in ("running", "pending", "processing"):
+        if node_status in ("running", "pending", "processing", "waiting_check", "waiting_approval", "waiting_endorsement"):
             await db.execute(
                 sql_update(Task)
                 .where(
                     Task.instance_id == instance_id,
                     Task.node_id == node_id,
-                    Task.status.in_(["pending", "processing"]),
+                    Task.status.notin_(_INACTIVE_TASK_STATUSES),
                 )
                 .values(assignee_id=body.assignee_id)
             )
@@ -267,11 +286,9 @@ async def change_personnel(
             instance_id=node.instance_id,
         )
 
-    # 负责人变更：通知新负责人
+    # 负责人变更：通知新负责人（含 WAITING_* 状态的活跃任务）
     if body.assignee_id is not None:
-        active_task = (await db.execute(
-            select(Task).where(Task.node_id == node_id, Task.status.in_(["pending", "processing"]))
-        )).scalar_one_or_none()
+        active_task = await _get_active_task(db, node_id)
         if active_task:
             await create_notification(
                 db, user_id=body.assignee_id, type="task_assigned",

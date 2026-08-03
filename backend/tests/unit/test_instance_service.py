@@ -12,7 +12,7 @@ from app.core.error_codes import ErrorCode
 from app.models.enums import InstanceStatus, InstanceNodeStatus
 from app.services.instance_service import create_instance, terminate_instance, change_personnel
 
-from tests.factories import make_instance, make_node
+from tests.factories import make_instance, make_node, make_task
 from tests.conftest import MockResult
 
 
@@ -147,3 +147,52 @@ class TestChangePersonnel:
         with pytest.raises(AppException) as exc:
             await change_personnel(mock_db, instance_id=1, node_id=5, body=body, current_user=FakeUser(id=1))
         assert exc.value.code == ErrorCode.NOT_RUNNING
+
+    @pytest.mark.asyncio
+    async def test_change_assignee_covers_waiting_task(self, mock_db):
+        """节点处于等待审批状态 → 换负责人时 Task 更新条件覆盖 WAITING_*（notin_ 终结状态）"""
+        from app.models.enums import TaskStatus
+        inst = make_instance(id=1, initiator_id=1, status=InstanceStatus.RUNNING)
+        node = make_node(id=5, instance_id=1, status=InstanceNodeStatus.WAITING_APPROVAL,
+                         assignee_id=2)
+        task = make_task(id=7, node_id=5, instance_id=1, assignee_id=2,
+                         status=TaskStatus.WAITING_APPROVAL)
+
+        captured = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=inst)      # SELECT instance
+            if i == 1:
+                return MockResult(scalar_one=node)      # SELECT node
+            if i == 2:
+                return None                              # update Task（换负责人）
+            if i == 3:
+                return None                              # clear_related delete
+            if i == 4:
+                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
+            if i == 5:
+                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+            if i == 6:
+                return MockResult(scalar_one=task)      # _get_active_task select
+            return None
+
+        mock_db.execute = _fake_execute
+
+        from app.schemas.instance import ChangePersonnelRequest
+        body = ChangePersonnelRequest(assignee_id=9)
+
+        await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
+                               current_user=FakeUser(id=1))
+
+        # 负责人字段已更新
+        assert node.assignee_id == 9
+        # Task 更新语句条件排除终结状态（含 notin_），而非只限 pending/processing
+        from sqlalchemy.dialects import mysql
+        update_stmt = captured[2]
+        # literal_binds：NOT IN 列表默认参数化，这里把绑定的状态值渲染进 SQL 以便断言
+        sql = str(update_stmt.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "NOT IN" in sql
+        assert "completed" in sql  # 终结状态被排除，WAITING_* 被覆盖
