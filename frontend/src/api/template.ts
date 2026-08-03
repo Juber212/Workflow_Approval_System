@@ -72,6 +72,7 @@ export interface TemplateNodeItem {
   require_approver_signature: boolean
   require_endorser_signature: boolean
   endorser_id: number | null
+  endorser_name: string | null
   signature_x: number
   signature_y: number
   signature_page: number

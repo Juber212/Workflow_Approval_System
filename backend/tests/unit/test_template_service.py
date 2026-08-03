@@ -159,12 +159,13 @@ class TestGetTemplateDetail:
         assert exc.value.code == ErrorCode.NOT_FOUND
 
     def test_node_to_dict_includes_endorser_signature(self):
-        """加载模板节点序列化返回批准人签批开关 + 批准人（此前缺失前端读不到）"""
+        """加载模板节点序列化返回批准人签批开关 + 批准人（含人名，此前缺姓名前端显示ID）"""
         node = TemplateNode(id=100, name="节点1", is_start=False, is_end=False,
                             require_endorser_signature=False, endorser_id=3)
-        d = _node_to_dict(node, {})
+        d = _node_to_dict(node, {3: "王五"})
         assert d["require_endorser_signature"] is False
         assert d["endorser_id"] == 3
+        assert d["endorser_name"] == "王五"
 
 
 # ============================================================

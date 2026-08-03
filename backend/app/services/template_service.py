@@ -234,6 +234,8 @@ async def get_template_detail(db: AsyncSession, template_id: int) -> TemplateDet
     for n in nodes:
         if n.assignee_id:
             user_ids.add(n.assignee_id)
+        if n.endorser_id:
+            user_ids.add(n.endorser_id)  # 批准人（此前缺失，导致设计器显示 ID 而非人名）
         for uid in _extract_ids(n.approvers):
             user_ids.add(uid)
         for uid in _extract_ids(n.checkers):
@@ -323,6 +325,7 @@ def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = Non
 
     # 解析负责人名称
     assignee_name = name_map.get(node.assignee_id) if node.assignee_id else None
+    endorser_name = name_map.get(node.endorser_id) if node.endorser_id else None
 
     # 解析校验人名称列表
     checker_ids = _extract_ids(node.checkers)
@@ -347,6 +350,7 @@ def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = Non
         "require_approver_signature": node.require_approver_signature,
         "require_endorser_signature": node.require_endorser_signature,
         "endorser_id": node.endorser_id,
+        "endorser_name": endorser_name,
         "signature_x": node.signature_x, "signature_y": node.signature_y,
         "signature_page": node.signature_page,
         "position_x": node.position_x, "position_y": node.position_y,

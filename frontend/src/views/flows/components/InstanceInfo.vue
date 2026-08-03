@@ -45,6 +45,12 @@
         <div class="k">发起时间</div>
         <div class="v num">{{ formatTime(detail.initiated_at) }}</div>
       </div>
+      <div class="info-grid__item">
+        <div class="k">难度</div>
+        <div class="v">
+          <span class="diff-badge" :class="'diff--' + (detail.difficulty || '1')">{{ detail.difficulty || '1' }}级</span>
+        </div>
+      </div>
       <div class="info-grid__item" v-if="!isProposal">
         <div class="k">节点进度</div>
         <div class="v">
@@ -229,5 +235,18 @@ const canSupplement = computed(() => {
 // 数字等宽
 .num {
   font-variant-numeric: tabular-nums;
+}
+
+// 难度徽章（与列表页 diff-badge 一致）
+.diff-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 10px;
+
+  &.diff--1 { color: #1e8449; background: #eafaf1; }
+  &.diff--2 { color: #2471a3; background: #eaf2f8; }
+  &.diff--3 { color: #b87333; background: #fef5e7; }
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
 }
 </style>
