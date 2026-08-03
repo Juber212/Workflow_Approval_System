@@ -12,7 +12,7 @@ from app.models.enums import (
     ApprovalStatus, TaskStatus, InstanceNodeStatus, InstanceStatus,
     EndorsementStatus,
 )
-from app.services.approval_service import approve, reject
+from app.services.approval_service import approve, reject, _preserved_upstream_count
 
 from tests.factories import make_approval, make_node, make_task, make_instance
 from tests.conftest import MockResult
@@ -257,3 +257,46 @@ class TestReject:
         with pytest.raises(AppException) as exc:
             await reject(mock_db, approval_id=1, current_user_id=1, opinion="重做", target_node_id=None)
         assert exc.value.code == ErrorCode.BAD_REQUEST
+
+
+# ============================================================
+# _preserved_upstream_count —— 驳回后汇合点保留兄弟分支计数（P0-5）
+# ============================================================
+
+class TestPreservedUpstreamCount:
+    """P0-5 修复：fork/join 驳回到分支内节点时，汇合点保留已完成兄弟分支的到达计数"""
+
+    @pytest.mark.asyncio
+    async def test_non_join_returns_zero(self, mock_db):
+        """非汇合点（incoming_count <= 1）→ 返回 0，不触发查询"""
+        dn = make_node(id=5)
+        dn.incoming_count = 1
+        assert await _preserved_upstream_count(mock_db, 1, dn, {1}) == 0
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_join_preserves_finished_sibling(self, mock_db):
+        """汇合点：非重做且已 FINISHED 的兄弟分支计数保留，重做路径节点不计入"""
+        dn = make_node(id=9)
+        dn.incoming_count = 2
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalars_all=[7, 8]),  # 直接上游：7（兄弟分支）、8（重做分支）
+            MockResult(rows_all=[(7, "finished"), (8, "running")]),  # 上游状态
+        ]
+        # redo_ids={8}：节点 8 在重做路径，不计入；节点 7 为已完成的兄弟分支，保留
+        count = await _preserved_upstream_count(mock_db, 1, dn, {8})
+        assert count == 1
+
+    @pytest.mark.asyncio
+    async def test_join_no_finished_sibling_returns_zero(self, mock_db):
+        """汇合点：无已完成的兄弟分支（全部重做）→ 返回 0"""
+        dn = make_node(id=9)
+        dn.incoming_count = 2
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalars_all=[7, 8]),  # 直接上游
+            MockResult(rows_all=[(7, "waiting"), (8, "waiting")]),  # 都在重做/等待
+        ]
+        count = await _preserved_upstream_count(mock_db, 1, dn, {7, 8})
+        assert count == 0

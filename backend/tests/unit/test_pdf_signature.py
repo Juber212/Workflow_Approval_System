@@ -3,8 +3,12 @@
 import pytest
 from unittest.mock import AsyncMock
 
-from app.models import SystemConfig
-from app.services.pdf_signature import _get_signature_configs, get_role_signature_defaults
+from app.models import SystemConfig, File
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
+from app.services.pdf_signature import (
+    _get_signature_configs, get_role_signature_defaults, create_signature_records,
+)
 from tests.conftest import MockResult
 
 
@@ -88,3 +92,54 @@ class TestGetRoleSignatureDefaults:
         result = await get_role_signature_defaults(mock_db, "assignee")
         assert result["x"] == 400
         assert result["y"] == 100
+
+
+# ============================================================
+# create_signature_records —— file_id 归属校验（P0-3）
+# ============================================================
+
+class TestCreateSignatureRecords:
+    """P0-3 修复：签名 file_id 必须属于当前节点，防止签名写入他人 PDF"""
+
+    @pytest.mark.asyncio
+    async def test_reject_file_id_not_in_node(self, mock_db):
+        """file_id 属于其他节点 → BAD_REQUEST"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalars_all=[File(id=20, node_id=8)]),  # 其他节点的文件
+        ]
+        with pytest.raises(AppException) as exc:
+            await create_signature_records(
+                mock_db, role_type="approver", source_id=1, node_id=5,
+                signatures=[{"file_id": 10, "signer_id": 2}],
+            )
+        assert exc.value.code == ErrorCode.BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_reject_file_id_missing(self, mock_db):
+        """file_id 不存在 → BAD_REQUEST"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalars_all=[]),  # 查不到该文件
+        ]
+        with pytest.raises(AppException) as exc:
+            await create_signature_records(
+                mock_db, role_type="approver", source_id=1, node_id=5,
+                signatures=[{"file_id": 999, "signer_id": 2}],
+            )
+        assert exc.value.code == ErrorCode.BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_accept_file_id_in_node(self, mock_db):
+        """file_id 属于当前节点 → 正常创建签名记录"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalars_all=[File(id=10, node_id=5)]),  # 本节点文件
+        ]
+        sig_ids = await create_signature_records(
+            mock_db, role_type="approver", source_id=1, node_id=5,
+            signatures=[{"file_id": 10, "signer_id": 2}],
+        )
+        # 签名记录已创建；file_id=None（旧兼容）时不校验、直接跳过
+        assert mock_db.add.called
+        assert len(sig_ids) == 1

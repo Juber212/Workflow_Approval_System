@@ -97,12 +97,37 @@ async def upload_file(
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
+    # ===== P0-2 修复：folder_name 白名单 + 路径穿越防护 =====
+    # folder_name 来自前端参数，若直接拼入存储路径可被传 ".." 实现目录穿越写盘
+    if folder_name:
+        # 1. 禁止路径分隔符与穿越段（folder_name 只允许普通文件夹名）
+        if "/" in folder_name or "\\" in folder_name or ".." in folder_name:
+            raise AppException(ErrorCode.BAD_REQUEST, "文件夹名称不合法：不能包含路径分隔符或 '..'")
+        # 2. 节点配置了文件夹分类时，folder_name 必须属于配置列表
+        folders_config = node.file_folders or []
+        if folders_config:
+            allowed_names = {
+                f.get("name", "").strip() for f in folders_config
+                if isinstance(f, dict) and f.get("name")
+            }
+            if folder_name.strip() not in allowed_names:
+                raise AppException(ErrorCode.BAD_REQUEST, f"文件夹「{folder_name}」不在该节点的文件夹配置中")
+        else:
+            # 3. 节点未配置文件夹分类时不允许指定子目录（folder_name 仅在有分类的节点使用）
+            raise AppException(ErrorCode.BAD_REQUEST, "该节点未配置文件夹分类，不可指定文件夹")
+
     # 创建存储目录（根据模板类型分目录，有文件夹时存入子目录）
     archive_subdir = settings.get_archive_dir(inst.template_type or "project")
     if folder_name:
         archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name, folder_name)
     else:
         archive_dir = os.path.join(settings.STORAGE_ROOT, archive_subdir, inst.name)
+
+    # 纵深防御：断言目标目录位于 STORAGE_ROOT 内（防 symlink / 拼接穿越绕过上述校验）
+    real_root = os.path.realpath(settings.STORAGE_ROOT)
+    real_dir = os.path.realpath(archive_dir)
+    if not (real_dir == real_root or real_dir.startswith(real_root + os.sep)):
+        raise AppException(ErrorCode.BAD_REQUEST, "非法的存储目录")
 
     # 生成唯一文件名（用原始文件名，同名时自动追加序号）
     ext = os.path.splitext(upload_file_obj.filename or "file")[1] or ""

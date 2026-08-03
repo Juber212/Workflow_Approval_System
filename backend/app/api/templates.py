@@ -90,6 +90,24 @@ async def post_template(
     return ApiResponse.ok({"id": tpl.id, "name": tpl.name}, message="模板创建成功")
 
 
+@router.get("/template-name-check")
+async def check_template_name(
+    organization_id: int,
+    name: str,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """检查模板名称是否可用（同一组织下不可重名）"""
+    from app.models import FlowTemplate
+    existing = (await db.execute(
+        select(FlowTemplate).where(
+            FlowTemplate.organization_id == organization_id,
+            FlowTemplate.name == name,
+        )
+    )).scalar_one_or_none()
+    return ApiResponse.ok({"available": existing is None})
+
+
 @router.get("/templates/{template_id}")
 async def get_template(
     template_id: int,
@@ -225,9 +243,10 @@ async def list_document_templates(
     )).scalars().all()
     linked_cat_id_set = set(linked_cat_links)
 
-    # 一把查所有分类的文档数
+    # 一把查所有分类的文档数 + 模板列表
     all_cat_ids = [c.id for c in all_org_cats]
     doc_count_map: dict[int, int] = {}
+    doc_list_map: dict[int, list[dict]] = {}  # category_id → [{id, name, original_name, file_type}]
     if all_cat_ids:
         rows = (await db.execute(
             select(TemplateCategoryDocument.category_id, func.count(TemplateCategoryDocument.id))
@@ -236,10 +255,27 @@ async def list_document_templates(
         )).all()
         doc_count_map = {cid: cnt for cid, cnt in rows}
 
+    # 查询已关联分类内的模板明细（用于发起弹窗分类勾选联动）
+    if linked_cat_id_set:
+        cat_doc_rows = (await db.execute(
+            select(TemplateCategoryDocument.category_id, DocumentTemplate.id,
+                   DocumentTemplate.name, DocumentTemplate.original_name, DocumentTemplate.file_type)
+            .join(DocumentTemplate, TemplateCategoryDocument.document_id == DocumentTemplate.id)
+            .where(TemplateCategoryDocument.category_id.in_(linked_cat_id_set))
+        )).all()
+        for cat_id, doc_id, doc_name, doc_orig, doc_type in cat_doc_rows:
+            if cat_id not in doc_list_map:
+                doc_list_map[cat_id] = []
+            doc_list_map[cat_id].append({
+                "id": doc_id, "name": doc_name,
+                "original_name": doc_orig, "file_type": doc_type,
+            })
+
     # 拆分为 linked / available
     linked_categories = [
         {"id": c.id, "name": c.name, "description": c.description,
-         "document_count": doc_count_map.get(c.id, 0)}
+         "document_count": doc_count_map.get(c.id, 0),
+         "documents": doc_list_map.get(c.id, [])}
         for c in all_org_cats if c.id in linked_cat_id_set
     ]
     available_categories = [
@@ -424,6 +460,65 @@ async def unlink_document_template(
 # ─── 批量下载：模板包 ZIP ─────────────────────────────────
 
 
+async def _is_instance_participant(db: AsyncSession, instance, user_id: int) -> bool:
+    """判断用户是否为流程实例参与者（发起人/节点负责人/校验人/审批人/批准人）
+
+    产品规则：文件模板仅任务参与者可下载，下载前须校验参与者身份。
+    """
+    from app.models import InstanceNode
+
+    if instance.initiator_id == user_id:
+        return True
+
+    def _contains_user(role_list) -> bool:
+        """兼容 checkers/approvers 数组元素为 int 或 dict 两种历史格式"""
+        for item in role_list or []:
+            if isinstance(item, dict):
+                if item.get("user_id") == user_id:
+                    return True
+            elif item == user_id:
+                return True
+        return False
+
+    nodes = (await db.execute(
+        select(InstanceNode).where(InstanceNode.instance_id == instance.id)
+    )).scalars().all()
+    for node in nodes:
+        if node.assignee_id == user_id or node.endorser_id == user_id:
+            return True
+        if _contains_user(node.checkers) or _contains_user(node.approvers):
+            return True
+    return False
+
+
+async def _collect_instance_doc_ids(db: AsyncSession, instance) -> set[int]:
+    """收集该实例可下载的文件模板 ID 集合
+
+    实例级 doc_template_ids 优先；为空则继承模板关联（单模板 + 分类包展开）。
+    """
+    from app.models import TemplateDocumentLink, TemplateCategoryDocument
+
+    linked_doc_ids: set[int] = set()
+    if instance.doc_template_ids:
+        linked_doc_ids.update(int(d) for d in instance.doc_template_ids)
+        return linked_doc_ids
+
+    links = (await db.execute(
+        select(TemplateDocumentLink).where(TemplateDocumentLink.template_id == instance.template_id)
+    )).scalars().all()
+    for link in links:
+        if link.document_id is not None:
+            linked_doc_ids.add(link.document_id)
+        elif link.category_id is not None:
+            cat_doc_ids = (await db.execute(
+                select(TemplateCategoryDocument.document_id).where(
+                    TemplateCategoryDocument.category_id == link.category_id
+                )
+            )).scalars().all()
+            linked_doc_ids.update(cat_doc_ids)
+    return linked_doc_ids
+
+
 @router.get("/templates/{template_id}/download-zip")
 async def download_template_zip(
     template_id: int,
@@ -457,6 +552,24 @@ async def download_template_zip(
     )).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "流程模板不存在")
+
+    # ===== P0-1 修复：补归属校验（产品预期：仅任务参与者可下载）=====
+    # 校验实例存在，并验证当前用户是参与者（发起人/负责人/校验人/审批人/批准人）或管理员
+    from app.models import FlowInstance
+
+    instance = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == instance_id)
+    )).scalar_one_or_none()
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+    if not current_user.is_admin() and not await _is_instance_participant(db, instance, current_user.id):
+        raise AppException(ErrorCode.FORBIDDEN, "仅流程参与者可下载文件模板")
+
+    # 校验 doc_ids 全部属于该实例可用的模板关联集（防止跨实例枚举下载）
+    allowed_doc_ids = await _collect_instance_doc_ids(db, instance)
+    invalid_ids = [d for d in ids if d not in allowed_doc_ids]
+    if invalid_ids:
+        raise AppException(ErrorCode.FORBIDDEN, "文件模板不属于该流程实例，无权下载")
 
     # 生成 ZIP
     zip_buffer = await batch_fill_and_zip(db, ids, instance_id, node_id)

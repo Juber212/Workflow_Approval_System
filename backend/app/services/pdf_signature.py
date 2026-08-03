@@ -35,6 +35,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.exceptions import AppException
+from app.core.error_codes import ErrorCode
 from app.models import SystemConfig, Approval, User, File, InstanceNode, Signature
 
 logger = logging.getLogger(__name__)
@@ -138,6 +140,23 @@ async def create_signature_records(
         新创建的签名记录 ID 列表
     """
     from app.models import Signature
+
+    # ===== P0-3 修复：签名 file_id 归属校验 =====
+    # file_id 来自前端，若不校验归属，攻击者可枚举 file_id 把自己的签名盖到他人 PDF 上。
+    # 统一校验：file_id 对应的文件必须属于当前节点（node_id），否则拒绝。
+    real_file_ids = [sig.get("file_id") for sig in signatures if sig.get("file_id") is not None]
+    if real_file_ids:
+        node_files = (await db.execute(
+            select(File).where(File.id.in_(real_file_ids), File.node_id == node_id)
+        )).scalars().all()
+        valid_ids = {f.id for f in node_files}
+        for sig in signatures:
+            fid = sig.get("file_id")
+            if fid is not None and fid not in valid_ids:
+                raise AppException(
+                    ErrorCode.BAD_REQUEST,
+                    f"签名文件不存在或不属于当前节点（file_id={fid}）",
+                )
 
     sig_records: list[Signature] = []  # 先保存对象引用，等 flush 后再取 ID
     for idx, sig in enumerate(signatures):

@@ -90,6 +90,40 @@ async def _get_downstream_nodes_by_edges(
     return downstream
 
 
+async def _preserved_upstream_count(
+    db: AsyncSession,
+    instance_id: int,
+    dn: InstanceNode,
+    redo_ids: set[int],
+) -> int:
+    """P0-5：驳回重跑时计算节点应保留的上游到达数
+
+    fork/join 驳回到分支内节点时，兄弟分支不在重做路径、保持 FINISHED 不会重新传播，
+    汇合点 arrived_count 若清零则永远等不到兄弟分支信号 → 流程永久悬挂。
+    此函数将「非重做路径中已 FINISHED 的直接上游分支」计为已到达。
+    非汇合点（incoming_count <= 1）直接返回 0，行为与原来一致。
+    """
+    if dn.incoming_count <= 1:
+        return 0
+    upstream_ids = (await db.execute(
+        select(InstanceEdge.source_node_id).where(
+            InstanceEdge.instance_id == instance_id,
+            InstanceEdge.target_node_id == dn.id,
+        )
+    )).scalars().all()
+    if not upstream_ids:
+        return 0
+    rows = (await db.execute(
+        select(InstanceNode.id, InstanceNode.status).where(
+            InstanceNode.id.in_(list(upstream_ids))
+        )
+    )).all()
+    return sum(
+        1 for rid, st in rows
+        if st == InstanceNodeStatus.FINISHED and rid not in redo_ids
+    )
+
+
 async def list_approvals(
     db: AsyncSession,
     *,
@@ -690,6 +724,8 @@ async def reject(
             downstream_result = await db.execute(select(InstanceNode).where(False))
         # 批量收集所有下游节点文件 + 终止 Task（一次遍历）
         final_downstream_nodes = list(downstream_result.scalars().all())
+        # P0-5：重做集合 = 目标节点 + 其下游（兄弟分支不在此集合，保持已完成计数）
+        redo_ids = {target_node.id} | {d.id for d in final_downstream_nodes}
         final_downstream_files: list = []
         for dn in final_downstream_nodes:
             dn_files_result = await db.execute(select(File).where(File.node_id == dn.id))
@@ -710,7 +746,8 @@ async def reject(
             dn.status = InstanceNodeStatus.WAITING
             dn.started_at = None
             dn.completed_at = None
-            dn.arrived_count = 0  # 重置到达计数，防止旧轮次计数污染
+            # P0-5：汇合点保留非重做已完成的兄弟分支计数，防驳回后永久卡死
+            dn.arrived_count = await _preserved_upstream_count(db, a.instance_id, dn, redo_ids)
 
         # 终止终审节点其余待审批记录
         await db.execute(
@@ -831,6 +868,8 @@ async def reject(
                 downstream_result = await db.execute(select(InstanceNode).where(False))
             # 批量收集所有下游节点 → 一次性删除文件 + 终止 Task
             downstream_nodes = list(downstream_result.scalars().all())
+            # P0-5：重做集合 = 目标节点 + 其下游（兄弟分支不在此集合，保持已完成计数）
+            redo_ids = {target_node.id} | {d.id for d in downstream_nodes}
             all_downstream_files: list = []
             for dn in downstream_nodes:
                 dn_files = (await db.execute(select(File).where(File.node_id == dn.id))).scalars().all()
@@ -848,7 +887,8 @@ async def reject(
                 dn.status = InstanceNodeStatus.WAITING
                 dn.started_at = None
                 dn.completed_at = None
-                dn.arrived_count = 0  # 重置到达计数，防止旧轮次计数污染
+                # P0-5：汇合点保留非重做已完成的兄弟分支计数，防驳回后永久卡死
+                dn.arrived_count = await _preserved_upstream_count(db, a.instance_id, dn, redo_ids)
 
             # 日志
             log = OperationLog(
