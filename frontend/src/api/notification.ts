@@ -74,6 +74,11 @@ export async function markAllNotificationsRead(): Promise<void> {
   await request.put('/notifications/read-all')
 }
 
+/** 删除单条通知（终局事件通知如「项目已终止」点击后移除） */
+export async function deleteNotification(id: number): Promise<void> {
+  await request.delete(`/notifications/${id}`)
+}
+
 // ==================== WebSocket ====================
 
 /** 通知类型中文映射 */
@@ -86,6 +91,7 @@ export const NOTICE_TYPE_LABELS: Record<string, string> = {
   approval_rejected: '审批驳回',
   final_rejected: '终审驳回',
   endorsement_rejected: '批准驳回',
+  instance_terminated: '项目已终止',
 }
 
 /** 通知类型图标 */
@@ -98,6 +104,7 @@ export const NOTICE_TYPE_ICONS: Record<string, string> = {
   approval_rejected: '❌',
   final_rejected: '↩️',
   endorsement_rejected: '❌',
+  instance_terminated: '⛔',
 }
 
 /**

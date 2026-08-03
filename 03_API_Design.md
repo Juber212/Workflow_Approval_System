@@ -939,16 +939,17 @@ body 为文件模板 ID 数组，全量替换关联。
 
 ---
 
-### 2.14 通知（6 个）— `/api/v1`
+### 2.14 通知（7 个）— `/api/v1`
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|:--:|------|
 | GET | `/notifications` | 用户 | 通知列表（分页，最新优先） |
 | GET | `/notifications/unread-count` | 用户 | 未读计数 |
 | GET | `/notifications/summary` | 用户 | 待办/校验/审批/批准汇总计数 |
-| GET | `/notifications/overdue` | 用户 | 系统全部超期项（任务/校验/审批/批准） |
+| GET | `/notifications/overdue` | 用户 | 系统全部超期预警项（任务/校验/审批/批准，含 2 天内即将到期） |
 | PUT | `/notifications/{id}/read` | 用户 | 标记单条已读 |
 | PUT | `/notifications/read-all` | 用户 | 全部已读 |
+| DELETE | `/notifications/{id}` | 用户 | 删除单条通知（终局事件通知如「项目已终止」点击后移除，仅限自己的） |
 
 #### GET `/notifications/summary`
 
@@ -1017,7 +1018,7 @@ body 为文件模板 ID 数组，全量替换关联。
 
 #### GET `/notifications/overdue`
 
-查询系统**全部**超期项（不限于当前用户），按类型分组返回。
+查询系统**全部**超期预警项（不限于当前用户），口径与首页卡片一致：**已逾期 + 2 天内即将到期**（`deadline < now + 2天`），按类型分组返回。每条含 `is_overdue` 标记区分「已逾期 / 即将逾期」。
 
 响应：
 ```json
@@ -1028,6 +1029,7 @@ body 为文件模板 ID 数组，全量替换关联。
       "instance_id": 10, "instance_name": "XX项目",
       "node_name": "技术方案", "person_name": "张三",
       "person_id": 5, "deadline": "2026-07-20T18:00:00",
+      "is_overdue": true,
       "priority": "high", "organization_name": "一所"
     }
   ],

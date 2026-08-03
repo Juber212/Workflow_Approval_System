@@ -73,11 +73,14 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  fetchNotifications, markNotificationRead, markAllNotificationsRead,
+  fetchNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification,
   NOTICE_TYPE_LABELS, NOTICE_TYPE_ICONS,
   useNotificationSocket,
   type NotificationItem,
 } from '@/api/notification'
+
+/** 终局事件通知类型：无待办可处理，点击即删除（如项目已终止） */
+const TERMINAL_TYPES = new Set(['instance_terminated'])
 
 const router = useRouter()
 
@@ -98,12 +101,19 @@ watch(latestNotice, (notice) => {
   }, 5000)
 })
 
-/** 点击气泡 → 跳转并关闭 */
-function onPopupClick() {
+/** 点击气泡 → 终局通知则删除，否则跳转并关闭 */
+async function onPopupClick() {
   if (!popupNotice.value) return
-  if (popupNotice.value.link) router.push(popupNotice.value.link)
+  const notice = popupNotice.value
   popupNotice.value = null
   if (popupTimer) clearTimeout(popupTimer)
+  if (TERMINAL_TYPES.has(notice.type)) {
+    // 项目已终止等终局通知：点击即删除（气泡推送的都是未读）
+    await deleteNotification(notice.id)
+    unreadCount.value = Math.max(0, unreadCount.value - 1)
+    return
+  }
+  if (notice.link) router.push(notice.link)
 }
 
 const showPanel = ref(false)
@@ -132,8 +142,18 @@ async function loadNotifications() {
   }
 }
 
-/** 点击通知 → 跳转 + 标记已读 */
+/** 点击通知 → 终局通知则删除，否则跳转 + 标记已读 */
 async function handleClick(item: NotificationItem) {
+  if (TERMINAL_TYPES.has(item.type)) {
+    // 项目已终止等终局通知：点击即从列表删除，不跳转
+    await deleteNotification(item.id)
+    notifications.value = notifications.value.filter(n => n.id !== item.id)
+    if (!item.is_read) {
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    }
+    showPanel.value = false
+    return
+  }
   if (!item.is_read) {
     await markNotificationRead(item.id)
     item.is_read = true

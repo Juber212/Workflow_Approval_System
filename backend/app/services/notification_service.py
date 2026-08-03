@@ -6,7 +6,7 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
@@ -26,18 +26,24 @@ async def create_notification(
     content: str,
     link: str | None = None,
 ) -> Notification | None:
-    """创建通知 + WebSocket 实时推送（不阻塞主流程）"""
+    """创建通知 + WebSocket 实时推送（不阻塞主流程）
+
+    使用 savepoint 隔离 DB 操作——通知插入失败不影响外层事务。
+    典型场景：被通知的用户已被删除 → FK 约束失败 → 仅回滚保存点，主流程继续。
+    """
     try:
-        notif = Notification(
-            user_id=user_id,
-            type=type,
-            title=title,
-            content=content,
-            link=link,
-            is_read=False,
-        )
-        db.add(notif)
-        await db.flush()
+        # savepoint 隔离：通知创建失败不回滚外层事务
+        async with db.begin_nested():
+            notif = Notification(
+                user_id=user_id,
+                type=type,
+                title=title,
+                content=content,
+                link=link,
+                is_read=False,
+            )
+            db.add(notif)
+            await db.flush()
 
         # WebSocket 实时推送（异步，不阻塞）
         try:
@@ -58,7 +64,7 @@ async def create_notification(
 
         return notif
     except Exception:  # 安全网：通知创建任何环节失败都不影响主业务流程
-        logger.error(f"创建通知失败: user_id={user_id}, type={type}", exc_info=True)
+        logger.warning(f"创建通知失败（已通过 savepoint 隔离，不影响主流程）: user_id={user_id}, type={type}", exc_info=True)
         return None
 
 
@@ -116,6 +122,22 @@ async def mark_all_read(db: AsyncSession, *, user_id: int) -> None:
         .values(is_read=True)
     )
     await db.flush()
+
+
+async def delete_notification(db: AsyncSession, *, notification_id: int, user_id: int) -> bool:
+    """删除单条通知（仅限自己的）
+
+    用于终局事件通知（如 instance_terminated 项目已终止）——点击即移除，
+    无需保留待办类通知的"处理"语义。
+    """
+    result = await db.execute(
+        delete(Notification).where(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        )
+    )
+    await db.flush()
+    return result.rowcount > 0
 
 
 async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
@@ -205,20 +227,23 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
 async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> None:
     """操作完成后删除相关通知（纯 DB 操作，不发送 WS）
 
+    使用 savepoint 隔离——清除通知失败不影响外层事务。
+
     WS 推送由 API 层在 db.commit() 后调用 send_refresh_signal() 完成，
     确保前端查询 summary 时数据已提交。
     """
     try:
-        from sqlalchemy import delete
-        await db.execute(
-            delete(Notification).where(
-                Notification.user_id == user_id,
-                Notification.type.in_(types),
+        async with db.begin_nested():
+            from sqlalchemy import delete
+            await db.execute(
+                delete(Notification).where(
+                    Notification.user_id == user_id,
+                    Notification.type.in_(types),
+                )
             )
-        )
-        await db.flush()
+            await db.flush()
     except Exception:
-        logger.debug(f"清除通知失败: user_id={user_id}, types={types}", exc_info=True)
+        logger.debug(f"清除通知失败（已通过 savepoint 隔离，不影响主流程）: user_id={user_id}, types={types}", exc_info=True)
 
 
 async def send_refresh_signal(user_id: int) -> None:
@@ -230,16 +255,18 @@ async def send_refresh_signal(user_id: int) -> None:
 
 
 async def get_overdue_items(db: AsyncSession) -> dict:
-    """查询系统全部超期项，按类型分组（任务/校验/审批/批准）
+    """查询全部超期预警项，按类型分组（任务/校验/审批/批准）
 
     全部用户可见，不区分组织。
-    返回各类别超期项列表，含实例名、节点名、负责人、截止时间、优先级。
+    口径与首页卡片一致：已逾期 + 2 天内即将逾期（deadline < now + 2天）。
+    每条含 is_overdue 标记，供前端区分「已逾期 / 即将逾期」。
     """
-    from datetime import datetime
+    from datetime import datetime, timedelta
     from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance, InstanceNode, User, Organization
     from sqlalchemy import and_
 
     now = datetime.now()
+    near_future = now + timedelta(days=2)  # 预警窗口：2 天内到期也纳入
     result: dict[str, list[dict]] = {
         "tasks": [],
         "checks": [],
@@ -256,7 +283,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         .where(
             Task.status.notin_(["completed", "terminated"]),
             InstanceNode.deadline.isnot(None),
-            InstanceNode.deadline < now,
+            InstanceNode.deadline < near_future,
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
@@ -270,7 +297,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         .where(
             CheckRecord.status == "pending",
             InstanceNode.deadline.isnot(None),
-            InstanceNode.deadline < now,
+            InstanceNode.deadline < near_future,
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
@@ -284,7 +311,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         .where(
             Approval.status == "pending",
             InstanceNode.deadline.isnot(None),
-            InstanceNode.deadline < now,
+            InstanceNode.deadline < near_future,
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
@@ -298,7 +325,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         .where(
             Endorsement.status == "pending",
             InstanceNode.deadline.isnot(None),
-            InstanceNode.deadline < now,
+            InstanceNode.deadline < near_future,
         )
         .order_by(InstanceNode.deadline.asc())
     )).all()
@@ -328,6 +355,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
+            "is_overdue": node.deadline < now,
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -342,6 +370,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
+            "is_overdue": node.deadline < now,
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -356,6 +385,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
+            "is_overdue": node.deadline < now,
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -370,6 +400,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
+            "is_overdue": node.deadline < now,
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_active_user, CurrentUser
 from app.core.database import get_db
+from app.core.exceptions import AppException, ErrorCode
 from app.schemas.common import ApiResponse
 from app.services import notification_service as ns
 
@@ -52,6 +53,19 @@ async def mark_read(
     """标记单条通知为已读"""
     await ns.mark_read(db, notification_id=notification_id, user_id=current_user.id)
     return ApiResponse.ok(message="已标记为已读")
+
+
+@router.delete("/notifications/{notification_id}", summary="删除单条通知")
+async def delete_notification_api(
+    notification_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """删除单条通知（仅限自己的）——终局事件通知（如项目已终止）点击后移除"""
+    deleted = await ns.delete_notification(db, notification_id=notification_id, user_id=current_user.id)
+    if not deleted:
+        raise AppException(ErrorCode.NOT_FOUND, "通知不存在或无权删除")
+    return ApiResponse.ok(message="已删除")
 
 
 @router.get("/notifications/overdue", summary="系统超期项汇总")

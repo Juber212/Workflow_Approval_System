@@ -529,9 +529,11 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
             logger.warning("[submit_task] 通知创建失败，不影响提交", exc_info=True)
 
     # ---- 通知清除：提交后删除该负责人的相关待办通知 (#11) ----
+    # endorsement_rejected（批准驳回）与 check_returned/approval_rejected/final_rejected 同类，
+    # 负责人重新提交文件时一并清除
     await clear_related(
         db, user_id=current_user_id,
-        types=["task_assigned", "check_returned", "approval_rejected", "final_rejected"],
+        types=["task_assigned", "check_returned", "approval_rejected", "final_rejected", "endorsement_rejected"],
     )
 
     return {"message": "任务已提交，等待校验" if checkers else "任务已提交，等待审批", "_pending_sig_ids": _pending_sig_ids}

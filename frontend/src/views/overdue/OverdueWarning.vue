@@ -28,10 +28,10 @@
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="负责人" min-width="80" />
-        <el-table-column label="截止时间" min-width="140">
+        <el-table-column label="截止时间" min-width="150">
           <template #default="{ row }">
-            <span class="text-danger">{{ formatTime(row.deadline) }}</span>
-            <el-tag type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
+            <span :class="row.is_overdue ? 'text-danger' : 'text-warning'">{{ formatTime(row.deadline) }}</span>
+            <el-tag :type="row.is_overdue ? 'danger' : 'warning'" size="small" style="margin-left:6px">{{ row.is_overdue ? '已逾期' : '即将逾期' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
@@ -55,10 +55,10 @@
         <el-table-column prop="instance_name" label="项目" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="校验人" min-width="80" />
-        <el-table-column label="截止时间" min-width="140">
+        <el-table-column label="截止时间" min-width="150">
           <template #default="{ row }">
-            <span class="text-danger">{{ formatTime(row.deadline) }}</span>
-            <el-tag type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
+            <span :class="row.is_overdue ? 'text-danger' : 'text-warning'">{{ formatTime(row.deadline) }}</span>
+            <el-tag :type="row.is_overdue ? 'danger' : 'warning'" size="small" style="margin-left:6px">{{ row.is_overdue ? '已逾期' : '即将逾期' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
@@ -82,10 +82,10 @@
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="审批人" min-width="80" />
-        <el-table-column label="截止时间" min-width="140">
+        <el-table-column label="截止时间" min-width="150">
           <template #default="{ row }">
-            <span class="text-danger">{{ formatTime(row.deadline) }}</span>
-            <el-tag type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
+            <span :class="row.is_overdue ? 'text-danger' : 'text-warning'">{{ formatTime(row.deadline) }}</span>
+            <el-tag :type="row.is_overdue ? 'danger' : 'warning'" size="small" style="margin-left:6px">{{ row.is_overdue ? '已逾期' : '即将逾期' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
@@ -109,10 +109,10 @@
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
         <el-table-column prop="person_name" label="批准人" min-width="80" />
-        <el-table-column label="截止时间" min-width="140">
+        <el-table-column label="截止时间" min-width="150">
           <template #default="{ row }">
-            <span class="text-danger">{{ formatTime(row.deadline) }}</span>
-            <el-tag type="danger" size="small" style="margin-left:6px">已逾期</el-tag>
+            <span :class="row.is_overdue ? 'text-danger' : 'text-warning'">{{ formatTime(row.deadline) }}</span>
+            <el-tag :type="row.is_overdue ? 'danger' : 'warning'" size="small" style="margin-left:6px">{{ row.is_overdue ? '已逾期' : '即将逾期' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="organization_name" label="所属组织" min-width="100" />
@@ -156,6 +156,7 @@ interface OverdueItem {
   person_name: string
   person_id: number
   deadline: string | null
+  is_overdue: boolean  // true=已逾期 false=即将逾期（2天内到期）
   priority: string
   organization_name: string
 }
@@ -259,6 +260,11 @@ onMounted(async () => {
 
 .text-danger {
   color: var(--el-color-danger);
+  font-weight: 500;
+}
+
+.text-warning {
+  color: var(--el-color-warning);
   font-weight: 500;
 }
 
