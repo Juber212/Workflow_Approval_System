@@ -154,12 +154,14 @@ class TestCheckFlowIntegration:
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
             MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
-            MockResult(scalar_one=check),       # 1: check FOR UPDATE
-            MagicMock(),                         # 2: update other checks
-            MagicMock(),                         # 3: update pending endorsements → terminated（难度4场景）
-            MockResult(scalar_one=node),         # 4: get node
-            MockResult(scalars_all=[]),          # 5: get files
-            MockResult(scalar_one=task),         # 6: get task
+            MockResult(scalar_one=check),       # 2: check FOR UPDATE
+            MockResult(scalars_all=[]),          # 3: SELECT terminated checkers（P1-12，空）
+            MagicMock(),                         # 4: update other checks
+            MockResult(scalars_all=[]),          # 5: SELECT terminated endorsers（P1-12，空）
+            MagicMock(),                         # 6: update pending endorsements → terminated（难度4场景）
+            MockResult(scalar_one=node),         # 7: get node
+            MockResult(scalars_all=[]),          # 8: get files
+            MockResult(scalar_one=task),         # 9: get task
         ]
 
         from app.core.security import create_access_token
@@ -255,14 +257,17 @@ class TestApprovalFlowIntegration:
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
             MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
-            MockResult(scalar_one=approval),    # 1: approval FOR UPDATE
-            MockResult(scalar_one=node),         # 2: get node
-            MagicMock(),                         # 3: clear_related delete
-            MagicMock(),                         # 4: update other approvals
-            MagicMock(),                         # 5: update pending checks
-            MagicMock(),                         # 6: update pending endorsements → terminated（难度4场景）
-            MockResult(scalars_all=[]),          # 7: get files
-            MockResult(scalar_one=task),         # 8: get task
+            MockResult(scalar_one=approval),    # 2: approval FOR UPDATE
+            MockResult(scalar_one=node),         # 3: get node
+            MagicMock(),                         # 4: clear_related delete
+            MockResult(scalars_all=[]),          # 5: SELECT terminated approvers（P1-12，空）
+            MagicMock(),                         # 6: update other approvals
+            MockResult(scalars_all=[]),          # 7: SELECT terminated checkers（P1-12，空）
+            MagicMock(),                         # 8: update pending checks
+            MockResult(scalars_all=[]),          # 9: SELECT terminated endorsers（P1-12，空）
+            MagicMock(),                         # 10: update pending endorsements → terminated（难度4场景）
+            MockResult(scalars_all=[]),          # 11: get files
+            MockResult(scalar_one=task),         # 12: get task
         ]
 
         from app.core.security import create_access_token

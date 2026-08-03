@@ -16,7 +16,7 @@ from app.models import (
 )
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
-from app.services.notification_service import create_notification, clear_related
+from app.services.notification_service import create_notification, clear_related, clear_related_for_users
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.file_service import batch_delete_files_with_physical
 from app.services.instance._helpers import compute_deadline_info
@@ -433,20 +433,33 @@ async def endorse_reject(
     from app.models import CheckRecord, Approval
 
     # 终止当前轮次 pending 的 Approval（加 round 过滤防止误杀其他轮次）
+    # P1-12：先收集被终止审批人，再终止并清除其待办通知
+    terminated_approvers = (await db.execute(
+        select(Approval.approver_id).where(
+            Approval.node_id == e.node_id, Approval.status == ApprovalStatus.PENDING,
+            Approval.round == e.round)
+    )).scalars().all()
     await db.execute(
         update(Approval)
         .where(Approval.node_id == e.node_id, Approval.status == ApprovalStatus.PENDING,
                Approval.round == e.round)
         .values(status=ApprovalStatus.TERMINATED)
     )
+    await clear_related_for_users(db, set(terminated_approvers), "approval_assigned", e.instance_id)
 
     # 终止当前轮次 pending 的 CheckRecord（加 round 过滤防止误杀其他轮次）
+    terminated_checkers = (await db.execute(
+        select(CheckRecord.checker_id).where(
+            CheckRecord.node_id == e.node_id, CheckRecord.status == "pending",
+            CheckRecord.round == e.round)
+    )).scalars().all()
     await db.execute(
         update(CheckRecord)
         .where(CheckRecord.node_id == e.node_id, CheckRecord.status == "pending",
                CheckRecord.round == e.round)
         .values(status="terminated")
     )
+    await clear_related_for_users(db, set(terminated_checkers), "check_assigned", e.instance_id)
 
     # 6. 删除当前轮文件（DB + 物理文件）
     files_result = await db.execute(

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
-from app.services.notification_service import create_notification, clear_related
+from app.services.notification_service import create_notification, clear_related, clear_related_for_users
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.instance._helpers import compute_progress, compute_deadline_info
 from app.services.file_service import batch_delete_files_with_physical
@@ -521,6 +521,15 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     # 审批策略分支：all_approve（默认）等待全部审批；single_approve 一人通过即推进
     if getattr(node, 'approval_strategy', 'all_approve') == 'single_approve':
         # 单人审批通过 → 终止其他 PENDING 审批，直接推进
+        # P1-12：先收集被终止审批人，再终止并清除其待办通知
+        terminated_approvers = (await db.execute(
+            select(Approval.approver_id).where(
+                Approval.node_id == a.node_id,
+                Approval.task_id == a.task_id,  # 限定当前任务轮次
+                Approval.status == ApprovalStatus.PENDING,
+                Approval.id != approval_id,
+            )
+        )).scalars().all()
         await db.execute(
             update(Approval)
             .where(
@@ -531,6 +540,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             )
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
+        await clear_related_for_users(db, set(terminated_approvers), "approval_assigned", a.instance_id)
     else:
         # 全部通过策略：检查是否还有待审批人员
         # P1-11：限定当前任务（task_id），与 single_approve 分支对齐——
@@ -762,11 +772,17 @@ async def reject(
             dn.arrived_count = await _preserved_upstream_count(db, a.instance_id, dn, redo_ids)
 
         # 终止终审节点其余待审批记录
+        # P1-12：先收集被终止审批人，再终止并清除其待办通知
+        terminated_approvers = (await db.execute(
+            select(Approval.approver_id).where(
+                Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
+        )).scalars().all()
         await db.execute(
             update(Approval)
             .where(Approval.node_id == a.node_id, Approval.status == ApprovalStatus.PENDING)
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
+        await clear_related_for_users(db, set(terminated_approvers), "approval_assigned", a.instance_id)
 
         # 记录日志
         log = OperationLog(
@@ -820,23 +836,40 @@ async def reject(
             a.reject_target_node_id = target_node_id
 
             # 终止当前节点其他 pending 审批
+            # P1-12：先收集被终止人员，再终止并清除其待办通知
+            terminated_approvers = (await db.execute(
+                select(Approval.approver_id).where(
+                    Approval.node_id == a.node_id, Approval.task_id == a.task_id,
+                    Approval.status == ApprovalStatus.PENDING)
+            )).scalars().all()
             await db.execute(
                 update(Approval)
                 .where(Approval.node_id == a.node_id, Approval.task_id == a.task_id, Approval.status == ApprovalStatus.PENDING)  # task_id 限定当前轮次
                 .values(status=ApprovalStatus.TERMINATED, decided_at=now)
             )
+            await clear_related_for_users(db, set(terminated_approvers), "approval_assigned", a.instance_id)
             # 终止当前节点 pending 校验
+            terminated_checkers = (await db.execute(
+                select(CheckRecord.checker_id).where(
+                    CheckRecord.task_id == a.task_id, CheckRecord.status == CheckStatus.PENDING)
+            )).scalars().all()
             await db.execute(
                 update(CheckRecord)
                 .where(CheckRecord.task_id == a.task_id, CheckRecord.status == CheckStatus.PENDING)
                 .values(status=CheckStatus.TERMINATED, decided_at=now)
             )
+            await clear_related_for_users(db, set(terminated_checkers), "check_assigned", a.instance_id)
             # 终止当前节点 pending 批准（难度4兜底）
+            terminated_endorsers = (await db.execute(
+                select(Endorsement.endorser_id).where(
+                    Endorsement.node_id == a.node_id, Endorsement.status == EndorsementStatus.PENDING)
+            )).scalars().all()
             await db.execute(
                 update(Endorsement)
                 .where(Endorsement.node_id == a.node_id, Endorsement.status == EndorsementStatus.PENDING)
                 .values(status=EndorsementStatus.TERMINATED, decided_at=now)
             )
+            await clear_related_for_users(db, set(terminated_endorsers), "endorsement_assigned", a.instance_id)
             # 批量删除当前节点当前轮文件（一次 flush，避免 N 次 DB 操作）
             curr_files_result = await db.execute(
                 select(File).where(File.node_id == a.node_id, File.round == node.round)
@@ -934,13 +967,24 @@ async def reject(
         a.decided_at = now
 
         # 其余 pending Approval → terminated
+        # P1-12：先收集被终止人员，再终止并清除其待办通知
+        terminated_approvers = (await db.execute(
+            select(Approval.approver_id).where(
+                Approval.node_id == a.node_id, Approval.task_id == a.task_id,
+                Approval.status == ApprovalStatus.PENDING)
+        )).scalars().all()
         await db.execute(
             update(Approval)
             .where(Approval.node_id == a.node_id, Approval.task_id == a.task_id, Approval.status == ApprovalStatus.PENDING)  # task_id 限定当前轮次
             .values(status=ApprovalStatus.TERMINATED, decided_at=now)
         )
+        await clear_related_for_users(db, set(terminated_approvers), "approval_assigned", a.instance_id)
 
         # 终止当前轮次待校验记录（保留历史轮次已决记录）
+        terminated_checkers = (await db.execute(
+            select(CheckRecord.checker_id).where(
+                CheckRecord.task_id == a.task_id, CheckRecord.status == CheckStatus.PENDING)
+        )).scalars().all()
         await db.execute(
             update(CheckRecord)
             .where(
@@ -949,8 +993,15 @@ async def reject(
             )
             .values(status=CheckStatus.TERMINATED, decided_at=now)
         )
+        await clear_related_for_users(db, set(terminated_checkers), "check_assigned", a.instance_id)
 
         # 终止当前节点 pending 的批准记录（难度4场景，安全兜底）
+        terminated_endorsers = (await db.execute(
+            select(Endorsement.endorser_id).where(
+                Endorsement.node_id == a.node_id,
+                Endorsement.status == EndorsementStatus.PENDING,
+            )
+        )).scalars().all()
         await db.execute(
             update(Endorsement)
             .where(
@@ -959,6 +1010,7 @@ async def reject(
             )
             .values(status=EndorsementStatus.TERMINATED, decided_at=now)
         )
+        await clear_related_for_users(db, set(terminated_endorsers), "endorsement_assigned", a.instance_id)
 
         # 删除当前轮文件（先DB后物理文件）
         curr_files_result = await db.execute(

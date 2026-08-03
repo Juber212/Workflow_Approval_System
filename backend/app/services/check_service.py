@@ -23,7 +23,7 @@ from app.models import (
 from app.models.enums import CheckStatus, TaskStatus, InstanceNodeStatus, ApprovalStatus, EndorsementStatus, OperatorType
 from app.schemas.common import PaginatedData
 from app.schemas.check import CheckListItem, CheckDetail
-from app.services.notification_service import create_notification, clear_related
+from app.services.notification_service import create_notification, clear_related, clear_related_for_users
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.instance._helpers import compute_progress, compute_deadline_info
 from app.services.file_service import batch_delete_files_with_physical
@@ -470,6 +470,13 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
     c.decided_at = now
 
     # 终止当前轮次其他待校验记录（保留历史轮次已决记录）
+    # P1-12：先收集被终止校验人，再终止并清除其待办通知
+    terminated_checkers = (await db.execute(
+        select(CheckRecord.checker_id).where(
+            CheckRecord.task_id == c.task_id,
+            CheckRecord.status == CheckStatus.PENDING,
+        )
+    )).scalars().all()
     await db.execute(
         update(CheckRecord)
         .where(
@@ -478,10 +485,17 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         )
         .values(status=CheckStatus.TERMINATED, decided_at=now)
     )
+    await clear_related_for_users(db, set(terminated_checkers), "check_assigned", c.instance_id)
 
     # 终止当前节点 pending 的批准记录（难度4场景，安全兜底）
     from app.models import Endorsement
     from app.models.enums import EndorsementStatus
+    terminated_endorsers = (await db.execute(
+        select(Endorsement.endorser_id).where(
+            Endorsement.node_id == c.node_id,
+            Endorsement.status == EndorsementStatus.PENDING,
+        )
+    )).scalars().all()
     await db.execute(
         update(Endorsement)
         .where(
@@ -490,6 +504,7 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         )
         .values(status=EndorsementStatus.TERMINATED, decided_at=now)
     )
+    await clear_related_for_users(db, set(terminated_endorsers), "endorsement_assigned", c.instance_id)
 
     # 删除当前轮文件（DB 记录 + 物理文件）
     node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()

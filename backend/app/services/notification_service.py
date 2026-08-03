@@ -261,6 +261,23 @@ async def clear_related(db: AsyncSession, *, user_id: int, types: list[str], ins
         logger.debug(f"清除通知失败（已通过 savepoint 隔离，不影响主流程）: user_id={user_id}, types={types}, instance_id={instance_id}", exc_info=True)
 
 
+async def clear_related_for_users(
+    db: AsyncSession,
+    user_ids: set[int],
+    notif_type: str,
+    instance_id: int | None = None,
+) -> None:
+    """为一批被终止任务的人员清除对应待办通知（P1-12）
+
+    用于「记录被批量置为 TERMINATED」的场景：调用方先收集被终止记录的
+    归属人员 user_ids，再逐个清除其待办通知，避免被换下/被驳回的人员
+    侧边栏红点与待办残留。
+    """
+    for uid in user_ids:
+        if uid:
+            await clear_related(db, user_id=uid, types=[notif_type], instance_id=instance_id)
+
+
 async def send_refresh_signal(user_id: int) -> None:
     """向指定用户推送 refresh_count（在 DB commit 后调用，保证前端查询到最新数据）"""
     try:

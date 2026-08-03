@@ -275,11 +275,14 @@ class TestReject:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MockResult(scalar_one=node),            # 1: SELECT node
             MagicMock(),                            # 2: clear_related delete
-            MagicMock(),                            # 3: UPDATE other approvals → terminated
-            MagicMock(),                            # 4: UPDATE pending checks → terminated
-            MagicMock(),                            # 5: UPDATE pending endorsements → terminated（难度4场景）
-            MockResult(scalars_all=[]),             # 6: SELECT files（空）
-            MockResult(scalar_one=task),            # 7: SELECT task
+            MockResult(scalars_all=[]),             # 3: SELECT terminated approvers（P1-12，空）
+            MagicMock(),                            # 4: UPDATE other approvals → terminated
+            MockResult(scalars_all=[]),             # 5: SELECT terminated checkers（P1-12，空）
+            MagicMock(),                            # 6: UPDATE pending checks → terminated
+            MockResult(scalars_all=[]),             # 7: SELECT terminated endorsers（P1-12，空）
+            MagicMock(),                            # 8: UPDATE pending endorsements → terminated（难度4场景）
+            MockResult(scalars_all=[]),             # 9: SELECT files（空）
+            MockResult(scalar_one=task),            # 10: SELECT task
         ]
 
         result = await reject(mock_db, approval_id=1, current_user_id=4, opinion="数据不对")
@@ -306,7 +309,8 @@ class TestReject:
             MockResult(scalars_all=[]),             # 4: SELECT target files（空）
             MockResult(scalars_all=[]),             # 5: SELECT edges from target_node（边遍历）
             MockResult(scalars_all=[]),             # 6: SELECT downstream nodes（空）
-            MagicMock(),                            # 7: terminate other approvals
+            MockResult(scalars_all=[]),             # 7: SELECT terminated approvers（P1-12，空）
+            MagicMock(),                            # 8: terminate other approvals
         ]
 
         result = await reject(mock_db, approval_id=1, current_user_id=1,
@@ -336,6 +340,39 @@ class TestReject:
         with pytest.raises(AppException) as exc:
             await reject(mock_db, approval_id=1, current_user_id=999, opinion="不对")
         assert exc.value.code == ErrorCode.FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_reject_clears_notification_for_terminated_approver(self, mock_db, mocker):
+        """P1-12：驳回终止其他待审批记录时，清除被终止审批人的待办通知"""
+        # patch notification_service.clear_related —— clear_related_for_users 内部调用的名字
+        mock_clear = mocker.patch("app.services.notification_service.clear_related", new=AsyncMock())
+
+        approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, round=2)
+        task = make_task(id=10, node_id=5, status=TaskStatus.WAITING_APPROVAL)
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
+            MockResult(scalar_one=node),            # 1: SELECT node
+            MagicMock(),                            # 2: clear_related（reject 开头，真调用）
+            MockResult(scalars_all=[9]),            # 3: SELECT terminated approvers（被终止审批人 id=9）
+            MagicMock(),                            # 4: UPDATE approvals → terminated
+            MockResult(scalars_all=[]),             # 5: SELECT terminated checkers（空）
+            MagicMock(),                            # 6: UPDATE checks → terminated
+            MockResult(scalars_all=[]),             # 7: SELECT terminated endorsers（空）
+            MagicMock(),                            # 8: UPDATE endorsements → terminated
+            MockResult(scalars_all=[]),             # 9: SELECT files（空）
+            MockResult(scalar_one=task),            # 10: SELECT task
+        ]
+
+        result = await reject(mock_db, approval_id=1, current_user_id=4, opinion="数据不对")
+
+        assert "已退回" in result["message"]
+        # 被终止审批人 id=9 的待办通知被清除（clear_related_for_users 内部调用）
+        mock_clear.assert_any_call(
+            mock_db, user_id=9, types=["approval_assigned"], instance_id=1
+        )
 
     @pytest.mark.asyncio
     async def test_end_reject_without_target_fails(self, mock_db):

@@ -124,11 +124,13 @@ class TestReturnCheck:
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalar_one=check),     # 0: get check FOR UPDATE
-            MagicMock(),                       # 1: update other pending checks → terminated
-            MagicMock(),                       # 2: update pending endorsements → terminated（难度4场景）
-            MockResult(scalar_one=node),       # 3: get node
-            MockResult(scalars_all=[]),        # 4: get files (empty)
-            MockResult(scalar_one=task),       # 5: get task
+            MockResult(scalars_all=[]),        # 1: SELECT terminated checkers（P1-12，空）
+            MagicMock(),                       # 2: update other pending checks → terminated
+            MockResult(scalars_all=[]),        # 3: SELECT terminated endorsers（P1-12，空）
+            MagicMock(),                       # 4: update pending endorsements → terminated（难度4场景）
+            MockResult(scalar_one=node),       # 5: get node
+            MockResult(scalars_all=[]),        # 6: get files (empty)
+            MockResult(scalar_one=task),       # 7: get task
         ]
 
         result = await return_check(mock_db, check_id=1, current_user_id=3, opinion="文件格式错误，请重传")
