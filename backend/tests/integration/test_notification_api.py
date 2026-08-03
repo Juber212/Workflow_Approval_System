@@ -29,6 +29,10 @@ def client_with_mocks():
     mock_db.delete = AsyncMock()
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=_nested_ctx)
 
     async def override_get_db():
         yield mock_db
@@ -79,6 +83,7 @@ class TestListNotificationsAPI:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),                   # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_value=0),       # 1: count
             MockResult(scalars_all=[]),       # 2: list
         ]
@@ -108,6 +113,7 @@ class TestListNotificationsAPI:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),                    # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_value=1),        # 1: count
             MockResult(scalars_all=[notif]),   # 2: list
         ]
@@ -140,6 +146,7 @@ class TestUnreadCountAPI:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),                   # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_value=3),       # 1: unread count
         ]
 
@@ -150,6 +157,54 @@ class TestUnreadCountAPI:
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert data["data"]["count"] == 3
+
+
+# ============================================================
+# 删除单条通知（终局事件通知点击即删）
+# ============================================================
+
+class TestDeleteNotificationAPI:
+    """DELETE /api/v1/notifications/{notification_id}"""
+
+    def test_delete_own_notification(self, client_with_mocks):
+        """删除自己的通知 → 200"""
+        client = client_with_mocks
+        db = client.mock_db
+
+        token = _make_token()
+
+        db.execute = AsyncMock()
+        db.execute.side_effect = [
+            _user_result(),              # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
+            MagicMock(rowcount=1),       # 1: delete 命中
+        ]
+
+        resp = client.delete(
+            "/api/v1/notifications/10",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+
+    def test_delete_not_found(self, client_with_mocks):
+        """删除不存在/非本人通知 → 404"""
+        client = client_with_mocks
+        db = client.mock_db
+
+        token = _make_token()
+
+        db.execute = AsyncMock()
+        db.execute.side_effect = [
+            _user_result(),              # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
+            MagicMock(rowcount=0),       # 1: delete 未命中
+        ]
+
+        resp = client.delete(
+            "/api/v1/notifications/999",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 404, f"Expected 404, got {resp.status_code}: {resp.text}"
 
 
 # ============================================================
@@ -169,6 +224,7 @@ class TestSummaryAPI:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),                   # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(rows_all=[]),          # 1: task counts
             MockResult(scalar_value=0),       # 2: check count
             MockResult(rows_all=[]),          # 3: approval counts

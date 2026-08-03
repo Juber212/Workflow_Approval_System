@@ -32,6 +32,10 @@ def client_with_mocks():
     mock_db.delete = AsyncMock()
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=_nested_ctx)
 
     async def override_get_db():
         yield mock_db
@@ -84,6 +88,7 @@ class TestTerminateInstance:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(user_id=99),  # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_one=inst),  # 1: SELECT instance
             MockResult(scalar_one=None),  # 2: template type for _get_type_label
         ]
@@ -107,6 +112,7 @@ class TestTerminateInstance:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),            # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_one=inst),  # 1: SELECT instance
             MockResult(scalar_one=None),  # 2: template type for _get_type_label
         ]
@@ -140,6 +146,7 @@ class TestChangePriority:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(user_id=99),   # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_one=inst),  # 1: SELECT instance
             MockResult(scalar_one=None),  # 2: template type for _get_type_label
         ]
@@ -166,6 +173,7 @@ class TestChangePriority:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),             # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalar_one=inst),  # 1: SELECT instance
             MockResult(scalar_one=None),  # 2: template type for _get_type_label
             MagicMock(),                  # 3: INSERT operation log
@@ -196,6 +204,7 @@ class TestGetInstanceDetail:
         db.execute = AsyncMock()
         db.execute.side_effect = [
             _user_result(),            # 0: get_current_active_user
+            MockResult(scalars_all=[]),  # 1: 角色查询（P0-9，空则不覆盖 JWT 快照）
             MockResult(scalars_all=[]),  # 1: SELECT instance → 不存在
         ]
 

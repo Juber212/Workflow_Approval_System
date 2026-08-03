@@ -96,7 +96,8 @@ class TestCheckFlowIntegration:
         # pass_check 中的 execute 调用链
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
-            MockResult(scalar_one=check),       # 1: SELECT check FOR UPDATE
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
+            MockResult(scalar_one=check),       # 2: SELECT check FOR UPDATE
             MagicMock(),                         # 2: lock other pending
             MockResult(scalars_all=[]),          # 3: all pending → 空
             MockResult(scalar_one=node),         # 4: SELECT node
@@ -124,7 +125,8 @@ class TestCheckFlowIntegration:
         check = make_check(id=1, checker_id=3, status=CheckStatus.PENDING)
 
         db.execute.side_effect = [
-            MockResult(scalar_one=user),        # 0: get_current_active_user
+            MockResult(scalar_one=user),        # 0: get_current_active_user → User
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
             MockResult(scalar_one=check),       # 1: SELECT check
         ]
 
@@ -150,7 +152,8 @@ class TestCheckFlowIntegration:
         task = make_task(id=10, node_id=5, status=TaskStatus.WAITING_CHECK)
 
         db.execute.side_effect = [
-            MockResult(scalar_one=user),        # 0: get_current_active_user
+            MockResult(scalar_one=user),        # 0: get_current_active_user → User
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
             MockResult(scalar_one=check),       # 1: check FOR UPDATE
             MagicMock(),                         # 2: update other checks
             MagicMock(),                         # 3: update pending endorsements → terminated（难度4场景）
@@ -192,7 +195,8 @@ class TestApprovalFlowIntegration:
         inst = make_instance(id=1, difficulty="1")
 
         db.execute.side_effect = [
-            MockResult(scalar_one=user),        # 0: get_current_active_user
+            MockResult(scalar_one=user),        # 0: get_current_active_user → User
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
             MockResult(scalar_one=approval),    # 1: approval FOR UPDATE
             MagicMock(),                         # 2: lock other pending
             MockResult(scalar_one=node),         # 3: SELECT node（审批策略判断）
@@ -222,7 +226,8 @@ class TestApprovalFlowIntegration:
         approval = make_approval(id=1, approver_id=4, status=ApprovalStatus.PENDING)
 
         db.execute.side_effect = [
-            MockResult(scalar_one=user),        # 0: get_current_active_user
+            MockResult(scalar_one=user),        # 0: get_current_active_user → User
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
             MockResult(scalar_one=approval),    # 1: approval
         ]
 
@@ -248,7 +253,8 @@ class TestApprovalFlowIntegration:
         task = make_task(id=10, node_id=5, status=TaskStatus.WAITING_APPROVAL)
 
         db.execute.side_effect = [
-            MockResult(scalar_one=user),        # 0: get_current_active_user
+            MockResult(scalar_one=user),        # 0: get_current_active_user → User
+            MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
             MockResult(scalar_one=approval),    # 1: approval FOR UPDATE
             MockResult(scalar_one=node),         # 2: get node
             MagicMock(),                         # 3: clear_related delete

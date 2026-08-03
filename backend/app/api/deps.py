@@ -53,13 +53,28 @@ async def get_current_active_user(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    """获取当前用户并验证账号状态（用于需要查询数据库的场景）"""
+    """获取当前用户并验证账号状态，同时重查实时角色（P0-9：角色变更即时生效）
+
+    JWT 中的 roles 是签发时的快照——管理员降级/升级用户后旧 token 仍携带旧角色。
+    这里每次请求从 DB 重查角色覆盖快照，require_admin/require_manager 基于最新角色判断。
+    仅当 DB 角色查询到非空结果才覆盖（避免 mock 环境与「无角色用户」误清空 JWT 快照）。
+    """
     stmt = select(User).where(User.id == current_user.id)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:
         raise AppException(ErrorCode.FORBIDDEN, "账号已被禁用")
+
+    # 重查实时角色（与账号状态校验在同一次依赖解析内完成）
+    role_result = await db.execute(
+        select(Role.code)
+        .join(UserRole, UserRole.role_id == Role.id)
+        .where(UserRole.user_id == current_user.id)
+    )
+    db_roles = list(role_result.scalars().all())
+    if db_roles:
+        current_user.roles = db_roles
 
     return current_user
 
