@@ -11,7 +11,7 @@ from app.core.error_codes import ErrorCode
 from app.models import FlowTemplate, Organization, TemplateNode, User
 from app.services.template_service import (
     create_template, get_template_detail, update_template, delete_template,
-    get_organization_summaries,
+    get_organization_summaries, _node_to_dict,
 )
 from tests.conftest import MockResult
 
@@ -157,6 +157,14 @@ class TestGetTemplateDetail:
         with pytest.raises(AppException) as exc:
             await get_template_detail(mock_db, template_id=999)
         assert exc.value.code == ErrorCode.NOT_FOUND
+
+    def test_node_to_dict_includes_endorser_signature(self):
+        """加载模板节点序列化返回批准人签批开关 + 批准人（此前缺失前端读不到）"""
+        node = TemplateNode(id=100, name="节点1", is_start=False, is_end=False,
+                            require_endorser_signature=False, endorser_id=3)
+        d = _node_to_dict(node, {})
+        assert d["require_endorser_signature"] is False
+        assert d["endorser_id"] == 3
 
 
 # ============================================================

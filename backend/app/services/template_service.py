@@ -345,6 +345,8 @@ def _node_to_dict(node: TemplateNode, user_name_map: dict[int, str] | None = Non
         "require_assignee_signature": node.require_assignee_signature,
         "require_checker_signature": node.require_checker_signature,
         "require_approver_signature": node.require_approver_signature,
+        "require_endorser_signature": node.require_endorser_signature,
+        "endorser_id": node.endorser_id,
         "signature_x": node.signature_x, "signature_y": node.signature_y,
         "signature_page": node.signature_page,
         "position_x": node.position_x, "position_y": node.position_y,

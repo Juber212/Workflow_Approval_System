@@ -16,6 +16,7 @@ _NODE_UPDATABLE_FIELDS = [
     "name", "description", "assignee_id", "time_limit_days",
     "require_file", "file_folders", "approvers", "checkers", "approval_strategy",
     "require_assignee_signature", "require_checker_signature", "require_approver_signature",
+    "require_endorser_signature", "endorser_id",  # 批准人签批开关 + 批准人（此前缺失导致配置不持久化）
     "signature_x", "signature_y", "signature_page",
     "position_x", "position_y", "sort_order",
 ]

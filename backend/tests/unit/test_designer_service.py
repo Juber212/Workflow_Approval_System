@@ -10,7 +10,7 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.designer_service import (
     save_design_data, add_node, update_node, delete_node,
-    add_edge, delete_edge,
+    add_edge, delete_edge, _apply_node_fields,
 )
 from app.models import FlowTemplate, TemplateNode
 
@@ -79,6 +79,21 @@ class TestSaveDesignData:
         assert result["template_id"] == 1
         assert "node_count" in result
         assert "edge_count" in result
+
+
+# ============================================================
+# 签批配置持久化（require_endorser_signature / endorser_id）
+# ============================================================
+
+class TestEndorserSignaturePersistence:
+    """批准人签批开关与批准人字段保存链路（此前白名单缺字段被丢弃）"""
+
+    def test_apply_node_fields_persists_endorser_signature(self):
+        """保存节点时批准人签批开关 + 批准人被持久化到节点"""
+        node = TemplateNode(id=1)
+        _apply_node_fields(node, {"require_endorser_signature": False, "endorser_id": 3})
+        assert node.require_endorser_signature is False
+        assert node.endorser_id == 3
 
 
 # ============================================================
