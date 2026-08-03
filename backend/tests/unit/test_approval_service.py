@@ -160,6 +160,101 @@ class TestApprove:
             await approve(mock_db, approval_id=1, current_user_id=4, opinion=None)
         assert exc.value.code == ErrorCode.FORBIDDEN
 
+    @pytest.mark.asyncio
+    async def test_all_approve_aggregation_limited_by_task_id(self, mock_db, mocker):
+        """P1-11：all_approve 聚合只统计当前 task 的 pending，跨 task 残留不阻塞
+
+        模拟"当前 task 已无 pending"（跨 task 的残留 pending 被 SQL 排除），
+        流程应判定全部通过推进，而非卡在等待其他审批人。
+        """
+        mocker.patch("app.services.approval_service.propagate_from_node", new=AsyncMock())
+
+        approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, require_approver_signature=False, endorser_id=None)
+        inst = make_instance(id=1, difficulty="1")
+
+        captured: list = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=approval)   # SELECT approval FOR UPDATE
+            if i == 1:
+                return MagicMock()                        # lock other pending
+            if i == 2:
+                return MagicMock()                        # clear_related delete
+            if i == 3:
+                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
+            if i == 4:
+                return MockResult(scalars_all=[])         # remaining pending → 当前 task 无 pending
+            if i == 5:
+                return MagicMock()                        # UPDATE task → completed
+            if i == 6:
+                return MockResult(scalar_one=inst)        # SELECT FlowInstance
+            if i == 7:
+                return MockResult(scalar_one=None)        # SELECT FlowTemplate（非 proposal）
+            return None
+
+        mock_db.execute = _fake_execute
+
+        result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
+
+        assert result["all_approved"] is True
+        # 聚合查询（captured[4]）必须限定 task_id == 10（当前任务），与 single_approve 对齐
+        from sqlalchemy.dialects import mysql
+        sql = str(captured[4].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "task_id = 10" in sql
+
+    @pytest.mark.asyncio
+    async def test_signature_applied_update_limited_by_task_id(self, mock_db, mocker):
+        """P1-11：signature_applied 批量更新只标当前 task 的 APPROVED 审批，不误标历史轮次"""
+        mocker.patch("app.services.approval_service.propagate_from_node", new=AsyncMock())
+
+        approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, require_approver_signature=True, endorser_id=None)
+        inst = make_instance(id=1, difficulty="1")
+        pending_sig = MagicMock()
+        pending_sig.id = 99
+
+        captured: list = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=approval)       # SELECT approval FOR UPDATE
+            if i == 1:
+                return MagicMock()                            # lock other pending
+            if i == 2:
+                return MagicMock()                            # clear_related delete
+            if i == 3:
+                return MockResult(scalar_one=node)            # SELECT node
+            if i == 4:
+                return MockResult(scalars_all=[])             # remaining pending → 空
+            if i == 5:
+                return MagicMock()                            # UPDATE task → completed
+            if i == 6:
+                return MockResult(scalars_all=[pending_sig])  # SELECT Signature pending
+            if i == 7:
+                return MagicMock()                            # UPDATE Approval signature_applied
+            if i == 8:
+                return MockResult(scalar_one=inst)            # SELECT FlowInstance
+            if i == 9:
+                return MockResult(scalar_one=None)            # SELECT FlowTemplate（非 proposal）
+            return None
+
+        mock_db.execute = _fake_execute
+
+        result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
+
+        assert result["all_approved"] is True
+        # 签名状态更新语句（captured[7]）必须限定 task_id == 10，只标当前任务轮次
+        from sqlalchemy.dialects import mysql
+        sql = str(captured[7].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "task_id = 10" in sql
+        assert "signature_applied" in sql
+
 
 # ============================================================
 # reject —— 审批退回/驳回

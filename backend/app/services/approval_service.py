@@ -533,9 +533,12 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         )
     else:
         # 全部通过策略：检查是否还有待审批人员
+        # P1-11：限定当前任务（task_id），与 single_approve 分支对齐——
+        # 避免跨轮次/跨任务残留的 PENDING 审批被误计入，导致全部已通过仍"等待其他审批人"
         pending_apprs = await db.execute(
             select(Approval).where(
                 Approval.node_id == a.node_id,
+                Approval.task_id == a.task_id,
                 Approval.status == ApprovalStatus.PENDING,
             )
         )
@@ -567,9 +570,15 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             _pending_signature_ids = [s.id for s in pending_sigs]
 
         # 兼容旧版：标记 Approval 的旧签名字段
+        # P1-11：限定当前任务（task_id），只标当前轮次已通过审批的签名状态，
+        # 避免多轮次重跑时把历史轮次的 APPROVED 记录也误标
         await db.execute(
             update(Approval)
-            .where(Approval.node_id == node.id, Approval.status == ApprovalStatus.APPROVED)
+            .where(
+                Approval.node_id == node.id,
+                Approval.task_id == a.task_id,
+                Approval.status == ApprovalStatus.APPROVED,
+            )
             .values(signature_applied=True)
         )
         await db.flush()
