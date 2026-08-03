@@ -1,6 +1,6 @@
 """用户模型"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 
@@ -9,6 +9,10 @@ from app.core.database import Base
 
 class User(Base):
     __tablename__ = "users"
+    # 索引名与既有 DB 索引对齐（P1-20 对账）
+    __table_args__ = (
+        Index("idx_org", "organization_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, comment="登录用户名")

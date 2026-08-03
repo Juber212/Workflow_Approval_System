@@ -1,6 +1,6 @@
 """实例节点模型（运行时状态）"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON, Float, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,13 @@ from app.core.database import Base
 
 class InstanceNode(Base):
     __tablename__ = "instance_nodes"
+    # 索引名与既有 DB 索引对齐（P1-20 对账）
+    __table_args__ = (
+        Index("idx_instance", "instance_id"),
+        Index("idx_assignee", "assignee_id"),
+        Index("idx_status_deadline", "status", "deadline"),
+        Index("fk_instance_nodes_endorser", "endorser_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id", ondelete="CASCADE"), nullable=False, comment="所属实例")

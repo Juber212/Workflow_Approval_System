@@ -1,6 +1,6 @@
 """项目模型"""
 
-from sqlalchemy import String, Integer, DateTime, ForeignKey, JSON
+from sqlalchemy import String, Integer, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,17 @@ from app.core.database import Base
 
 class FlowInstance(Base):
     __tablename__ = "flow_instances"
+    # 索引名与既有 DB 索引完全对齐（P1-20 对账，防 autogenerate 误删），
+    # 另补 DB 缺失的热点筛选索引 idx_status / idx_template_type
+    __table_args__ = (
+        Index("idx_template", "template_id"),
+        Index("idx_org", "organization_id"),
+        Index("idx_initiator", "initiator_id"),
+        Index("idx_initiator_status", "initiator_id", "status"),
+        Index("idx_status", "status"),
+        Index("idx_template_type", "template_type"),
+        Index("fk_flow_instances_proposal_id", "proposal_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, comment="项目名称")

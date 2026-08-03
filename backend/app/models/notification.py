@@ -1,6 +1,6 @@
 """通知模型 —— 站内通知，用户离线也可回看"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,11 @@ from app.core.database import Base
 
 class Notification(Base):
     __tablename__ = "notifications"
+    # 索引名与既有 DB 索引对齐（P1-20 对账），另补 idx_instance（按实例清理通知）
+    __table_args__ = (
+        Index("idx_notif_user_unread", "user_id", "is_read"),
+        Index("idx_instance", "instance_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="接收人")

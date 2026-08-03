@@ -1,5 +1,5 @@
 """批准记录模型 —— 难度4级时，审批人全部通过后的最终审核环节"""
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Float, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from app.core.database import Base
@@ -7,6 +7,13 @@ from app.core.database import Base
 
 class Endorsement(Base):
     __tablename__ = "endorsements"
+    # 索引名与既有 DB 索引对齐（P1-20 对账）
+    __table_args__ = (
+        Index("instance_id", "instance_id"),
+        Index("node_id", "node_id"),
+        Index("task_id", "task_id"),
+        Index("endorser_id", "endorser_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属项目")

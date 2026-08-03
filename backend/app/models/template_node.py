@@ -1,6 +1,6 @@
 """模板节点模型（统一节点模型）"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, JSON, Float, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,12 @@ from app.core.database import Base
 
 class TemplateNode(Base):
     __tablename__ = "template_nodes"
+    # 索引名与既有 DB 索引对齐（P1-20 对账）
+    __table_args__ = (
+        Index("idx_template", "template_id"),
+        Index("idx_assignee", "assignee_id"),
+        Index("fk_template_nodes_endorser", "endorser_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     template_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_templates.id", ondelete="CASCADE"), nullable=False, comment="所属模板")

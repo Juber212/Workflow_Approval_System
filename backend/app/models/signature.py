@@ -1,6 +1,6 @@
 """签名记录模型 —— 统一管理负责人/校验人/审批人的签名记录"""
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, ForeignKey, Float
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, ForeignKey, Float, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime, date
 
@@ -9,6 +9,13 @@ from app.core.database import Base
 
 class Signature(Base):
     __tablename__ = "signatures"
+    # 索引名与既有 DB 索引对齐（P1-20 对账），另补 idx_source（按业务记录查签名）
+    __table_args__ = (
+        Index("file_id", "file_id"),
+        Index("node_id", "node_id"),
+        Index("signer_id", "signer_id"),
+        Index("idx_source", "source_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     file_id: Mapped[int] = mapped_column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, comment="签在哪个文件")

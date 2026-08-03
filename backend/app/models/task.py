@@ -1,6 +1,6 @@
 """任务模型"""
 
-from sqlalchemy import String, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,13 @@ from app.core.database import Base
 
 class Task(Base):
     __tablename__ = "tasks"
+    # 索引名与既有 DB 索引对齐（P1-20 对账）
+    __table_args__ = (
+        Index("idx_instance", "instance_id"),
+        Index("idx_node", "node_id"),
+        Index("idx_assignee", "assignee_id"),
+        Index("idx_assignee_status", "assignee_id", "status"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instance_id: Mapped[int] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=False, comment="所属项目")

@@ -1,6 +1,6 @@
 """操作日志模型（按年分区，只写不删）"""
 
-from sqlalchemy import String, Integer, DateTime, JSON
+from sqlalchemy import String, Integer, DateTime, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
@@ -9,6 +9,15 @@ from app.core.database import Base
 
 class OperationLog(Base):
     __tablename__ = "operation_logs"
+    # 索引名与既有 DB 索引对齐（P1-20 对账；分区表，索引均非分区键）
+    __table_args__ = (
+        Index("idx_instance", "instance_id"),
+        Index("idx_created", "created_at"),
+        Index("idx_instance_created", "instance_id", "created_at"),
+        Index("idx_node_round", "node_id", "round"),
+        Index("idx_operator", "operator_id"),
+        Index("idx_type", "operation_type"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, autoincrement=True, primary_key=True, comment="自增ID")
     instance_id: Mapped[int | None] = mapped_column(Integer, comment="所属项目")
