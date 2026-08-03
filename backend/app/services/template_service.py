@@ -2,6 +2,7 @@
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
@@ -195,7 +196,10 @@ async def create_template(db: AsyncSession, data: TemplateCreate, user_id: int) 
         organization_id=data.organization_id, created_by=user_id,
     )
     db.add(tpl)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise AppException(ErrorCode.CONFLICT, f"该组织下已存在同名模板「{data.name}」")
 
     # 开始节点
     db.add(TemplateNode(

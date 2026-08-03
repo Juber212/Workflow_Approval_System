@@ -21,6 +21,10 @@ def client():
     mock_db.add = MagicMock()
     mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=_nested_ctx)
 
     async def override_get_db():
         yield mock_db

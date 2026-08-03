@@ -97,6 +97,11 @@ def mock_db():
     db.rollback = AsyncMock()
     db.delete = AsyncMock()
     db.refresh = AsyncMock()
+    # begin_nested 返回一个支持 async with 的对象（savepoint 隔离）
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    db.begin_nested = MagicMock(return_value=_nested_ctx)
     return db
 
 

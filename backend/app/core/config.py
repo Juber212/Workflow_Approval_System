@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # 用户默认密码（必须在 .env 中配置，不允许使用源码默认值）
     DEFAULT_USER_PASSWORD: str = ""
+    # 管理员初始密码（仅首次部署 seed 脚本创建 admin 时使用）
+    DEFAULT_ADMIN_PASSWORD: str = ""
 
     # Redis（ARQ 任务队列 + Pub/Sub 桥接）
     REDIS_URL: str = "redis://localhost:6379/0"  # Redis 连接地址
@@ -102,7 +104,7 @@ class Settings(BaseSettings):
             f"?charset=utf8mb4"
         )
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

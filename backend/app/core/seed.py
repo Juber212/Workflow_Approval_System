@@ -44,15 +44,14 @@ CONFIGS = [
     {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
 ]
 
-# 默认管理员密码从环境变量读取，未设置则拒绝运行
-import os as _os
-_DEFAULT_ADMIN_PASSWORD = _os.getenv("DEFAULT_ADMIN_PASSWORD", "")
-if not _DEFAULT_ADMIN_PASSWORD:
+# 默认管理员密码从配置文件读取
+from app.core.config import settings
+if not settings.DEFAULT_ADMIN_PASSWORD:
     raise RuntimeError("环境变量 DEFAULT_ADMIN_PASSWORD 未设置，请先设置默认管理员密码后重试")
 
 DEFAULT_ADMIN = {
     "username": "admin",
-    "password": _DEFAULT_ADMIN_PASSWORD,
+    "password": settings.DEFAULT_ADMIN_PASSWORD,
     "real_name": "系统管理员",
 }
 

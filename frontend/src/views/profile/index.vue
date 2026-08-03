@@ -80,7 +80,7 @@
           </el-table-column>
           <el-table-column label="优先级" min-width="64">
             <template #default="{ row }">
-              <span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
+              <span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
             </template>
           </el-table-column>
           <el-table-column label="状态" min-width="64">
@@ -210,7 +210,7 @@
         <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push({ name: 'InstanceDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="name" label="项目" min-width="140" />
           <el-table-column label="优先级" min-width="64">
-            <template #default="{ row }"><span class="pri-tag" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
+            <template #default="{ row }"><span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
           </el-table-column>
           <el-table-column prop="current_handlers" label="当前处理人" min-width="90" show-overflow-tooltip>
             <template #default="{ row }">
@@ -696,13 +696,7 @@ watch(propActiveTab, (tab) => {
 .text-danger { color: var(--el-color-danger); font-weight: 500; }
 .text-muted { color: var(--el-text-color-placeholder); }
 
-.pri-tag {
-  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
-  &.pri--urgent { color: #fff; background: var(--el-color-danger); }
-  &.pri--high { color: #fff; background: var(--el-color-warning); }
-  &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
-  &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); }
-}
+.pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { background: #fde2e2; color: #c0392b; } &.pri--high { background: #fef5e7; color: #d68910; } &.pri--normal { background: #eaf2f8; color: #2471a3; } &.pri--low { background: #f2f3f5; color: #86909c; } }
 
 /* 分页 */
 .list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
