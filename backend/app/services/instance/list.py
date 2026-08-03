@@ -1,6 +1,6 @@
 """实例列表查询服务"""
 
-from ._helpers import _batch_get_node_stats, _batch_get_active_node_info, _batch_get_active_deadlines, _batch_get_flow_deadlines, format_current_handlers, enrich_handler_info_with_names, compute_deadline_info
+from ._helpers import ACTIVE_NODE_STATUSES, _batch_get_node_stats, _batch_get_active_node_info, _batch_get_active_deadlines, _batch_get_flow_deadlines, format_current_handlers, enrich_handler_info_with_names, compute_deadline_info
 
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,7 +92,8 @@ async def list_instances(
             select(InstanceNode.deadline)
             .where(
                 InstanceNode.instance_id == FlowInstance.id,
-                InstanceNode.status.in_(["pending", "processing"]),
+                # P1-16：改用活跃状态集合（原 pending/processing 非实例节点状态，恒匹配不到导致 deadline 恒 NULL）
+                InstanceNode.status.in_(ACTIVE_NODE_STATUSES),
             )
             .order_by(InstanceNode.sort_order)
             .limit(1)

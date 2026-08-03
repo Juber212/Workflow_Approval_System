@@ -11,6 +11,7 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models.enums import InstanceStatus, InstanceNodeStatus
 from app.services.instance_service import create_instance, terminate_instance, change_personnel
+from app.services.instance.list import list_instances
 
 from tests.factories import make_instance, make_node, make_task
 from tests.conftest import MockResult
@@ -251,3 +252,46 @@ class TestChangePersonnel:
         sql = str(update_stmt.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "NOT IN" in sql
         assert "completed" in sql  # 终结状态被排除，活跃任务被覆盖
+
+
+# ============================================================
+# list_instances —— 优先级排序 deadline 子查询（P1-16）
+# ============================================================
+
+class TestListInstances:
+    """实例列表 —— 优先级排序的 deadline 子查询用活跃状态集合"""
+
+    @pytest.mark.asyncio
+    async def test_priority_sort_uses_active_statuses(self, mock_db, mocker):
+        """P1-16：按优先级排序时，deadline 子查询按活跃状态集合匹配（修复恒 NULL）"""
+        # 批量 helper 单独 patch（不依赖其内部查询），聚焦验证排序子查询
+        mocker.patch("app.services.instance.list._batch_get_node_stats", new=AsyncMock(return_value={}))
+        mocker.patch("app.services.instance.list._batch_get_active_node_info", new=AsyncMock(return_value={}))
+        mocker.patch("app.services.instance.list._batch_get_active_deadlines", new=AsyncMock(return_value={}))
+        mocker.patch("app.services.instance.list._batch_get_flow_deadlines", new=AsyncMock(return_value={}))
+
+        inst = make_instance(id=1, initiator_id=1, priority="urgent", status="running")
+        captured: list = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_value=1)  # count 查询
+            if i == 1:
+                return MockResult(rows_all=[(inst, "张三", "设计所")])  # 主查询
+            return None
+
+        mock_db.execute = _fake_execute
+
+        result = await list_instances(mock_db, sort_by="priority", page=1, page_size=10)
+
+        # 主查询（captured[1]）的 deadline 子查询必须用活跃状态集合（running/waiting_* 等）
+        from sqlalchemy.dialects import mysql
+        sql = str(captured[1].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "running" in sql
+        assert "waiting_approval" in sql
+        assert "waiting_check" in sql
+        # 结果组装正常
+        assert result.total == 1
+        assert result.items[0].priority == "urgent"

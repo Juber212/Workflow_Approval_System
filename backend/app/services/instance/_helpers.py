@@ -10,6 +10,14 @@ from app.models import (
     User,
 )
 
+# 节点活跃状态集合：非终态且已激活（排除 waiting 未激活 / finished / rejected / terminated）
+# 供列表 deadline 排序、活跃节点查询、逾期判断复用。
+# P1-16：list.py 曾误用 ["pending","processing"]（非实例节点状态）导致 deadline 恒 NULL。
+ACTIVE_NODE_STATUSES = [
+    "arrived", "running", "pending", "processing",
+    "waiting_check", "waiting_approval", "waiting_endorsement",
+]
+
 
 def compute_deadline_info(deadline: datetime | None) -> tuple[bool, int | None]:
     """计算逾期状态和剩余天数
@@ -78,8 +86,7 @@ async def _batch_get_active_node_info(db: AsyncSession, instance_ids: list[int])
         return {}
 
     # 活跃状态：排除 finished / terminated / waiting（等待上游尚未激活）
-    active_statuses = ["arrived", "running", "pending", "processing",
-                       "waiting_check", "waiting_approval", "waiting_endorsement"]
+    active_statuses = ACTIVE_NODE_STATUSES
 
     # 查询每个实例的第一个活跃工作节点（按 sort_order 升序）
     stmt = (
