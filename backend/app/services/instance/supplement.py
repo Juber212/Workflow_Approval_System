@@ -85,6 +85,34 @@ async def supplement_files(
     user_result = await db.execute(select(User.real_name).where(User.id == current_user.id))
     user_name = user_result.scalar() or current_user.username
 
+    # ========== 4.5 校验补交文件夹规则（P1-9：白名单 + 必填）==========
+    folders_config = node.file_folders or []
+    if folders_config:
+        # 白名单：folder_name 必须属于节点配置的文件夹分类
+        valid_names = {(f.get("name") or "").strip() for f in folders_config if (f.get("name") or "").strip()}
+        if not folder_name or folder_name not in valid_names:
+            raise AppException(ErrorCode.BAD_REQUEST, "请选择正确的目标文件夹（节点配置的文件夹分类）")
+
+        # 必填：连同历史文件统计，必填文件夹补交后必须非空
+        history_files = (await db.execute(
+            select(File).where(File.node_id == node_id, File.round == node.round)
+        )).scalars().all()
+        folder_counts: dict[str, int] = {}
+        for f in history_files:
+            fn = f.folder_name or ""
+            folder_counts[fn] = folder_counts.get(fn, 0) + 1
+        # 本次补交的文件全部进入 folder_name
+        folder_counts[folder_name] = folder_counts.get(folder_name, 0) + len(files)
+        for folder in folders_config:
+            name = (folder.get("name") or "").strip()
+            if not name:
+                continue
+            if folder.get("required") and folder_counts.get(name, 0) == 0:
+                raise AppException(ErrorCode.BAD_REQUEST, f"文件夹「{name}」必须至少提交 1 个文件")
+    elif folder_name:
+        # 节点无文件夹分类配置，却传了 folder_name → 拒绝
+        raise AppException(ErrorCode.BAD_REQUEST, "该节点无文件夹分类配置，无需指定文件夹")
+
     # ========== 5. 遍历上传文件 ==========
     file_records: list[File] = []
     written_files: list[str] = []  # 跟踪已写入的物理文件路径（DB失败时用于清理）
