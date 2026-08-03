@@ -84,7 +84,7 @@ const hoveredId = ref<number | null>(null)
 /** 基础工作节点 DnD */
 function onBaseDragStart(e: DragEvent) {
   startDnD(e, {
-    name: '新节点',
+    name: '',
     is_start: false, is_end: false,
     require_file: true,
     approval_strategy: 'all_approve',
@@ -103,8 +103,15 @@ function onPresetDragStart(e: DragEvent, preset: PresetItem) {
     checkers_names: preset.checkers_names || null,
     approvers: preset.approvers?.map(a => a.user_id) || null,
     approvers_names: preset.approvers_names || null,
+    endorser_id: preset.endorser_id ?? null,
+    endorser_name: preset.endorser_name || null,
     time_limit_days: preset.time_limit_days,
     require_file: preset.require_file,
+    file_folders: preset.file_folders || null,
+    require_assignee_signature: preset.require_assignee_signature ?? true,
+    require_checker_signature: preset.require_checker_signature ?? true,
+    require_approver_signature: preset.require_approver_signature ?? true,
+    require_endorser_signature: preset.require_endorser_signature ?? true,
     approval_strategy: 'all_approve',
   })
 }

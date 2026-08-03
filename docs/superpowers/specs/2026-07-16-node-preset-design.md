@@ -1,6 +1,6 @@
 # 节点预设功能 — 设计文档
 
-> 2026-07-16 | 状态：待用户审阅
+> 2026-07-16 初版 | 2026-07-31 更新：补全文件提交配置 + 签批开关 + 批准人字段
 
 ---
 
@@ -48,14 +48,22 @@ CREATE TABLE node_presets (
     assignee_id     INT          NULL     COMMENT '负责人 ID',
     checkers        JSON         NULL     COMMENT '校验人列表 [{"user_id": N}]',
     approvers       JSON         NULL     COMMENT '审批人列表 [{"user_id": N}]',
+    endorser_id     INT          NULL     COMMENT '批准人 ID（仅难度4生效）',
     time_limit_days INT          NULL     COMMENT '完成时限（天）',
     require_file    BOOLEAN      NOT NULL DEFAULT FALSE COMMENT '是否必须上传文件',
+    file_folders    JSON         NULL     COMMENT '文件提交文件夹配置 [{name, required, file_count}]',
+    require_assignee_signature  BOOLEAN NOT NULL DEFAULT TRUE COMMENT '负责人提交时是否需要签名',
+    require_checker_signature   BOOLEAN NOT NULL DEFAULT TRUE COMMENT '校验人通过时是否需要签名',
+    require_approver_signature  BOOLEAN NOT NULL DEFAULT TRUE COMMENT '审批人通过时是否需要签名',
+    require_endorser_signature  BOOLEAN NOT NULL DEFAULT TRUE COMMENT '批准人通过时是否需要签名',
     sort_order      INT          NOT NULL DEFAULT 0 COMMENT '排序序号（预留）',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX idx_user_id (user_id),
-    CONSTRAINT fk_preset_user FOREIGN KEY (user_id) REFERENCES users(id)
+    CONSTRAINT fk_preset_user   FOREIGN KEY (user_id)     REFERENCES users(id),
+    CONSTRAINT fk_preset_assignee FOREIGN KEY (assignee_id) REFERENCES users(id),
+    CONSTRAINT fk_preset_endorser FOREIGN KEY (endorser_id) REFERENCES users(id)
 );
 ```
 
@@ -64,6 +72,9 @@ CREATE TABLE node_presets (
 - 人员存 **ID 快照**，不跟随用户表变更。失效检测由前端在拖出时比对。
 - `name` 是预设名称（如"财务审批模板"），`node_name` 是拖到画布后节点的 `name` 属性（如"财务审批"），两者可相同也可不同。
 - `sort_order` 字段预留未来拖拽排序，当前版本不暴露 UI。
+- `file_folders` 存储文件提交文件夹配置（简单模式/文件夹模式），文件夹模式下支持多个命名文件夹各自设必填/可选 + 数量限制。
+- 4 个签批开关（`require_*_signature`）分别控制负责人/校验人/审批人/批准人在对应环节是否需要签名。
+- `endorser_id` 为批准人（仅难度4级生效），保存时取 ID 快照。
 
 ---
 
@@ -89,8 +100,14 @@ CREATE TABLE node_presets (
   "assignee_id": 3,
   "checkers": [{"user_id": 5}],
   "approvers": [{"user_id": 7}],
+  "endorser_id": null,
   "time_limit_days": 3,
-  "require_file": true
+  "require_file": true,
+  "file_folders": null,
+  "require_assignee_signature": true,
+  "require_checker_signature": true,
+  "require_approver_signature": true,
+  "require_endorser_signature": true
 }
 ```
 
@@ -109,8 +126,15 @@ CREATE TABLE node_presets (
       "checkers_names": ["李四"],
       "approvers": [{"user_id": 7}],
       "approvers_names": ["王五"],
+      "endorser_id": null,
+      "endorser_name": null,
       "time_limit_days": 3,
       "require_file": true,
+      "file_folders": null,
+      "require_assignee_signature": true,
+      "require_checker_signature": true,
+      "require_approver_signature": true,
+      "require_endorser_signature": true,
       "sort_order": 0,
       "created_at": "2026-07-16T10:00:00"
     }
@@ -167,10 +191,12 @@ CREATE TABLE node_presets (
 | 预设名称 | `el-input` max 30 | 列表显示用 |
 | 节点名称 | `el-input` max 30 | 拖出后节点 name |
 | 负责人 | `UserSelector` 单选 | |
-| 校验人 | `UserSelector` 多选 | 至少 1 人 |
-| 审批人 | `UserSelector` 多选 | 至少 1 人 |
+| 校验人 | `UserSelector` 单选 | |
+| 审批人 | `UserSelector` 单选 | |
+| 批准人 | `UserSelector` 单选 | 可选，仅难度4级时生效 |
 | 时限 | `el-input-number` 1-365 | |
-| 需文件 | `el-switch` | |
+| 文件配置 | `el-switch`（简单模式） / 文件夹列表（文件夹模式） | 支持多个命名文件夹，各自设必填/可选+数量限制 |
+| 签批配置 | 4 个 `el-checkbox` | 负责人/校验人/审批人/批准人提交时签名 |
 
 Props：
 - `modelValue: boolean` — 控制弹窗显隐
@@ -200,11 +226,13 @@ function addWorkNode(x?: number, y?: number)
 function addWorkNode(x?: number, y?: number, presetProperties?: Partial<WorkNodeProperties>)
 ```
 
-合并逻辑：presetProperties 覆盖默认值。人员 name 字段（`assignee_name`、`checkers_names`、`approvers_names`）由预设的 `*_names` 直接带入。
+合并逻辑：presetProperties 覆盖默认值。人员 name 字段（`assignee_name`、`checkers_names`、`approvers_names`、`endorser_name`）由预设的 `*_names` 直接带入。
+
+新增字段透传：`file_folders`、`require_assignee_signature`、`require_checker_signature`、`require_approver_signature`、`require_endorser_signature`、`endorser_id`、`endorser_name`。
 
 ### 5.5 人员失效检测
 
-拖出节点时（`addWorkNode` 内），对预设中的 `assignee_id`、`checkers` 中每个 `user_id`、`approvers` 中每个 `user_id`，检查是否存在于当前 UserSelector 用户列表中。
+拖出节点时（`addWorkNode` 内），对预设中的 `assignee_id`、`checkers` 中每个 `user_id`、`approvers` 中每个 `user_id`、`endorser_id`，检查是否存在于当前 UserSelector 用户列表中。
 
 缺失的人员字段置空，`toast.warning("预设「{name}」中的人员「{user_name}」已不可用，请重新选择")`。
 
@@ -214,13 +242,15 @@ function addWorkNode(x?: number, y?: number, presetProperties?: Partial<WorkNode
 
 ## 六、文件清单
 
+### 初版（2026-07-16）
+
 | 文件 | 操作 | 说明 |
 |------|------|------|
 | `backend/app/models/node_preset.py` | **新建** | SQLAlchemy 模型 |
 | `backend/app/schemas/preset.py` | **新建** | Pydantic Schema |
 | `backend/app/api/presets.py` | **新建** | FastAPI 路由 |
 | `backend/app/services/preset_service.py` | **新建** | 业务逻辑（CRUD + 人员姓名填充） |
-| `backend/alembic/versions/xxx_add_node_presets.py` | **新建** | 迁移 |
+| `backend/alembic/versions/baf8caa5c762_add_node_presets.py` | **新建** | 迁移：建表 |
 | `backend/app/models/__init__.py` | 修改 | 注册 NodePreset 模型 |
 | `frontend/src/api/presets.ts` | **新建** | 前端 API 封装 |
 | `frontend/src/views/flows/designer/PresetEditor.vue` | **新建** | 预设编辑弹窗 |
@@ -228,6 +258,13 @@ function addWorkNode(x?: number, y?: number, presetProperties?: Partial<WorkNode
 | `frontend/src/views/flows/designer/PropertyPanel.vue` | 修改 | 新增"保存为预设"按钮 |
 | `frontend/src/views/flows/designer/FlowCanvas.vue` | 修改 | addWorkNode 支持预设参数 + 失效检测 |
 | `frontend/src/views/flows/FlowDesigner.vue` | 修改 | 组合 PresetEditor + 事件透传 |
+
+### 增强版（2026-07-31）
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `backend/alembic/versions/22a4163060e3_*.py` | **新建** | 迁移：+6 列（file_folders、4签批、endorser） |
+| 上述全部文件 | 修改 | 全链路补全 6 个字段 + 修复 .map() 报错 |
 
 ---
 

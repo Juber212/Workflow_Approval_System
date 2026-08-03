@@ -14,8 +14,17 @@ export interface PresetItem {
   checkers_names: string[] | null
   approvers: Array<{ user_id: number }> | null
   approvers_names: string[] | null
+  endorser_id: number | null
+  endorser_name: string | null
   time_limit_days: number | null
   require_file: boolean
+  /** 文件提交文件夹配置 */
+  file_folders: Array<{ name: string; required: boolean; file_count: number | null }> | null
+  /** 签批开关 */
+  require_assignee_signature: boolean
+  require_checker_signature: boolean
+  require_approver_signature: boolean
+  require_endorser_signature: boolean
   sort_order: number
   created_at: string | null
 }
@@ -30,8 +39,17 @@ export interface PresetFormData {
   checkers_names?: string[] | null     // 预填时传递姓名
   approvers?: Array<{ user_id: number }> | null
   approvers_names?: string[] | null    // 预填时传递姓名
+  endorser_id?: number | null
+  endorser_name?: string | null
   time_limit_days?: number | null
   require_file?: boolean
+  /** 文件提交文件夹配置 */
+  file_folders?: Array<{ name: string; required: boolean; file_count: number | null }> | null
+  /** 签批开关 */
+  require_assignee_signature?: boolean
+  require_checker_signature?: boolean
+  require_approver_signature?: boolean
+  require_endorser_signature?: boolean
 }
 
 // ==================== API ====================

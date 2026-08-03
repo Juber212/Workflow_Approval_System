@@ -13,6 +13,12 @@ class PresetCreate(BaseModel):
     approvers: list[dict] | None = Field(None, description="审批人列表 [{\"user_id\": N}]")
     time_limit_days: int | None = Field(None, description="完成时限（天）")
     require_file: bool = Field(False, description="是否必须上传文件")
+    file_folders: list[dict] | None = Field(None, description="文件提交文件夹配置")
+    require_assignee_signature: bool = Field(True, description="负责人提交时是否需要签名")
+    require_checker_signature: bool = Field(True, description="校验人通过时是否需要签名")
+    require_approver_signature: bool = Field(True, description="审批人通过时是否需要签名")
+    require_endorser_signature: bool = Field(True, description="批准人通过时是否需要签名")
+    endorser_id: int | None = Field(None, description="批准人 ID")
 
 
 class PresetUpdate(BaseModel):
@@ -24,6 +30,12 @@ class PresetUpdate(BaseModel):
     approvers: list[dict] | None = Field(None, description="审批人列表")
     time_limit_days: int | None = Field(None, description="完成时限（天）")
     require_file: bool | None = Field(None, description="是否必须上传文件")
+    file_folders: list[dict] | None = Field(None, description="文件提交文件夹配置")
+    require_assignee_signature: bool | None = Field(None, description="负责人提交时是否需要签名")
+    require_checker_signature: bool | None = Field(None, description="校验人通过时是否需要签名")
+    require_approver_signature: bool | None = Field(None, description="审批人通过时是否需要签名")
+    require_endorser_signature: bool | None = Field(None, description="批准人通过时是否需要签名")
+    endorser_id: int | None = Field(None, description="批准人 ID")
 
 
 class PresetResponse(BaseModel):
@@ -37,8 +49,15 @@ class PresetResponse(BaseModel):
     checkers_names: list[str] | None = None
     approvers: list[dict] | None = None
     approvers_names: list[str] | None = None
+    endorser_id: int | None = None
+    endorser_name: str | None = None
     time_limit_days: int | None = None
     require_file: bool = False
+    file_folders: list[dict] | None = None
+    require_assignee_signature: bool = True
+    require_checker_signature: bool = True
+    require_approver_signature: bool = True
+    require_endorser_signature: bool = True
     sort_order: int = 0
     created_at: datetime | None = None
     updated_at: datetime | None = None

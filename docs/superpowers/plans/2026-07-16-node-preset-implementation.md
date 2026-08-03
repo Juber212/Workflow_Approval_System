@@ -1,12 +1,38 @@
 # 节点预设功能 — 实现计划
 
 > **For agentic workers:** 按任务顺序执行，每步使用 checkbox (`- [ ]`) 跟踪进度。
+>
+> **2026-07-31 更新：** 全链路补全 6 字段（file_folders、4 签批开关、endorser_id）+ 修复 .map() 报错（checkers/approvers 单选化后类型不匹配）。
 
 **目标：** 让用户把常用节点配置保存为个人预设，设计流程时从节点库拖出即用
 
 **架构：** 后端新建 `node_presets` 表 + 4 个 CRUD 端点；前端新建 PresetEditor 组件 + 改造 NodePanel/PropertyPanel/FlowCanvas/FlowDesigner
 
 **技术栈：** FastAPI + SQLAlchemy 2.0 + Vue 3 + Element Plus + LogicFlow
+
+---
+
+## 2026-07-31 增量变更
+
+| 层 | 改动 | 涉及文件 |
+|----|------|----------|
+| 后端模型 | +6 列：`file_folders`(JSON)、`require_assignee_signature`、`require_checker_signature`、`require_approver_signature`、`require_endorser_signature`(Boolean)、`endorser_id`(FK) | `models/node_preset.py` |
+| 后端 Schema | PresetCreate/Update/Response 各 +6 字段 | `schemas/preset.py` |
+| 后端服务 | create/response/name-resolve 全线补全 | `services/preset_service.py` |
+| 数据库迁移 | `22a4163060e3` 加列 | `alembic/versions/` |
+| 前端类型 | PresetItem + PresetFormData 各 +7 字段 | `api/presets.ts` |
+| 前端编辑器 | 批准人选择器 + 文件提交文件夹(双模式) + 4签批checkbox | `PresetEditor.vue` |
+| 前端设计器 | 修复 `.map()` 报错 + 补全字段透传 + 验证 endorser | `FlowDesigner.vue` |
+| 前端面板 | DnD 属性补全 | `NodePanel.vue` |
+
+### Bug 修复：`.map() is not a function`
+
+**根因：** PropertyPanel 校验人/审批人改为单选后 `form.checkers` 类型从 `number[]` 变为 `number`，`handleSaveAsPreset` 中 `formData.checkers?.map(...)` 报错。
+
+**修复：** 兼容单数值和数组两种格式：
+```ts
+checkers: ch != null ? [{ user_id: typeof ch === 'number' ? ch : ch[0] }] : null
+```
 
 ## 全局约束
 

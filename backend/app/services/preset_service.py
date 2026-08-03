@@ -41,6 +41,12 @@ async def create_preset(db: AsyncSession, data: PresetCreate, user_id: int) -> P
         approvers=data.approvers,
         time_limit_days=data.time_limit_days,
         require_file=data.require_file,
+        file_folders=data.file_folders,
+        require_assignee_signature=data.require_assignee_signature,
+        require_checker_signature=data.require_checker_signature,
+        require_approver_signature=data.require_approver_signature,
+        require_endorser_signature=data.require_endorser_signature,
+        endorser_id=data.endorser_id,
     )
     db.add(preset)
     await db.flush()
@@ -87,6 +93,8 @@ async def _batch_resolve_names(db: AsyncSession, presets: list[NodePreset]) -> d
     for preset in presets:
         if preset.assignee_id:
             user_ids.add(preset.assignee_id)
+        if preset.endorser_id:
+            user_ids.add(preset.endorser_id)
         for item in (preset.checkers or []):
             if isinstance(item, dict) and "user_id" in item:
                 user_ids.add(item["user_id"])
@@ -115,8 +123,15 @@ def _preset_to_response(preset: NodePreset, name_map: dict[int, str]) -> PresetR
         checkers_names=_extract_names(preset.checkers, name_map),
         approvers=preset.approvers,
         approvers_names=_extract_names(preset.approvers, name_map),
+        endorser_id=preset.endorser_id,
+        endorser_name=name_map.get(preset.endorser_id) if preset.endorser_id else None,
         time_limit_days=preset.time_limit_days,
         require_file=preset.require_file,
+        file_folders=preset.file_folders,
+        require_assignee_signature=preset.require_assignee_signature if preset.require_assignee_signature is not None else True,
+        require_checker_signature=preset.require_checker_signature if preset.require_checker_signature is not None else True,
+        require_approver_signature=preset.require_approver_signature if preset.require_approver_signature is not None else True,
+        require_endorser_signature=preset.require_endorser_signature if preset.require_endorser_signature is not None else True,
         sort_order=preset.sort_order,
         created_at=preset.created_at,
         updated_at=preset.updated_at,
