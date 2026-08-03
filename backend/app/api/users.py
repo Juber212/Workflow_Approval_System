@@ -93,6 +93,10 @@ async def put_user_status(
 
     await toggle_user_status(db, user_id, data.is_active)
     await db.commit()
+    # 禁用用户时断开其 WebSocket 连接，即时停止通知推送
+    if not data.is_active:
+        from app.services.ws_manager import manager
+        await manager.disconnect_user(user_id)
     return ApiResponse.ok(message="已启用" if data.is_active else "已禁用")
 
 

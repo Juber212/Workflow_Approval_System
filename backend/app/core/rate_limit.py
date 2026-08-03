@@ -157,6 +157,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/api/v1/health":
             return await call_next(request)
 
+        # WebSocket 升级请求不占用 API 限流配额：
+        # 连接建立仅一次（低频），认证由 ws 端点自负责（黑名单/is_active），心跳为 WS 帧不受限流
+        if request.url.path.startswith("/api/v1/ws"):
+            return await call_next(request)
+
         # 仅限制 API 路由，静态文件等跳过
         if not request.url.path.startswith("/api/"):
             return await call_next(request)

@@ -44,6 +44,21 @@ class ConnectionManager:
                     del self._connections[user_id]
         logger.debug(f"WebSocket 断开: user_id={user_id}")
 
+    async def disconnect_user(self, user_id: int):
+        """断开指定用户的全部 WebSocket 连接（登出 / 禁用用户时调用，强制下线）
+
+        先从映射中移除该用户的全部连接，再逐个关闭；已被移除的连接
+        由 ws.py 的 finally 块调用 disconnect() 时会安全跳过（user_id 已不存在）。
+        """
+        async with self._lock:
+            connections = list(self._connections.get(user_id, []))
+            self._connections.pop(user_id, None)
+        for ws in connections:
+            try:
+                await ws.close(code=4001, reason="登录状态已失效，请重新登录")
+            except Exception:
+                pass  # 连接可能已关闭，忽略
+
     async def send_to_user(self, user_id: int, data: dict):
         """向指定用户的所有连接推送消息"""
         # snapshot 当前连接列表，避免迭代时被修改

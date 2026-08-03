@@ -111,6 +111,9 @@ async def logout(current_user: CurrentUser = Depends(get_current_active_user)):
     if remaining > 0 and current_user.jti:
         from app.core.token_blacklist import add_to_blacklist
         await add_to_blacklist(current_user.jti, remaining)
+    # 登出后断开该用户全部 WebSocket 连接，即时停止通知推送
+    from app.services.ws_manager import manager
+    await manager.disconnect_user(current_user.id)
     return ApiResponse.ok({"message": "退出成功"})
 
 

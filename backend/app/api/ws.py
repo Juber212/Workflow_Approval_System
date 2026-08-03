@@ -7,8 +7,12 @@ import asyncio
 import json
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 
 from app.core.security import decode_access_token
+from app.core.token_blacklist import is_blacklisted
+from app.core.database import async_session_factory
+from app.models.user import User
 from app.services.ws_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -57,9 +61,28 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001, reason="token 无效或已过期")
         return
 
+    # 检查 token 是否已被吊销（登出 / 禁用后即时失效，防止已失效 token 建立连接）
+    if await is_blacklisted(payload.get("jti", "")):
+        await websocket.close(code=4001, reason="token 已失效，请重新登录")
+        return
+
     user_id = int(payload.get("sub", 0))
     if not user_id:
         await websocket.close(code=4001, reason="token 中缺少用户标识")
+        return
+
+    # 检查账号状态：被禁用用户不可建立连接（防止离线通知被拦截绕过）
+    try:
+        async with async_session_factory() as db:
+            is_active = (await db.execute(
+                select(User.is_active).where(User.id == user_id)
+            )).scalar_one_or_none()
+    except Exception:
+        # DB 查询异常时保守放行，避免认证阶段故障阻断所有连接
+        logger.warning("WebSocket 认证查询账号状态失败: user_id=%s", user_id, exc_info=True)
+        is_active = True
+    if not is_active:
+        await websocket.close(code=4001, reason="账号已被禁用")
         return
 
     await manager.register(user_id, websocket)
