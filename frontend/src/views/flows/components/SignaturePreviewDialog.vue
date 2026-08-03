@@ -154,7 +154,7 @@
               <!-- 当前页槽位签名叠加层（只渲染当前页码的槽位，不同页互不影响） -->
               <template v-if="sigBlobUrl && activeFileId && !loadingPdf">
                 <div
-                  v-for="{ slot, originalIdx: si } in visibleSlots"
+                  v-for="{ originalIdx: si } in visibleSlots"
                   :key="si"
                   class="sig-overlay"
                   :class="{ 'sig-overlay--active': si === activeSlotIdx, 'sig-overlay--inactive': si !== activeSlotIdx }"
@@ -283,7 +283,6 @@ const dialogVisible = computed({
 const loading = ref(false)
 const loadingPdf = ref(false)  // PDF 加载中的独立状态，不影响文档列表显示
 const initializing = ref(false)  // 初始化中，避免闪烁"暂无文件"提示
-const wrapperRef = ref<HTMLDivElement>()
 const canvasRef = ref<HTMLCanvasElement>()
 const totalPages = ref(0)
 const currentPage = ref(1)

@@ -117,6 +117,10 @@
     <div class="card" style="margin-bottom:20px">
       <div class="card__header">
         <span class="card__title">我的待办</span>
+        <span class="pt-summary">
+          <span class="pt-summary__total">共 {{ pendingCount }} 条</span>
+          <span v-if="urgentCount > 0" class="pt-summary__urgent">紧急 {{ urgentCount }} 条</span>
+        </span>
         <el-button text type="primary" size="small" @click="$router.push({ name: 'Profile' })">查看更多 →</el-button>
       </div>
       <div class="card__body" style="padding:0">
@@ -175,7 +179,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getDashboard, type DashboardData, type MyPendingItem } from '@/api/dashboard'
+import { getDashboard, type DashboardData } from '@/api/dashboard'
 import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
@@ -220,6 +224,10 @@ const curOrgOverview = computed(() => catTab.value === 'project' ? data.org_over
 
 // ─── 我的待办列表（跟随 tab 切换项目/方案） ───
 const curPending = computed(() => catTab.value === 'project' ? data.my_pending : data.proposal_my_pending)
+
+/** 我的待办计数（当前 tab 列表统计，紧急=urgent/high） */
+const pendingCount = computed(() => curPending.value.length)
+const urgentCount = computed(() => curPending.value.filter(p => p.priority === 'urgent' || p.priority === 'high').length)
 
 /** 格式化截止时间 */
 /** 逾期/临期行标色 */
@@ -319,6 +327,19 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
   &--success { border-bottom-color: var(--el-color-success); }
   &--info    { border-bottom-color: #409EFF; }
   &--danger  { border-bottom-color: var(--el-color-danger); }
+}
+
+/* ─── 我的待办计数 ─── */
+.pt-summary {
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto;  // 推向右，紧挨「查看更多」按钮
+  font-size: 13px; color: var(--el-text-color-secondary);
+
+  &__total { font-weight: 600; color: var(--el-text-color-primary); }
+  &__urgent {
+    font-weight: 500; color: var(--el-color-danger);
+    background: #fde2e2; padding: 1px 10px; border-radius: 10px;
+  }
 }
 
 /* ─── 我的待办类型标签 ─── */

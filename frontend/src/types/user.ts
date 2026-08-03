@@ -11,4 +11,6 @@ export interface UserInfo {
   roles: string[]
   /** 首次登录是否需要强制修改密码 */
   must_change_password: boolean
+  /** 是否已上传签名图片 */
+  has_signature: boolean
 }

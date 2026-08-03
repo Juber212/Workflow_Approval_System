@@ -82,10 +82,10 @@
 /** 流程进度条 —— N 条 SVG 贝塞尔曲线分叉/汇合 + 单节点自动居中 */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Check } from '@element-plus/icons-vue'
-import type { DetailNodeInfo } from '@/api/instance'
+import type { FlowNodeBrief } from '@/api/task'
 
-const props = defineProps<{ nodes: DetailNodeInfo[] }>()
-const emit = defineEmits<{ 'node-click': [node: DetailNodeInfo] }>()
+const props = defineProps<{ nodes: FlowNodeBrief[] }>()
+const emit = defineEmits<{ 'node-click': [node: FlowNodeBrief] }>()
 
 // ========== DOM 引用 ==========
 const trackRef = ref<HTMLElement | null>(null)
@@ -101,12 +101,12 @@ const joinData = ref<Record<number, JoinData>>({})
 
 // ========== 分组逻辑（不变） ==========
 const nodeGroups = computed(() => {
-  const groups: DetailNodeInfo[][] = []
+  const groups: FlowNodeBrief[][] = []
   if (!props.nodes.length) return groups
   const sorted = [...props.nodes].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   const uniqueOrders = new Set(sorted.map(n => n.sort_order ?? 0))
   if (uniqueOrders.size <= 1) return sorted.map(n => [n])
-  let current: DetailNodeInfo[] = [sorted[0]]
+  let current: FlowNodeBrief[] = [sorted[0]]
   for (let i = 1; i < sorted.length; i++) {
     if ((sorted[i].sort_order ?? 0) === (sorted[i - 1].sort_order ?? 0)) {
       current.push(sorted[i])
@@ -124,14 +124,14 @@ function isLineActive(gIdx: number): boolean {
 function isForkActive(gIdx: number): boolean { return isLineActive(gIdx) }
 function isJoinActive(gIdx: number): boolean { return isLineActive(gIdx) }
 
-function stepClass(node: DetailNodeInfo) {
+function stepClass(node: FlowNodeBrief) {
   const s = (node.status || '').toLowerCase()
   if (s === 'finished') return 'is-done'
   if (['arrived', 'running', 'waiting_check', 'waiting_approval', 'waiting_endorsement'].includes(s)) return 'is-current'
   return 'is-wait'
 }
 
-function statusText(node: DetailNodeInfo) {
+function statusText(node: FlowNodeBrief) {
   const s = (node.status || '').toLowerCase()
   const m: Record<string, string> = { finished: '已完成', arrived: '进行中', running: '进行中', waiting_check: '待校验', waiting_approval: '待审批', waiting_endorsement: '待批准' }
   if (m[s]) return m[s]

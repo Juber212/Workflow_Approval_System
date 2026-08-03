@@ -75,7 +75,8 @@ export interface FlowNodeBrief {
   is_start: boolean
   is_end: boolean
   status: string
-  sort_order: number
+  /** 排序序号（endorse 详情接口可能不返回；进度条分叉/汇合分组用，缺省按 0） */
+  sort_order?: number
 }
 
 export interface TaskFileItem {

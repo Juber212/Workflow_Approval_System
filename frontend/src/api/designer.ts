@@ -12,7 +12,7 @@ export interface FileFolderConfig {
 
 /** 设计器节点数据 */
 export interface DesignerNode {
-  id?: number | null        // 已有节点 id（null/undefined 表示新增）
+  id?: number | string | null  // 已有节点 id（null/undefined 表示新增；新建节点为临时字符串 ID，后端解析）
   name?: string
   is_start?: boolean
   is_end?: boolean

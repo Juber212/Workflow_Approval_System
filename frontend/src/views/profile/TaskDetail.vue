@@ -269,13 +269,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
 import { getToken } from '@/api/request'
-import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse } from '@/api/task'
+import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, formatFileSize } from '@/utils/format'
-import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
+import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
 
@@ -293,7 +293,6 @@ const submitting = ref(false)
 const preparing = ref(false)  // 预提交转化 PDF 中的状态
 const waitingConversion = ref(false)  // 等待 ARQ Worker 后台转换完成
 let conversionPollTimer: ReturnType<typeof setInterval> | null = null
-let currentConversionFileIds: number[] = []  // 正在等待转换的文件 ID 列表
 
 // 签批弹框
 const showSignatureDialog = ref(false)
@@ -515,7 +514,6 @@ async function handleSubmit() {
         if (result.conversion_pending) {
           // 文件需要后台转换，进入等待模式
           waitingConversion.value = true
-          currentConversionFileIds = result.file_ids
           // 启动轮询兜底（每 2 秒检查一次，直到全部完成或失败）
           startConversionPolling(detail.value!.id)
           // 也监听 WebSocket 通知（由 notification.ts 的 useNotificationSocket 触发自定义事件）
@@ -614,13 +612,18 @@ function listenConversionDone() {
   window.addEventListener('conversion-all-done', handler, { once: true })
 }
 
-/** 转换完成后：检查结果 → 打开签批弹框或显示错误 */
-async function handleConversionComplete(status: { total: number; ready: number; failed: number; status?: string }) {
+/** 转换完成后：检查结果 → 打开签批弹框或显示错误
+ * 轮询路径传入 FilesStatusResponse（has_failed），WebSocket 路径传入 conversion_all_done 消息体（failed），两者字段不同需归一化 */
+async function handleConversionComplete(status: FilesStatusResponse | { total: number; ready: number; failed: number; status?: string }) {
   waitingConversion.value = false
-  currentConversionFileIds = []
 
-  if (status.failed > 0) {
-    ElMessage.error(`${status.failed} 个文件转换失败，请检查文件格式后重新上传再提交`)
+  // 归一化失败数量：轮询结果统计 files 中的 failed 状态，WebSocket 消息直接取 failed 数字
+  const failedCount = 'has_failed' in status
+    ? status.files.filter(f => f.conversion_status === 'failed').length
+    : status.failed
+
+  if (failedCount > 0) {
+    ElMessage.error(`${failedCount} 个文件转换失败，请检查文件格式后重新上传再提交`)
     return
   }
 

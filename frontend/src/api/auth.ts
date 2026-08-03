@@ -79,6 +79,7 @@ export function toUserInfo(data: {
   organization_id: number | null
   organization_name: string | null
   must_change_password?: boolean
+  has_signature?: boolean
 }): UserInfo {
   return {
     id: data.user_id,
@@ -90,5 +91,6 @@ export function toUserInfo(data: {
     organization_name: data.organization_name,
     roles: data.roles,
     must_change_password: data.must_change_password ?? false,
+    has_signature: data.has_signature ?? false,
   }
 }

@@ -123,7 +123,7 @@
         </el-select>
         <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
           :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
-          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+          <el-option v-for="u in initiatorOptions" :key="u.id" :label="u.real_name" :value="u.id" />
         </el-select>
       </div>
 
@@ -281,12 +281,13 @@ import {
   getTemplates,
   updateTemplate,
   deleteTemplate,
+  checkTemplateName,
   type OrgCardItem,
   type TemplateItem,
 } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { getProposals } from '@/api/proposal'
-import { searchUsers } from '@/api/admin'
+import { searchUsers, type UserSearchItem } from '@/api/admin'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
@@ -406,7 +407,7 @@ const showAdvancedSearch = ref(false)
 const instanceDateRange = ref<[string, string] | null>(null)
 const instancePriority = ref('')
 const instanceInitiatorId = ref<number | null>(null)
-const initiatorOptions = ref<{ user_id: number; real_name: string }[]>([])
+const initiatorOptions = ref<UserSearchItem[]>([])
 /** 各状态实例数量 */
 const statusCounts = ref<Record<string, number>>({})
 
@@ -630,9 +631,14 @@ async function handleSave() {
       formVisible.value = false
       fetchTemplates()
     } else {
-      // 新建模板：不在此时入库，直接跳设计器；设计器首次保存时才真正创建模板
+      // 新建模板：先检查同组织下是否重名，再跳设计器
+      const available = await checkTemplateName(orgId.value, form.name.trim())
+      if (!available) {
+        ElMessage.error('该组织下已存在同名模板，请更换名称')
+        return
+      }
       formVisible.value = false
-      const params = new URLSearchParams({ new: '1', name: form.name, org_id: String(orgId.value) })
+      const params = new URLSearchParams({ new: '1', name: form.name.trim(), org_id: String(orgId.value) })
       if (form.description) params.set('desc', form.description)
       router.push({ name: 'FlowDesigner', params: { id: '0' }, query: Object.fromEntries(params) })
     }

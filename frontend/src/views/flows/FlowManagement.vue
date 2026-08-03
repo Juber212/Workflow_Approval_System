@@ -56,7 +56,7 @@
         </el-select>
         <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
           :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
-          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+          <el-option v-for="u in initiatorOptions" :key="u.id" :label="u.real_name" :value="u.id" />
         </el-select>
     </div>
 
@@ -177,7 +177,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
-import { searchUsers } from '@/api/admin'
+import { searchUsers, type UserSearchItem } from '@/api/admin'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
@@ -207,7 +207,7 @@ const showAdvancedSearch = ref(false)
 const instanceDateRange = ref<[string, string] | null>(null)
 const instancePriority = ref('')
 const instanceInitiatorId = ref<number | null>(null)
-const initiatorOptions = ref<{ user_id: number; real_name: string }[]>([])
+const initiatorOptions = ref<UserSearchItem[]>([])
 /** 各状态实例数量（从 API 获取） */
 const statusCounts = ref<Record<string, number>>({})
 

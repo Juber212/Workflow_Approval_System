@@ -47,7 +47,7 @@
             <div>
               <UserSelector
                 :model-value="getOverride(node.id, 'checkers_ids')?.[0] ?? getCheckerId(node)"
-                @update:model-value="(v: number | undefined) => setOverride(node.id, 'checkers_ids', v != null ? [v] : undefined)"
+                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'checkers_ids', typeof v === 'number' ? [v] : undefined)"
                 :multiple="false"
                 :placeholder="'选择校验人'"
                 org-members
@@ -66,7 +66,7 @@
             <div>
               <UserSelector
                 :model-value="getOverride(node.id, 'approvers_ids')?.[0] ?? getApproverId(node)"
-                @update:model-value="(v: number | undefined) => setOverride(node.id, 'approvers_ids', v != null ? [v] : undefined)"
+                @update:model-value="(v: number | number[] | undefined) => setOverride(node.id, 'approvers_ids', typeof v === 'number' ? [v] : undefined)"
                 :multiple="false"
                 :placeholder="'选择审批人'"
                 org-members
@@ -309,7 +309,7 @@ defineExpose({ validate, hasIssues })
 </script>
 
 <script lang="ts">
-import { computed } from 'vue'
+// 仅用于注册组件名，computed 已在 <script setup> 中导入，避免重复声明
 export default { name: 'NodeOverridePanel' }
 </script>
 

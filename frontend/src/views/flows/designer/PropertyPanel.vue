@@ -350,9 +350,6 @@ const emit = defineEmits<{
   'save-as-preset': [formData: typeof form]
 }>()
 
-/** 表单引用 */
-const formRef = ref()
-
 /** 表单本地状态 */
 const form = reactive({
   name: '',
@@ -540,27 +537,27 @@ function handleOptionsLoaded(users: Array<{ id: number; real_name: string }>) {
   }
 }
 
-/** 负责人变更 —— 同步名称 + 写入节点 */
-function handleAssigneeChange(val: number | undefined) {
-  form.assignee_name = val ? (userNameCache[val] || '') : ''
+/** 负责人变更 —— 同步名称 + 写入节点（参数放宽以匹配 UserSelector 的 update:model-value 签名，仅 number 有效） */
+function handleAssigneeChange(val: number | number[] | undefined) {
+  form.assignee_name = typeof val === 'number' && val ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
 /** 校验人变更 —— 同步名称 + 写入节点 */
-function handleCheckersChange(val: number | undefined) {
-  form.checkers_name = val != null ? (userNameCache[val] || '') : ''
+function handleCheckersChange(val: number | number[] | undefined) {
+  form.checkers_name = typeof val === 'number' ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
 /** 审批人变更 —— 同步名称 + 写入节点 */
-function handleApproversChange(val: number | undefined) {
-  form.approvers_name = val != null ? (userNameCache[val] || '') : ''
+function handleApproversChange(val: number | number[] | undefined) {
+  form.approvers_name = typeof val === 'number' ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
 /** 批准人变更 —— 同步名称 + 写入节点 */
-function handleEndorserChange(val: number | undefined) {
-  form.endorser_name = val ? (userNameCache[val] || '') : ''
+function handleEndorserChange(val: number | number[] | undefined) {
+  form.endorser_name = typeof val === 'number' && val ? (userNameCache[val] || '') : ''
   syncToNode()
 }
 
@@ -629,7 +626,6 @@ function handleFolderModeToggle(val: boolean) {
 /** 同名文件夹冲突检测（同模板内跨节点） */
 const folderNameConflict = computed<string | null>(() => {
   if (!useFileFolders.value || !props.lf) return null
-  const currentName = form.name
   // 收集当前节点所有非空文件夹名
   const currentNames = new Set(folders.value.map(f => f.name.trim()).filter(Boolean))
   // 检查同一节点内重复

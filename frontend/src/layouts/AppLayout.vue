@@ -235,7 +235,7 @@ async function refreshUserInfoDetail() {
         phone: userStore.userInfo.phone, roles: userStore.userInfo.roles,
         organization_id: userStore.userInfo.organization_id,
         organization_name: userStore.userInfo.organization_name,
-        has_signature: !!userStore.userInfo.signature_image,  // 从 store 中推断
+        has_signature: !!userStore.userInfo.has_signature,
       }
     }
   }

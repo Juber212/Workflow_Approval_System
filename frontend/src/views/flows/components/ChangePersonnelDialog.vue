@@ -32,7 +32,7 @@
         <label class="personnel-edit__label">校验人</label>
         <UserSelector
           :model-value="form.checker_id"
-          @update:model-value="(v: number | undefined) => form.checker_id = v"
+          @update:model-value="(v: number | number[] | undefined) => form.checker_id = v as number | undefined"
           :initial-options="checkerInitialOptions"
           :multiple="false"
           :placeholder="'选择校验人'"
@@ -46,7 +46,7 @@
         <label class="personnel-edit__label">审批人</label>
         <UserSelector
           :model-value="form.approver_id"
-          @update:model-value="(v: number | undefined) => form.approver_id = v"
+          @update:model-value="(v: number | number[] | undefined) => form.approver_id = v as number | undefined"
           :initial-options="approverInitialOptions"
           :multiple="false"
           :placeholder="'选择审批人'"

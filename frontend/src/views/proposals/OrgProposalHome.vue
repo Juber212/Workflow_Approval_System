@@ -169,7 +169,7 @@ const creating = ref(false)
 const formRef = ref<FormInstance>()
 const form = ref({
   name: '', description: '',
-  designerId: null as number | null,
+  designerId: undefined as number | undefined,  // 与 UserSelector 的 modelValue 类型对齐（number | number[] | undefined）
   approverIds: [] as number[],
   deadline: null as string | null,
 })
@@ -262,7 +262,7 @@ async function handleCreate() {
 }
 
 function resetForm() {
-  form.value = { name: '', description: '', designerId: null, approverIds: [], deadline: null }
+  form.value = { name: '', description: '', designerId: undefined, approverIds: [], deadline: null }
   formRef.value?.resetFields()
 }
 

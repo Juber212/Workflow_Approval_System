@@ -104,13 +104,12 @@
 <script setup lang="ts">
 /** 模板详情页 —— 基础信息 + 节点配置 + 流程预览链 */
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { getTemplateDetail, type TemplateDetail, type TemplateNodeItem } from '@/api/template'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
-const router = useRouter()
 const userStore = useUserStore()
 const { setBreadcrumb } = useBreadcrumb()
 const loading = ref(false)

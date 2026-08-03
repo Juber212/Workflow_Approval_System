@@ -85,6 +85,8 @@ export interface TemplateEdgeItem {
   id: number
   source_node_id: number
   target_node_id: number
+  /** 折线路径点串（模板详情接口可能返回，设计器恢复路由形状用） */
+  points?: string | null
 }
 
 export interface TemplateListParams {
@@ -116,6 +118,12 @@ export async function getTemplates(params: TemplateListParams = {}) {
 export async function getTemplateDetail(id: number): Promise<TemplateDetail> {
   const res = await request.get(`/templates/${id}`)
   return res.data
+}
+
+/** 检查模板名称是否可用（同一组织下不可重名） */
+export async function checkTemplateName(organizationId: number, name: string): Promise<boolean> {
+  const res = await request.get('/template-name-check', { params: { organization_id: organizationId, name } })
+  return res.data?.available ?? true
 }
 
 /** 创建模板 */
@@ -152,6 +160,7 @@ export interface TemplateCategorySummary {
   name: string
   description: string | null
   document_count: number  // 分类下文件模板数量
+  documents?: DocTemplateItem[]  // 分类内模板详情（发起弹窗勾选联动用）
 }
 
 /** 文件模板列表响应（含已关联 + 未关联 + 分类） */

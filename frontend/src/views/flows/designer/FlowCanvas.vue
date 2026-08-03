@@ -64,13 +64,10 @@ const zoomRatio = ref(100)
 let _dragOverHandler: ((e: DragEvent) => void) | null = null
 let _dropHandler: ((e: DragEvent) => void) | null = null
 
-/** 工作节点序号 */
-let workNodeCounter = 1
-
 onMounted(() => {
   if (!canvasRef.value) return
 
-  const logicFlow = new LogicFlow({ container: canvasRef.value, ...DEFAULT_CONFIG })
+  const logicFlow = new LogicFlow({ container: canvasRef.value, ...(DEFAULT_CONFIG as any) })
   logicFlow.history.maxSize = 50
 
   // 注册自定义节点
@@ -176,7 +173,7 @@ function addWorkNode(x?: number, y?: number, presetProperties?: Record<string, a
 
   // 默认属性
   const defaults = {
-    name: `节点 ${workNodeCounter++}`,
+    name: '',
     is_start: false, is_end: false,
     require_file: true,
     approval_strategy: 'all_approve',

@@ -39,11 +39,15 @@ import { ArrowDown } from '@element-plus/icons-vue'
 import { formatTime } from '@/utils/format'
 import type { LogItemBrief } from '@/api/instance'
 
-const props = defineProps<{
+// total/isProposal 提供默认值，避免模板中 total 可能为 undefined
+const props = withDefaults(defineProps<{
   logs: LogItemBrief[]
   total?: number
   isProposal?: boolean  // 是否为方案实例，用于区分操作类型文案
-}>()
+}>(), {
+  total: 0,
+  isProposal: false,
+})
 
 /** 默认折叠（方案默认展开） */
 const collapsed = ref(!props.isProposal)

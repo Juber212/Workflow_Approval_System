@@ -185,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
@@ -194,7 +194,6 @@ import { getApprovalDetail, approveApproval, rejectApproval, type ApprovalDetail
 import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { useUserStore } from '@/stores/user'
 import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
@@ -204,7 +203,6 @@ const AUTH_TOKEN = () => getToken() || ''
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 
 const loading = ref(false)
 const detail = ref<ApprovalDetail | null>(null)

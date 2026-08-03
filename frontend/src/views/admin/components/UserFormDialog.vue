@@ -139,8 +139,9 @@ watch(isAdminSelected, (isAdmin) => {
   if (formRef.value) {
     formRef.value.clearValidate('organization_id')
   }
-  // 动态修改 organization_id 的 required 规则
-  const orgRule = rules.organization_id?.[0]
+  // 动态修改 organization_id 的 required 规则（rules 值可能是单条或数组，统一取数组首条）
+  const orgRules = rules.organization_id
+  const orgRule = Array.isArray(orgRules) ? orgRules[0] : orgRules
   if (orgRule) {
     orgRule.required = !isAdmin
     orgRule.message = isAdmin ? undefined : '非管理员必须选择组织'

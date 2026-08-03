@@ -55,7 +55,7 @@
         </el-select>
         <el-select v-model="initiatorId" placeholder="发起人" clearable filterable remote
           :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleSearch">
-          <el-option v-for="u in initiatorOptions" :key="u.user_id" :label="u.real_name" :value="u.user_id" />
+          <el-option v-for="u in initiatorOptions" :key="u.id" :label="u.real_name" :value="u.id" />
         </el-select>
     </div>
 
@@ -118,7 +118,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { getProposals, getProposalOrganizations, type ProposalListItem, type ProposalOrgCardItem } from '@/api/proposal'
-import { getOrgOptions, searchUsers } from '@/api/admin'
+import { getOrgOptions, searchUsers, type UserSearchItem } from '@/api/admin'
 import { permanentDeleteInstance } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
@@ -159,7 +159,7 @@ const showAdvancedSearch = ref(false)
 const dateRange = ref<[string, string] | null>(null)
 const priority = ref('')
 const initiatorId = ref<number | null>(null)
-const initiatorOptions = ref<{ user_id: number; real_name: string }[]>([])
+const initiatorOptions = ref<UserSearchItem[]>([])
 const statusCounts = ref<Record<string, number>>({})
 
 const statusFilters = [
@@ -289,7 +289,7 @@ async function searchInitiators(query: string) {
   if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
   initiatorSearchTimer = setTimeout(async () => {
     try {
-      initiatorOptions.value = await searchUsers({ keyword: query, page_size: 20 })
+      initiatorOptions.value = await searchUsers(query, 20)
     } catch { /* ignore */ }
   }, 300)
 }

@@ -187,7 +187,6 @@ import { getEndorsementDetail, endorseApprove, endorseReject, type EndorsementDe
 import { previewFile, downloadFile } from '@/api/task'
 import type { SignatureSlot } from '@/api/signature'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { useUserStore } from '@/stores/user'
 import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
@@ -197,7 +196,6 @@ const AUTH_TOKEN = () => getToken() || ''
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
 const router = useRouter()
-const userStore = useUserStore()
 
 const loading = ref(false)
 const detail = ref<EndorsementDetail | null>(null)
@@ -215,12 +213,13 @@ const currentFiles = computed(() => {
 /** 历史节点文件（非当前节点，按节点分组） */
 const historyFileGroups = computed(() => {
   if (!detail.value) return []
-  const map = new Map<string, { nodeId: number | null; nodeName: string; files: typeof detail.value.files }>()
+  // nodeKey 用于模板 v-for 的 :key，与 Map 的分组 key 一致
+  const map = new Map<string, { nodeKey: string; nodeId: number | null; nodeName: string; files: typeof detail.value.files }>()
   for (const f of detail.value.files) {
     if (f.node_id === detail.value!.node_id) continue  // 跳过本节点
     const key = f.node_id ? String(f.node_id) : '_unknown'
     if (!map.has(key)) {
-      map.set(key, { nodeId: f.node_id, nodeName: f.node_name || '未知节点', files: [] })
+      map.set(key, { nodeKey: key, nodeId: f.node_id, nodeName: f.node_name || '未知节点', files: [] })
     }
     map.get(key)!.files.push(f)
   }

@@ -88,7 +88,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import type { UploadFile, UploadInstance, UploadRawFile } from 'element-plus'
+import type { UploadFile, UploadRawFile } from 'element-plus'
 import { supplementFiles } from '@/api/instance'
 import type { DetailNodeInfo } from '@/api/instance'
 
@@ -112,7 +112,6 @@ const visible = computed({
 })
 
 // ========== 状态 ==========
-const uploadRef = ref<UploadInstance>()
 const fileList = ref<UploadFile[]>([])
 const submitting = ref(false)
 const selectedFolder = ref<string | null>(null)  // 选中的文件夹名称

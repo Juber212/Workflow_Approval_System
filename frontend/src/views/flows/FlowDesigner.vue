@@ -98,14 +98,16 @@
         <!-- 文件模板选择 —— 继承模板关联，可临时调整 -->
         <el-form-item label="模板包" v-if="launchLinkedCategories.length > 0">
           <div class="launch-doc-list">
-            <div v-for="c in launchLinkedCategories" :key="'lcat-' + c.id" class="launch-doc-item">
-              <span>
-                <el-tag size="small" type="warning" effect="plain">📦 包</el-tag>
-                {{ c.name }}
-                <span class="launch-doc-orig">({{ c.document_count }} 个模板)</span>
-              </span>
-              <span class="launch-doc-hint">发起后在项目详情页可一键下载 ZIP</span>
-            </div>
+            <el-checkbox-group v-model="launchCategorySelected" @change="onCategoryToggle">
+              <div v-for="c in launchLinkedCategories" :key="'lcat-' + c.id" class="launch-doc-item">
+                <el-checkbox :label="c.id" :value="c.id">
+                  <el-tag size="small" type="warning" effect="plain">📦 包</el-tag>
+                  {{ c.name }}
+                  <span class="launch-doc-orig">({{ c.document_count }} 个模板)</span>
+                </el-checkbox>
+              </div>
+            </el-checkbox-group>
+            <div class="launch-doc-hint">默认全选，可取消不需要的模板包</div>
           </div>
         </el-form-item>
         <el-form-item label="文件模板" v-if="launchDocTemplates.length > 0">
@@ -218,7 +220,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, downloadTemplatesZip, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
 import request from '@/api/request'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance, calculateDeadlines } from '@/api/instance'
@@ -240,6 +242,7 @@ const showLaunchDialog = ref(false)
 const launchDocTemplates = ref<DocTemplateItem[]>([])
 const launchDocSelected = ref<number[]>([])
 const launchLinkedCategories = ref<TemplateCategorySummary[]>([])
+const launchCategorySelected = ref<number[]>([])  // 选中的分类 ID（默认全选）
 
 const launchFormRef = ref<FormInstance>()
 const templateName = ref('')
@@ -381,11 +384,19 @@ async function loadLaunchDocTemplates() {
   try {
     const data = await getDocTemplates(templateId)
     launchDocTemplates.value = data.linked
-    launchDocSelected.value = data.linked.map(d => d.id)  // 默认全选单个模板
+    // 默认全选：单个模板 + 分类内模板
     launchLinkedCategories.value = (data as any).linked_categories || []
+    launchCategorySelected.value = launchLinkedCategories.value.map(c => c.id)  // 分类默认全选
+    // 收集分类内模板 ID 作为初始选中
+    const catDocIds: number[] = []
+    launchLinkedCategories.value.forEach(c => {
+      (c.documents || []).forEach(d => catDocIds.push(d.id))
+    })
+    launchDocSelected.value = data.linked.map(d => d.id).concat(catDocIds)
   } catch {
     launchDocTemplates.value = []
     launchLinkedCategories.value = []
+    launchCategorySelected.value = []
   }
 }
 
@@ -417,7 +428,7 @@ function _makeItems(
     ...docs.map(d => ({
       key: `${keyPrefix}-doc-${d.id}`, name: d.name,
       subtitle: d.original_name,
-      tagLabel: `.${d.file_type}`, tagType: (d.file_type === 'xlsx' ? 'success' : '') as const,
+      tagLabel: `.${d.file_type}`, tagType: (d.file_type === 'xlsx' ? 'success' : '') as DocListItem['tagType'],
       isCategory: false, catId: 0, raw: d,
     })),
   ]
@@ -436,6 +447,39 @@ const availableList = computed<DocListItem[]>(() => _makeItems(availableCategori
 watch(showLaunchDialog, (val) => {
   if (val) loadLaunchDocTemplates()
 })
+
+/** 分类勾选切换 → 同步联动包内模板 */
+function onCategoryToggle(checkedIds: number[]) {
+  const prev = launchCategorySelected.value
+  launchCategorySelected.value = checkedIds
+
+  // 找出本次变更的分类（新增勾选 or 取消勾选）
+  const added = checkedIds.filter(id => !prev.includes(id))
+  const removed = prev.filter(id => !checkedIds.includes(id))
+
+  // 构建分类 ID → 模板 ID 映射
+  const catToDocs: Record<number, number[]> = {}
+  launchLinkedCategories.value.forEach(c => {
+    catToDocs[c.id] = (c.documents || []).map(d => d.id)
+  })
+
+  // 新增勾选 → 加入包内模板
+  const current = new Set(launchDocSelected.value)
+  added.forEach(catId => {
+    (catToDocs[catId] || []).forEach(docId => current.add(docId))
+  })
+  // 取消勾选 → 移除包内模板（但如果模板也被单独勾选了则保留）
+  removed.forEach(catId => {
+    (catToDocs[catId] || []).forEach(docId => {
+      // 检查该模板是否还属于其他已勾选分类
+      const stillInOtherCat = checkedIds.some(
+        cid => cid !== catId && (catToDocs[cid] || []).includes(docId)
+      )
+      if (!stillInOtherCat) current.delete(docId)
+    })
+  })
+  launchDocSelected.value = Array.from(current)
+}
 
 /** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
@@ -513,7 +557,7 @@ function handleNodeSelect(nodeData: any | null) { selectedNodeData.value = nodeD
 function getCanvasNodes(): any[] {
   const lf = canvasRef.value?.getLf()
   if (!lf) return []
-  const nodes = (lf.getGraphData().nodes || []).map((n: any) => ({
+  const nodes = ((lf.getGraphData() as { nodes: any[] }).nodes || []).map((n: any) => ({
     id: n.id, name: n.properties?.name || n.text?.value || '',
     is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
     assignee_id: n.properties?.assignee_id ?? null, assignee_name: n.properties?.assignee_name || '',
@@ -677,6 +721,14 @@ function buildPresetProperties(preset: PresetItem): Record<string, any> {
     time_limit_days: preset.time_limit_days ?? null,
     require_file: preset.require_file ?? true,
     approval_strategy: 'all_approve',
+    // 新字段透传
+    file_folders: preset.file_folders || null,
+    require_assignee_signature: preset.require_assignee_signature ?? true,
+    require_checker_signature: preset.require_checker_signature ?? true,
+    require_approver_signature: preset.require_approver_signature ?? true,
+    require_endorser_signature: preset.require_endorser_signature ?? true,
+    endorser_id: preset.endorser_id ?? null,
+    endorser_name: preset.endorser_name || null,
   }
 }
 
@@ -702,6 +754,10 @@ function validatePresetUsers(preset: PresetItem) {
     }
   }
   // toast 提示
+  // 批准人检测
+  if (preset.endorser_id && !preset.endorser_name) {
+    missing.push(`批准人(ID:${preset.endorser_id})`)
+  }
   if (missing.length > 0) {
     ElMessage.warning(`预设「${preset.name}」中的以下人员已不可用：${missing.join('、')}`)
   }
@@ -735,17 +791,28 @@ function handleSaveAsPreset(formData: any) {
   editingPreset.value = null  // 新建模式
   presetEditorVisible.value = true
   // 将 formData 暂存，PresetEditor 打开时预填
+  // checkers/approvers 已改为单选数值，需要兼容处理
+  const ch = formData.checkers
+  const ap = formData.approvers
   pendingPresetData.value = {
     name: formData.name || '',
     node_name: formData.name || '',
     assignee_id: formData.assignee_id,
     assignee_name: formData.assignee_name || null,
-    checkers: formData.checkers?.map((id: number) => ({ user_id: id })) || null,
-    checkers_names: formData.checkers_names || null,
-    approvers: formData.approvers?.map((id: number) => ({ user_id: id })) || null,
-    approvers_names: formData.approvers_names || null,
+    checkers: ch != null ? [{ user_id: typeof ch === 'number' ? ch : ch[0] }] : null,
+    checkers_names: formData.checkers_name ? [formData.checkers_name] : null,
+    approvers: ap != null ? [{ user_id: typeof ap === 'number' ? ap : ap[0] }] : null,
+    approvers_names: formData.approvers_name ? [formData.approvers_name] : null,
     time_limit_days: formData.time_limit_days,
     require_file: formData.require_file,
+    // 新增：文件提交配置 + 签批开关 + 批准人
+    file_folders: formData.file_folders || null,
+    require_assignee_signature: formData.require_assignee_signature ?? true,
+    require_checker_signature: formData.require_checker_signature ?? true,
+    require_approver_signature: formData.require_approver_signature ?? true,
+    require_endorser_signature: formData.require_endorser_signature ?? true,
+    endorser_id: formData.endorser_id ?? null,
+    endorser_name: formData.endorser_name || null,
   }
 }
 
@@ -766,8 +833,15 @@ function editPresetToFormData(preset: PresetItem): PresetFormData {
     checkers_names: preset.checkers_names,       // 传递姓名
     approvers: preset.approvers,
     approvers_names: preset.approvers_names,     // 传递姓名
+    endorser_id: preset.endorser_id,
+    endorser_name: preset.endorser_name,
     time_limit_days: preset.time_limit_days,
     require_file: preset.require_file,
+    file_folders: preset.file_folders,
+    require_assignee_signature: preset.require_assignee_signature,
+    require_checker_signature: preset.require_checker_signature,
+    require_approver_signature: preset.require_approver_signature,
+    require_endorser_signature: preset.require_endorser_signature,
   }
 }
 
@@ -777,7 +851,7 @@ async function handleSave() {
   if (!lf) return
   saving.value = true
   try {
-    const graphData = lf.getGraphData()
+    const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const idMapping = buildSystemIdMapping(graphData)
     const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
       id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,
@@ -839,7 +913,7 @@ async function handleLaunch() {
   launching.value = true
   try {
     // 1. 先保存模板最新设计
-    const graphData = lf.getGraphData()
+    const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const idMapping = buildSystemIdMapping(graphData)
     const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
       id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,

@@ -161,7 +161,6 @@ import {
   getAdminOrganizations, type AdminDocTemplateItem,
   getAdminCategories, createAdminCategory, updateAdminCategory, deleteAdminCategory,
   getAdminCategoryDetail, linkDocsToCategory, unlinkDocsFromCategory,
-  type TemplateCategoryItem,
 } from '@/api/template'
 import { formatFileSize } from '@/utils/format'
 
