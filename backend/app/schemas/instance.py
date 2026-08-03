@@ -100,6 +100,7 @@ class NodeFileBrief(BaseModel):
     folder_name: str | None = None  # 所属文件夹名称
     round: int = 1
     created_at: datetime | None = None
+    conversion_status: str = "ready"  # PDF 转换状态（补交文件转换中为 pending/converting）
 
 
 class CheckRecordBrief(BaseModel):

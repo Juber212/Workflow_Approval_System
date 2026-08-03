@@ -129,9 +129,19 @@
                 <el-icon :size="14"><Document /></el-icon>
                 <span class="file-name" :title="f.original_name">{{ f.original_name }}</span>
                 <el-tag size="small" type="warning" effect="dark">补交</el-tag>
+                <el-tag v-if="f.conversion_status === 'pending' || f.conversion_status === 'converting'" size="small" type="info">转换中</el-tag>
+                <el-tag v-else-if="f.conversion_status === 'failed'" size="small" type="danger">转换失败</el-tag>
                 <span class="file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }} · {{ formatTime(f.created_at) }}</span>
                 <div class="file-actions">
-                  <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                  <!-- 转换完成 → 在线预览；转换失败 → 查看走下载（原格式） -->
+                  <el-button
+                    v-if="f.conversion_status === 'ready'"
+                    text type="primary" size="small" @click="previewFile(f.id)"
+                  >查看</el-button>
+                  <el-button
+                    v-else-if="f.conversion_status === 'failed'"
+                    text type="primary" size="small" @click="downloadFile(f.id)"
+                  >查看</el-button>
                   <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                 </div>
               </div>

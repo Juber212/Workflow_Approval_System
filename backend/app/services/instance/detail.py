@@ -121,6 +121,7 @@ async def get_instance_detail(db: AsyncSession, instance_id: int) -> dict:
                     folder_name=f.folder_name,  # 所属文件夹名称
                     round=f.round,
                     created_at=f.created_at,
+                    conversion_status=f.conversion_status or "ready",
                 )
             )
 

@@ -172,6 +172,8 @@ async def supplement_files(
                 await f.write(chunk)
 
         # 5d. 创建 File 记录（task_id=NULL、upload_type=supplement）
+        # P1-9：非 PDF 补交文件标记 pending 并写入后入转换队列，转换完成可在线预览
+        is_pdf = upload_file_obj.content_type == "application/pdf"
         file_record = File(
             instance_id=instance_id,
             node_id=node_id,
@@ -184,7 +186,8 @@ async def supplement_files(
             stored_name=stored_name,
             file_path=os.path.join(archive_subdir, instance.name, stored_name),
             file_size=file_size_val,
-            mime_type="application/pdf" if upload_file_obj.content_type == "application/pdf" else upload_file_obj.content_type,
+            mime_type="application/pdf" if is_pdf else upload_file_obj.content_type,
+            conversion_status="ready" if is_pdf else "pending",
         )
         db.add(file_record)
         file_records.append(file_record)
@@ -204,6 +207,16 @@ async def supplement_files(
                     logger.warning(f"文件操作失败: {e}", exc_info=True)
                     pass
         raise
+
+    # ========== 6.5 非 PDF 补交文件入转换队列（P1-9：转换完成后可在线预览）==========
+    pending_files = [fr for fr in file_records if fr.conversion_status == "pending"]
+    if pending_files:
+        from app.services.pdf_queue import enqueue_file_conversion
+        for fr in pending_files:
+            try:
+                await enqueue_file_conversion(fr.id, fr.file_path)
+            except Exception:
+                logger.warning(f"补交文件入转换队列失败: file_id={fr.id}", exc_info=True)
 
     log = OperationLog(
         instance_id=instance_id,
@@ -235,6 +248,7 @@ async def supplement_files(
                 folder_name=fr.folder_name,  # 所属文件夹名称
                 round=fr.round,
                 created_at=fr.created_at,
+                conversion_status=fr.conversion_status or "ready",
             )
             for fr in file_records
         ],

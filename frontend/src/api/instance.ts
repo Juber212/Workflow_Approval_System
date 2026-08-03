@@ -116,6 +116,7 @@ export interface NodeFileBrief {
   folder_name: string | null  // 所属文件夹名称
   round: number
   created_at: string | null
+  conversion_status?: string  // PDF 转换状态（补交文件转换中为 pending/converting）
 }
 
 /** 校验记录简要 */

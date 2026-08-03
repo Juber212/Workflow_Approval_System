@@ -148,7 +148,7 @@
 
 <script setup lang="ts">
 /** 实例详情页 —— 项目/方案共用，根据 template_type 切换面包屑和文案 */
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief } from '@/api/instance'
@@ -215,6 +215,11 @@ onMounted(() => {
   fetchDetail()
 })
 
+onUnmounted(() => {
+  // 清理补交转换轮询定时器
+  if (supplementPollTimer) { clearInterval(supplementPollTimer); supplementPollTimer = null }
+})
+
 /** 路由变更时重新拉取数据（同一组件复用于项目详情/方案详情，onMounted 不会重新触发） */
 watch(
   () => route.fullPath,
@@ -275,9 +280,32 @@ function handleSupplement(nodeId?: number) {
   showSupplementDialog.value = true
 }
 
-/** 补交成功后刷新详情 */
+/** 补交成功后刷新详情，并轮询等待非 PDF 文件转换完成（P1-9） */
 function handleSupplementSuccess() {
   fetchDetail()
+  startSupplementPoll()
+}
+
+/** 补交的 Word/Excel 转换轮询：每 2 秒刷新详情，直到全部转换完成或超时 */
+let supplementPollTimer: ReturnType<typeof setInterval> | null = null
+
+function startSupplementPoll() {
+  if (supplementPollTimer) clearInterval(supplementPollTimer)
+  let tries = 0
+  supplementPollTimer = setInterval(() => {
+    tries++
+    const hasConverting = (detail.value?.nodes || []).some((n: DetailNodeInfo) =>
+      (n.files || []).some((f: NodeFileBrief) =>
+        f.conversion_status === 'pending' || f.conversion_status === 'converting'
+      )
+    )
+    // 转换完成或轮询超时（最多 60 秒）后停止
+    if (!hasConverting || tries >= 30) {
+      if (supplementPollTimer) { clearInterval(supplementPollTimer); supplementPollTimer = null }
+      return
+    }
+    fetchDetail()
+  }, 2000)
 }
 
 /** 打开优先级修改弹窗 */
