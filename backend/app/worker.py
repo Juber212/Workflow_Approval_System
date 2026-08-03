@@ -1,7 +1,11 @@
 """ARQ Worker 入口 —— 后台 PDF 转换任务
 
 启动方式（在 backend 目录下执行）：
-    arq app.worker.WorkerSettings
+    python -m arq app.worker.WorkerSettings
+
+注意：用 `python -m arq` 而非 `arq`——后者的 arq.exe shim 可能被
+Windows Device Guard/AppLocker 应用控制策略阻止（未签名 exe），
+通过 python.exe 以模块方式运行可规避（2026-08-03 实测）。
 
 依赖：
     Redis 必须运行，ARQ_REDIS_URL 需指向正确地址
