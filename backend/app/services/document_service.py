@@ -21,6 +21,7 @@ from app.utils.file_utils import resolve_file_path
 from app.models import (
     DocumentTemplate, FlowTemplate, FlowInstance, Task,
     InstanceNode, User, Organization,
+    TemplateDocumentLink, TemplateCategoryDocument,
 )
 
 logger = logging.getLogger(__name__)
@@ -280,3 +281,30 @@ def get_doc_template_abs_path(doc: DocumentTemplate) -> str:
             return doc.file_path
     # 最终兜底（确保返回绝对路径）
     return os.path.abspath(path)
+
+
+async def collect_instance_doc_ids(db: AsyncSession, instance) -> set[int]:
+    """收集该实例可下载的文件模板 ID 集合
+
+    实例级 doc_template_ids 优先；为空则继承模板关联（单模板 + 分类包展开）。
+    公共 helper：供模板级 / 任务级下载接口做归属校验，防止跨实例枚举下载。
+    """
+    linked_doc_ids: set[int] = set()
+    if instance.doc_template_ids:
+        linked_doc_ids.update(int(d) for d in instance.doc_template_ids)
+        return linked_doc_ids
+
+    links = (await db.execute(
+        select(TemplateDocumentLink).where(TemplateDocumentLink.template_id == instance.template_id)
+    )).scalars().all()
+    for link in links:
+        if link.document_id is not None:
+            linked_doc_ids.add(link.document_id)
+        elif link.category_id is not None:
+            cat_doc_ids = (await db.execute(
+                select(TemplateCategoryDocument.document_id).where(
+                    TemplateCategoryDocument.category_id == link.category_id
+                )
+            )).scalars().all()
+            linked_doc_ids.update(cat_doc_ids)
+    return linked_doc_ids

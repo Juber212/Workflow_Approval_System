@@ -30,6 +30,7 @@ from app.services.category_service import (
     get_category_detail, link_documents_to_category, unlink_documents_from_category,
     batch_fill_and_zip,
 )
+from app.services.document_service import collect_instance_doc_ids
 from app.api.deps import get_current_active_user, CurrentUser, require_manager, require_same_org, require_admin, resolve_org_scope
 
 router = APIRouter(prefix="/api/v1", tags=["项目模板"])
@@ -491,34 +492,6 @@ async def _is_instance_participant(db: AsyncSession, instance, user_id: int) -> 
     return False
 
 
-async def _collect_instance_doc_ids(db: AsyncSession, instance) -> set[int]:
-    """收集该实例可下载的文件模板 ID 集合
-
-    实例级 doc_template_ids 优先；为空则继承模板关联（单模板 + 分类包展开）。
-    """
-    from app.models import TemplateDocumentLink, TemplateCategoryDocument
-
-    linked_doc_ids: set[int] = set()
-    if instance.doc_template_ids:
-        linked_doc_ids.update(int(d) for d in instance.doc_template_ids)
-        return linked_doc_ids
-
-    links = (await db.execute(
-        select(TemplateDocumentLink).where(TemplateDocumentLink.template_id == instance.template_id)
-    )).scalars().all()
-    for link in links:
-        if link.document_id is not None:
-            linked_doc_ids.add(link.document_id)
-        elif link.category_id is not None:
-            cat_doc_ids = (await db.execute(
-                select(TemplateCategoryDocument.document_id).where(
-                    TemplateCategoryDocument.category_id == link.category_id
-                )
-            )).scalars().all()
-            linked_doc_ids.update(cat_doc_ids)
-    return linked_doc_ids
-
-
 @router.get("/templates/{template_id}/download-zip")
 async def download_template_zip(
     template_id: int,
@@ -566,7 +539,7 @@ async def download_template_zip(
         raise AppException(ErrorCode.FORBIDDEN, "仅流程参与者可下载文件模板")
 
     # 校验 doc_ids 全部属于该实例可用的模板关联集（防止跨实例枚举下载）
-    allowed_doc_ids = await _collect_instance_doc_ids(db, instance)
+    allowed_doc_ids = await collect_instance_doc_ids(db, instance)
     invalid_ids = [d for d in ids if d not in allowed_doc_ids]
     if invalid_ids:
         raise AppException(ErrorCode.FORBIDDEN, "文件模板不属于该流程实例，无权下载")

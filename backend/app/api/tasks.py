@@ -17,6 +17,7 @@ from app.services.pdf_queue import enqueue_batch_conversion
 from app.services.pdf_converter import convert_to_pdf
 from app.services.document_service import (
     resolve_template_variables, fill_template, get_doc_template_abs_path,
+    collect_instance_doc_ids,
 )
 from app.api.deps import get_current_active_user, CurrentUser
 from app.models import Task, InstanceNode, File, DocumentTemplate, FlowInstance, TemplateDocumentLink, TemplateCategory, TemplateCategoryDocument
@@ -427,6 +428,16 @@ async def download_task_template_zip(
     if not doc_ids:
         raise AppException(ErrorCode.NOT_FOUND, "该包内无模板")
 
+    # P1-2 修复：校验包内模板全部属于该实例的关联集（防跨实例枚举下载模板包）
+    instance = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == task.instance_id)
+    )).scalar_one_or_none()
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+    allowed_doc_ids = await collect_instance_doc_ids(db, instance)
+    if any(d not in allowed_doc_ids for d in doc_ids):
+        raise AppException(ErrorCode.FORBIDDEN, "模板包不属于该流程实例，无权下载")
+
     # 查询包名（用于 ZIP 文件名）
     cat = (await db.execute(
         select(TemplateCategory).where(TemplateCategory.id == category_id)
@@ -465,6 +476,16 @@ async def download_document_template(
         raise AppException(ErrorCode.NOT_FOUND, "任务不存在")
     if task.assignee_id != current_user.id:
         raise AppException(ErrorCode.FORBIDDEN, "仅任务负责人可下载模板")
+
+    # P1-2 修复：校验模板属于该实例的关联集（防跨实例枚举下载文件模板）
+    instance = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == task.instance_id)
+    )).scalar_one_or_none()
+    if instance is None:
+        raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
+    allowed_doc_ids = await collect_instance_doc_ids(db, instance)
+    if doc_id not in allowed_doc_ids:
+        raise AppException(ErrorCode.FORBIDDEN, "文件模板不属于该流程实例，无权下载")
 
     # 2. 查文档模板
     doc = (await db.execute(

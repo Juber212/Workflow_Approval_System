@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.api.templates import _is_instance_participant, _collect_instance_doc_ids
+from app.api.templates import _is_instance_participant
+from app.services.document_service import collect_instance_doc_ids
 from app.models import FlowInstance
 
 
@@ -88,7 +89,7 @@ async def test_collect_uses_instance_level_config_first():
     """实例级 doc_template_ids 优先，无需查库"""
     db = AsyncMock()
     inst = _make_instance(doc_template_ids=[3, 4])
-    assert await _collect_instance_doc_ids(db, inst) == {3, 4}
+    assert await collect_instance_doc_ids(db, inst) == {3, 4}
     db.execute.assert_not_called()
 
 
@@ -108,4 +109,4 @@ async def test_collect_from_template_links_and_category():
     cat_result.scalars.return_value.all.return_value = [6, 7]
     db.execute.side_effect = [link_result, cat_result]
 
-    assert await _collect_instance_doc_ids(db, inst) == {5, 6, 7}
+    assert await collect_instance_doc_ids(db, inst) == {5, 6, 7}
