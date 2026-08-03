@@ -157,8 +157,9 @@ class TestChangePersonnel:
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=inst),   # SELECT instance
-            MockResult(scalar_one=node),   # SELECT node
+            MockResult(scalar_one=inst),     # SELECT instance
+            MockResult(scalar_one=node),     # SELECT node
+            MockResult(scalars_all=[]),      # SELECT User（id_name_map）
         ]
 
         from app.schemas.instance import ChangePersonnelRequest
@@ -189,14 +190,16 @@ class TestChangePersonnel:
             if i == 1:
                 return MockResult(scalar_one=node)      # SELECT node
             if i == 2:
-                return None                              # update Task（换负责人）
+                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
             if i == 3:
-                return None                              # clear_related delete
+                return None                              # update Task（换负责人）
             if i == 4:
-                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
+                return None                              # clear_related delete
             if i == 5:
-                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
             if i == 6:
+                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+            if i == 7:
                 return MockResult(scalar_one=task)      # _get_active_task select
             return None
 
@@ -205,14 +208,16 @@ class TestChangePersonnel:
         from app.schemas.instance import ChangePersonnelRequest
         body = ChangePersonnelRequest(assignee_id=9)
 
-        await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
-                               current_user=FakeUser(id=1))
+        result = await change_personnel(mock_db, instance_id=1, node_id=5, body=body,
+                                        current_user=FakeUser(id=1))
 
         # 负责人字段已更新
         assert node.assignee_id == 9
+        # 被换掉的人员（旧负责人）返回，供 API 层推送实时刷新
+        assert result["removed_users"] == [2]
         # Task 更新语句条件排除终结状态（含 notin_）
         from sqlalchemy.dialects import mysql
-        update_stmt = captured[2]
+        update_stmt = captured[3]
         # literal_binds：NOT IN 列表默认参数化，这里把绑定的状态值渲染进 SQL 以便断言
         sql = str(update_stmt.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "NOT IN" in sql
