@@ -13,7 +13,7 @@ from app.utils.file_utils import resolve_file_path
 from app.core.exceptions import AppException
 from app.services.notification_service import create_notification, clear_related
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
-from app.services.instance._helpers import compute_progress
+from app.services.instance._helpers import compute_progress, is_deadline_overdue
 from app.core.error_codes import ErrorCode
 from app.models import (
     Task,
@@ -115,13 +115,12 @@ async def list_tasks(
         inst = insts_map.get(t.instance_id)
         initiator = users_map.get(inst.initiator_id) if inst else None
 
-        # deadline 来自关联节点
+        # deadline 来自关联节点（自然日口径：截止日当天不算逾期，见 P1-17）
         dl = node.deadline if node else None
-        is_overdue = dl is not None and dl < now
+        is_overdue = is_deadline_overdue(dl)
         days_remaining = None
         if dl:
-            delta = (dl - now).days
-            days_remaining = max(0, delta)
+            days_remaining = max(0, (dl.date() - now.date()).days)
 
         items.append(TaskListItem(
             id=t.id,

@@ -293,6 +293,8 @@ async def get_overdue_items(db: AsyncSession) -> dict:
     口径与首页卡片一致：已逾期 + 2 天内即将逾期（deadline < now + 2天）。
     每条含 is_overdue 标记，供前端区分「已逾期 / 即将逾期」。
     """
+    # 延迟导入：避免与 instance 包形成循环依赖（instance/__init__ → create → flow_engine → 本模块）
+    from app.services.instance._helpers import is_deadline_overdue
     from datetime import datetime, timedelta
     from app.models import Task, CheckRecord, Approval, Endorsement, FlowInstance, InstanceNode, User, Organization
     from sqlalchemy import and_
@@ -387,7 +389,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
-            "is_overdue": node.deadline < now,
+            "is_overdue": is_deadline_overdue(node.deadline),
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -402,7 +404,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
-            "is_overdue": node.deadline < now,
+            "is_overdue": is_deadline_overdue(node.deadline),
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -417,7 +419,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
-            "is_overdue": node.deadline < now,
+            "is_overdue": is_deadline_overdue(node.deadline),
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
@@ -432,7 +434,7 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "person_name": user.real_name,
             "person_id": user.id,
             "deadline": node.deadline.isoformat() if node.deadline else None,
-            "is_overdue": node.deadline < now,
+            "is_overdue": is_deadline_overdue(node.deadline),
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })

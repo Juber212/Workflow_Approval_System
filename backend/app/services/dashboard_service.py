@@ -15,7 +15,7 @@ from app.models import (
     Approval,
 )
 from app.models.enums import TaskStatus, CheckStatus, ApprovalStatus
-from app.services.instance._helpers import compute_deadline_info
+from app.services.instance._helpers import compute_deadline_info, is_deadline_overdue
 from app.schemas.dashboard import (
     DashboardData,
     DashboardStats,
@@ -427,7 +427,8 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem
         dl = node.deadline
 
         if dl:
-            delta = (dl - now).days
+            # 自然日口径：忽略时分秒，截止日当天 delta=0 显示「还剩 0 天」（见 P1-17）
+            delta = (dl.date() - now.date()).days
             if delta < 0:
                 days_label = f"已逾期 {-delta}天"
             else:
@@ -444,14 +445,14 @@ async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem
             deadline=dl.isoformat() if dl else None,
             days_label=days_label,
             organization_name="",
-            is_overdue=dl is not None and dl < now,
+            is_overdue=is_deadline_overdue(dl),
         ))
 
-    # 排序：逾期从多到少，然后剩余从少到多
+    # 排序：逾期从多到少，然后剩余从少到多（自然日口径，忽略时分秒，见 P1-17）
     items.sort(key=lambda x: (
         not x.is_overdue,
-        -(abs((datetime.fromisoformat(x.deadline) - now).days) if x.deadline else 0) if x.is_overdue else 999,
-        abs((datetime.fromisoformat(x.deadline) - now).days) if x.deadline and not x.is_overdue else 999,
+        -(abs((datetime.fromisoformat(x.deadline).date() - now.date()).days) if x.deadline else 0) if x.is_overdue else 999,
+        abs((datetime.fromisoformat(x.deadline).date() - now.date()).days) if x.deadline and not x.is_overdue else 999,
     ))
 
     return items

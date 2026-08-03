@@ -20,21 +20,34 @@ ACTIVE_NODE_STATUSES = [
 
 
 def compute_deadline_info(deadline: datetime | None) -> tuple[bool, int | None]:
-    """计算逾期状态和剩余天数
+    """计算逾期状态和剩余天数（自然日口径）
 
-    供各 service 的 list 函数复用，统一逾期判断逻辑。
+    截止时间按天粒度判断：截止日当天（00:00~23:59）均视为「今日截止」不算逾期，
+    次日 00:00 起才算逾期。剩余天数 = 截止日期 - 今天（忽略时分秒）。
+    修复 P1-17：原实现用 deadline - now 算天数，而 deadline 存的是当日 00:00:00，
+    导致截止日当天 00:01 起 delta.days 即变 -1，误报「已逾期 1 天」。
 
     Returns:
         (is_overdue, days_remaining)
-        - is_overdue: True=已逾期
+        - is_overdue: True=已逾期（截止日期早于今天）
         - days_remaining: 正数=剩余天数, 0=今日截止, 负数=已逾期天数, None=无截止时间
     """
     if deadline is None:
         return False, None
-    now = datetime.now()
-    delta = deadline - now
-    days = delta.days
-    return days < 0, days
+    deadline_day = deadline.date()
+    today = datetime.now().date()
+    return deadline_day < today, (deadline_day - today).days
+
+
+def is_deadline_overdue(deadline: datetime | None) -> bool:
+    """自然日口径逾期判断（供待办/通知/仪表盘等直比逻辑复用）
+
+    与 compute_deadline_info 保持同一口径：截止日当天不算逾期，次日 00:00 起才算。
+    P1-17 前各处用 `deadline < now` 直比，因 deadline 存当日 00:00:00 会提前一天误判。
+    """
+    if deadline is None:
+        return False
+    return deadline.date() < datetime.now().date()
 
 
 
