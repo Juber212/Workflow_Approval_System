@@ -137,7 +137,7 @@ storage/archive/{实例名称}/
 - ✅ Frontend (Vue3 + LogicFlow + Element Plus) — 全部页面完成
 - ✅ Backend (FastAPI + SQLAlchemy + JWT) — 全部模块完成
 - ✅ Flow Engine (FlowEngine 类 → API 层调用) — BFS 激活/传播/fork-join 汇合
-- ✅ 自动化测试 190 条（158 mock 单元 + 10 mock 集成 + 19 MySQL 真实服务调用 + 3 其他），零业务逻辑 bug
+- ✅ 自动化测试 227 条（169 单元 + 39 集成 + 19 MySQL 真实），零业务逻辑 bug
 - ✅ 首页柱状图重写、签批预览、通知系统（WebSocket + 30s 轮询兜底）
 - ✅ 批准人（Endorser）+ 难度等级、方案（Proposal）模块、文件模板、节点预设
 - ✅ 截止时间逾期/临期行标色（全部列表页）
@@ -148,6 +148,7 @@ storage/archive/{实例名称}/
 - ✅ 数据库隔离级别加固：READ COMMITTED 防 fork-join 并发竞态
 - ✅ 前后端字段对齐：NodeOverride 签名字段 / template type / endorsements 等
 - ✅ 第五轮架构增强：JWT 黑名单（Redis DB 2）+ must_change_password 前后端双重拦截 + 401 跳转状态保持 + 低危项清零（Phase 16）
+- ✅ 第六轮全栈审查（2026-08-03）P0 上线阻断全部修复：模板ZIP下载鉴权 / folder_name路径穿越 / 签名file_id越权 / fork-join驳回卡死 / must_change_password死循环+改密流程 / 前端57个TS错误清零（vue-tsc -b 0 + build 通过） / WS鉴权完整化 / 角色降级即时生效（P0-4 审批死锁经确认撤销）
 - - [ ] 中危项按需修复
 
 **状态：可部署上线**
@@ -156,10 +157,10 @@ storage/archive/{实例名称}/
 
 | 类型 | 数量 | 位置 | 说明 |
 |------|:--:|------|------|
-| Mock 单元测试 | 158 | `tests/unit/` | 内存运行，毫秒级 |
-| Mock 集成测试 | 10 | `tests/integration/` | TestClient + mock_db |
+| 单元测试 | 169 | `tests/unit/` | 内存运行，毫秒级 |
+| 集成测试 | 39 | `tests/integration/` | TestClient + mock_db |
 | MySQL 真实测试 | 19 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
-| **合计** | **190** | | **0 业务逻辑 bug** |
+| **合计** | **227** | | **P0 批次新增 37 条** |
 
 运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
 

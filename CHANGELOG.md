@@ -4,6 +4,74 @@
 
 ---
 
+## 2026-08-03 — P0 上线阻断项全量修复（第六轮全栈审查）
+
+### 安全与越权
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 1 | 模板 ZIP 下载接口补归属校验：非任务参与者 403、doc_ids 必须属于实例关联集 | `api/templates.py`、`category_service.py` |
+| 2 | folder_name 路径穿越封堵：白名单校验 + 写盘前 realpath 断言在 STORAGE_ROOT 内 | `file_service.py` |
+| 3 | 签名 file_id 越权：`create_signature_records` 校验 file_id 属于本节点 | `pdf_signature.py` |
+| 4 | WS 鉴权完整化：认证查 token 黑名单 + 用户 is_active，登出/禁用断开全部 WS 连接 | `api/ws.py`、`ws_manager.py` |
+| 5 | 角色降级即时生效：`get_current_active_user` 重查 DB 实时角色 | `api/deps.py` |
+
+### 正确性
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 6 | fork/join 驳回到分支内节点不再卡死：汇合点保留已完成兄弟分支到达计数 | `approval_service.py` |
+| 7 | must_change_password 死循环消除 + 被重置用户先登录再改密流程修正 | `guards.ts`、`login/index.vue`、`api/auth.py` |
+| 8 | 前端 57 个 TS 错误清零（vue-tsc -b 0 errors + build 通过）；顺带修复发起人筛选 value 恒为 undefined 的隐藏 bug | 29 个前端文件 |
+
+### 处置说明
+- P0-4 审批 ABBA 死锁：前端已确认无多人审批场景（已做成单选），撤销修复，代码与测试回滚
+
+### 测试
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 227 | 单元 169 + 集成 39 + MySQL 19，全绿（P0 新增 37 条） |
+| 前端类型检查 | 0 errors | `vue-tsc -b --force` + `npm run build` 通过 |
+
+---
+
+## 2026-08-03 — 通知修复 + 超期预警口径统一 + 首页待办计数
+
+### 通知系统
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 1 | `instance_terminated`（项目已终止）通知前端显示中文 + ⛔ 图标（原显示原始英文类型） | `api/notification.ts` |
+| 2 | 新增 `DELETE /notifications/{id}`：终局事件通知（项目已终止）点击即删，列表与实时气泡同步生效 | `api/notifications.py`（新接口）、`notification_service.py`、`NotificationBell.vue` |
+| 3 | `endorsement_rejected`（批准驳回）通知在负责人重新提交文件时清除，与审批驳回/校验退回/终审驳回一致 | `task_service.py` |
+| 4 | 通知类型注释补 `instance_terminated` | `models/notification.py` |
+
+### 超期预警口径统一
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 5 | 独立超期预警页面纳入 2 天内即将到期的项，与首页卡片/内嵌列表口径一致（`deadline < now + 2天`） | `notification_service.py`（`get_overdue_items`） |
+| 6 | 每条返回 `is_overdue` 标记，前端区分「已逾期（红）/ 即将逾期（黄）」标签 | `notification_service.py`、`OverdueWarning.vue` |
+
+### 首页增强
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 7 | 「我的待办」卡片头部加计数：共 N 条 · 紧急 X 条（urgent/high，跟随项目/方案 Tab） | `dashboard/index.vue` |
+
+### 工具
+
+| # | 内容 | 涉及文件 |
+|---|------|------|
+| 8 | 超期预警测试数据脚本：造已逾期/即将逾期两类数据，覆盖待办/校验/审批/批准 4 类跳转，可独立清理（`--near` 造临期、`--clean` 全清） | `backend/app/core/seed_overdue.py`（新） |
+
+### 测试
+
+| 类型 | 数量 | 说明 |
+|------|:--:|------|
+| 后端全量 | 173 | mock 单元 + 集成全部通过，零回归 |
+| 前端类型检查 | 0 errors | vue-tsc --noEmit 通过 |
+
+---
+
 ## 2026-07-31 — 进度条并行分叉/汇合曲线对齐修复 + 测试数据种子脚本
 
 ### 修复
