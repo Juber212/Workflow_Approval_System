@@ -101,15 +101,17 @@ async def list_instances(
             .scalar_subquery()
         )
         # MySQL 不支持 NULLS LAST，用 CASE 将 null 推到末尾
+        # 排序优先级：先按 urgent>high>normal>low，同优先级内再按截止时间（最近截止优先）。
+        # P1-16 修复：原把 deadline 排在 priority 前，导致截止时间早的普通项目压过紧急项目。
         list_stmt = base_stmt.order_by(
-            case((current_deadline.is_(None), 1), else_=0),  # 无截止时间排最后
-            current_deadline.asc(),
             case(
                 (FlowInstance.priority == "urgent", 0),
                 (FlowInstance.priority == "high", 1),
                 (FlowInstance.priority == "normal", 2),
                 else_=3,
             ),
+            case((current_deadline.is_(None), 1), else_=0),  # 同优先级内无截止时间排最后
+            current_deadline.asc(),  # 同优先级内最近截止优先
             FlowInstance.initiated_at.asc(),
         )
     else:

@@ -292,6 +292,10 @@ class TestListInstances:
         assert "running" in sql
         assert "waiting_approval" in sql
         assert "waiting_check" in sql
+        # 排序顺序：优先级必须先于 deadline（P1-16 修正——否则紧急项目被截止时间压到后面）
+        # 渲染后 ORDER BY 第一个 CASE WHEN 是 priority，deadline 的 NULL 判断紧随其后
+        order_sql = sql[sql.index("ORDER BY"):]
+        assert order_sql.index("priority") < order_sql.index("IS NULL")
         # 结果组装正常
         assert result.total == 1
         assert result.items[0].priority == "urgent"
