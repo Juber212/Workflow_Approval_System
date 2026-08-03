@@ -514,7 +514,11 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     await db.flush()
 
     # 查询节点（审批策略判断需要）
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    # P1-19：FOR UPDATE 锁 node 行 —— 与 change_personnel（紧急换人）操作同一 node 时串行化，
+    # 消除「换人读旧状态 vs 审批推进节点」的 TOCTOU 竞态窗口。
+    node = (await db.execute(
+        select(InstanceNode).where(InstanceNode.id == a.node_id).with_for_update()
+    )).scalar_one_or_none()
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
@@ -679,7 +683,10 @@ async def reject(
     if a.status != ApprovalStatus.PENDING:
         raise AppException(ErrorCode.FORBIDDEN, "仅待审批状态可操作")
 
-    node = (await db.execute(select(InstanceNode).where(InstanceNode.id == a.node_id))).scalar_one_or_none()
+    # P1-19：FOR UPDATE 锁 node 行（reject 与 change_personnel 并发时串行化，防 TOCTOU）
+    node = (await db.execute(
+        select(InstanceNode).where(InstanceNode.id == a.node_id).with_for_update()
+    )).scalar_one_or_none()
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
     now = datetime.now()

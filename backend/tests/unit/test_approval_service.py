@@ -255,6 +255,49 @@ class TestApprove:
         assert "task_id = 10" in sql
         assert "signature_applied" in sql
 
+    @pytest.mark.asyncio
+    async def test_approve_locks_node_row(self, mock_db, mocker):
+        """P1-19：approve 查询 node 时 FOR UPDATE 锁行，与紧急换人串行化防 TOCTOU"""
+        mocker.patch("app.services.approval_service.propagate_from_node", new=AsyncMock())
+        approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, require_approver_signature=False, endorser_id=None,
+                         approvers=[{"user_id": 4, "name": "A"}])
+        inst = make_instance(id=1, difficulty="1")
+
+        captured: list = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=approval)   # SELECT approval FOR UPDATE
+            if i == 1:
+                return MagicMock()                        # lock 其他 pending approvals
+            if i == 2:
+                return MagicMock()                        # clear_related delete
+            if i == 3:
+                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
+            if i == 4:
+                return MockResult(scalars_all=[])         # 无剩余 pending，全部通过
+            if i == 5:
+                return MagicMock()                        # UPDATE task completed
+            if i == 6:
+                return MockResult(scalar_one=inst)        # SELECT FlowInstance
+            if i == 7:
+                return MockResult(scalar_one=None)        # SELECT FlowTemplate（project 非 proposal）
+            return MagicMock()
+
+        mock_db.execute = _fake_execute
+
+        result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
+        assert result["all_approved"] is True
+
+        # captured[3] 是 SELECT InstanceNode —— 必须 FOR UPDATE（与 change_personnel 的 node 锁串行化）
+        from sqlalchemy.dialects import mysql
+        node_sql = str(captured[3].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "instance_nodes" in node_sql
+        assert "FOR UPDATE" in node_sql.upper()
+
 
 # ============================================================
 # reject —— 审批退回/驳回
@@ -291,6 +334,53 @@ class TestReject:
         assert approval.status == ApprovalStatus.REJECTED
         assert task.status == TaskStatus.PROCESSING
         assert node.round == 3  # round+1
+
+    @pytest.mark.asyncio
+    async def test_reject_locks_node_row(self, mock_db):
+        """P1-19：reject 查询 node 时 FOR UPDATE 锁行，防与紧急换人 TOCTOU"""
+        approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
+        node = make_node(id=5, is_end=False, round=2)
+        task = make_task(id=10, node_id=5, status=TaskStatus.WAITING_APPROVAL)
+
+        captured: list = []
+
+        async def _fake_execute(stmt, *args, **kwargs):
+            captured.append(stmt)
+            i = len(captured) - 1
+            if i == 0:
+                return MockResult(scalar_one=approval)   # SELECT approval FOR UPDATE
+            if i == 1:
+                return MockResult(scalar_one=node)        # SELECT node
+            if i == 2:
+                return MagicMock()                        # clear_related delete
+            if i == 3:
+                return MockResult(scalars_all=[])         # terminated approvers（空）
+            if i == 4:
+                return MagicMock()                        # UPDATE approvals terminated
+            if i == 5:
+                return MockResult(scalars_all=[])         # terminated checkers（空）
+            if i == 6:
+                return MagicMock()                        # UPDATE checks terminated
+            if i == 7:
+                return MockResult(scalars_all=[])         # terminated endorsers（空）
+            if i == 8:
+                return MagicMock()                        # UPDATE endorsements
+            if i == 9:
+                return MockResult(scalars_all=[])         # SELECT files（空）
+            if i == 10:
+                return MockResult(scalar_one=task)        # SELECT task
+            return MagicMock()
+
+        mock_db.execute = _fake_execute
+
+        result = await reject(mock_db, approval_id=1, current_user_id=4, opinion="数据不对")
+        assert "已退回" in result["message"]
+
+        # captured[1] 是 SELECT InstanceNode —— 必须 FOR UPDATE
+        from sqlalchemy.dialects import mysql
+        node_sql = str(captured[1].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        assert "instance_nodes" in node_sql
+        assert "FOR UPDATE" in node_sql.upper()
 
     @pytest.mark.asyncio
     async def test_end_node_final_reject(self, mock_db):
