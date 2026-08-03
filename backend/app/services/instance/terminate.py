@@ -176,9 +176,10 @@ async def terminate_instance(
 
     # ========== 12. 发送终止通知 + 清除待办（使用步骤4预先收集的用户列表） ==========
     for user_id, clear_type in notify_users:
-        await clear_related(db, user_id=user_id, types=[clear_type])
+        await clear_related(db, user_id=user_id, types=[clear_type], instance_id=instance_id)
         await create_notification(db, user_id=user_id, type="instance_terminated",
-            title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}")
+            title="项目已终止", content=f"「{instance.name}」已被发起人终止，原因：{reason}",
+            instance_id=instance_id)
 
     return {
         "id": instance.id,

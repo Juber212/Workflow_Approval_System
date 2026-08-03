@@ -25,11 +25,14 @@ async def create_notification(
     title: str,
     content: str,
     link: str | None = None,
+    instance_id: int | None = None,
 ) -> Notification | None:
     """创建通知 + WebSocket 实时推送（不阻塞主流程）
 
     使用 savepoint 隔离 DB 操作——通知插入失败不影响外层事务。
     典型场景：被通知的用户已被删除 → FK 约束失败 → 仅回滚保存点，主流程继续。
+
+    instance_id：所属流程实例 ID（P1-7），用于终止/驳回/换人时按实例精确清理。
     """
     try:
         # savepoint 隔离：通知创建失败不回滚外层事务
@@ -40,6 +43,7 @@ async def create_notification(
                 title=title,
                 content=content,
                 link=link,
+                instance_id=instance_id,
                 is_read=False,
             )
             db.add(notif)
@@ -224,10 +228,13 @@ async def get_summary(db: AsyncSession, *, user_id: int) -> dict:
     }
 
 
-async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> None:
+async def clear_related(db: AsyncSession, *, user_id: int, types: list[str], instance_id: int | None = None) -> None:
     """操作完成后删除相关通知（纯 DB 操作，不发送 WS）
 
     使用 savepoint 隔离——清除通知失败不影响外层事务。
+
+    instance_id（P1-7）：传入时仅清理指定实例的通知，避免把该用户
+    在其他实例的同类型通知一并清掉（过度清理）。不传保持按 user_id+类型清理。
 
     WS 推送由 API 层在 db.commit() 后调用 send_refresh_signal() 完成，
     确保前端查询 summary 时数据已提交。
@@ -235,15 +242,18 @@ async def clear_related(db: AsyncSession, *, user_id: int, types: list[str]) -> 
     try:
         async with db.begin_nested():
             from sqlalchemy import delete
+            conditions = [
+                Notification.user_id == user_id,
+                Notification.type.in_(types),
+            ]
+            if instance_id is not None:
+                conditions.append(Notification.instance_id == instance_id)
             await db.execute(
-                delete(Notification).where(
-                    Notification.user_id == user_id,
-                    Notification.type.in_(types),
-                )
+                delete(Notification).where(*conditions)
             )
             await db.flush()
     except Exception:
-        logger.debug(f"清除通知失败（已通过 savepoint 隔离，不影响主流程）: user_id={user_id}, types={types}", exc_info=True)
+        logger.debug(f"清除通知失败（已通过 savepoint 隔离，不影响主流程）: user_id={user_id}, types={types}, instance_id={instance_id}", exc_info=True)
 
 
 async def send_refresh_signal(user_id: int) -> None:

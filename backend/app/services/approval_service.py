@@ -447,6 +447,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
 
     await clear_related(
         db, user_id=current_user_id, types=["approval_assigned"],
+        instance_id=a.instance_id,
     )
 
     # 兼容旧版：单签名位置参数（直接存 Approval 旧字段）
@@ -620,6 +621,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
             title="新的待批准任务",
             content=f"节点「{node.name}」全部审批通过，等待你批准",
             link=f"/profile/endorse/{endorsement.id}",
+            instance_id=a.instance_id,
         )
 
         return {"all_approved": True, "waiting_endorsement": True, "message": "全部审批通过，等待批准人审核", "_pending_sig_ids": _pending_signature_ids}
@@ -667,6 +669,7 @@ async def reject(
 
     await clear_related(
         db, user_id=current_user_id, types=["approval_assigned"],
+        instance_id=a.instance_id,
     )
 
     if node.is_end:
@@ -778,6 +781,7 @@ async def reject(
                 title="终审总驳回",
                 content=f"发起人将流程驳回至节点「{target_node.name}」：{opinion}",
                 link=f"/profile/task/{new_task_id}",
+                instance_id=a.instance_id,
             )
 
         return {"message": f"已驳回至「{target_node.name}」节点"}
@@ -910,6 +914,7 @@ async def reject(
                     title="审批驳回",
                     content=f"节点「{node.name}」审批驳回到「{target_node.name}」：{opinion}",
                     link=f"/profile/task/{new_task.id}",
+                    instance_id=a.instance_id,
                 )
 
             return {"message": f"已驳回至历史节点「{target_node.name}」"}
@@ -984,6 +989,7 @@ async def reject(
                 title="审批驳回",
                 content=f"节点「{node.name}」审批驳回：{opinion}",
                 link=f"/profile/task/{task.id}",
+                instance_id=a.instance_id,
             )
 
         return {"message": "已退回，负责人可重新处理"}

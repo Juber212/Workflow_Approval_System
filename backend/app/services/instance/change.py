@@ -231,16 +231,16 @@ async def change_personnel(
 
     # 清除被移除的校验人通知
     for uid in _removed_checkers:
-        await clear_related(db, user_id=uid, types=["check_assigned"])
+        await clear_related(db, user_id=uid, types=["check_assigned"], instance_id=node.instance_id)
     # 清除被移除的审批人通知
     for uid in _removed_approvers:
-        await clear_related(db, user_id=uid, types=["approval_assigned"])
+        await clear_related(db, user_id=uid, types=["approval_assigned"], instance_id=node.instance_id)
     # 清除旧负责人通知
     if _old_assignee_id:
-        await clear_related(db, user_id=_old_assignee_id, types=["task_assigned"])
+        await clear_related(db, user_id=_old_assignee_id, types=["task_assigned"], instance_id=node.instance_id)
     # 清除旧批准人通知
     if _old_endorser_id:
-        await clear_related(db, user_id=_old_endorser_id, types=["endorsement_assigned"])
+        await clear_related(db, user_id=_old_endorser_id, types=["endorsement_assigned"], instance_id=node.instance_id)
 
     # 查询当前节点所有 pending 的校验/审批记录（即刚分配给新人员的）
     new_checks = (await db.execute(
@@ -252,6 +252,7 @@ async def change_personnel(
             title="新的待校验任务",
             content=f"节点「{node.name}」人员变更，你被分配为校验人",
             link=f"/profile/check/{nc.id}",
+            instance_id=node.instance_id,
         )
 
     new_apprs = (await db.execute(
@@ -263,6 +264,7 @@ async def change_personnel(
             title="新的待审批任务",
             content=f"节点「{node.name}」人员变更，你被分配为审批人",
             link=f"/profile/approval/{na.id}",
+            instance_id=node.instance_id,
         )
 
     # 负责人变更：通知新负责人
@@ -276,6 +278,7 @@ async def change_personnel(
                 title="新的待办任务",
                 content=f"节点「{node.name}」人员变更，你被分配为负责人",
                 link=f"/profile/task/{active_task.id}",
+                instance_id=node.instance_id,
             )
 
     # 批准人变更：通知新批准人
@@ -294,6 +297,7 @@ async def change_personnel(
                 title="新的待批准任务",
                 content=f"节点「{node.name}」人员变更，你被分配为批准人",
                 link=link,
+                instance_id=node.instance_id,
             )
 
     return {

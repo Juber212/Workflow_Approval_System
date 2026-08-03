@@ -13,6 +13,7 @@ class Notification(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="接收人")
     type: Mapped[str] = mapped_column(String(30), nullable=False, comment="通知类型: task_assigned/check_assigned/approval_assigned/endorsement_assigned/check_returned/approval_rejected/final_rejected/endorsement_rejected/instance_terminated")
+    instance_id: Mapped[int | None] = mapped_column(Integer, comment="所属流程实例 ID（用于按实例精确清理通知，可空兼容历史数据）")
     title: Mapped[str] = mapped_column(String(200), nullable=False, comment="通知标题")
     content: Mapped[str] = mapped_column(String(500), nullable=False, comment="通知内容")
     link: Mapped[str | None] = mapped_column(String(300), comment="点击跳转路径")

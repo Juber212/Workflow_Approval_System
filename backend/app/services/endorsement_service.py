@@ -283,6 +283,7 @@ async def endorse(
 
     await clear_related(
         db, user_id=current_user_id, types=["endorsement_assigned"],
+        instance_id=e.instance_id,
     )
     # 保存签名位置（旧版兼容）
     if signature_x is not None:
@@ -420,6 +421,7 @@ async def endorse_reject(
 
     await clear_related(
         db, user_id=current_user_id, types=["endorsement_assigned"],
+        instance_id=e.instance_id,
     )
 
     # 4. 查询节点
@@ -495,6 +497,7 @@ async def endorse_reject(
             title="批准驳回",
             content=f"节点「{node.name}」批准驳回：{opinion}",
             link=f"/profile/task/{task_for_notify.id}",
+            instance_id=node.instance_id,
         )
 
     return {"message": "已驳回，负责人需重新处理"}

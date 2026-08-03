@@ -509,6 +509,7 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
             title="新的待校验任务",
             content=f"节点「{node.name}」负责人已提交，等待你校验",
             link=f"/profile/check/{cr.id}",
+            instance_id=task.instance_id,
         )
         for c_id, cr in created_checks
     ]
@@ -519,6 +520,7 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
             title="新的待审批任务",
             content=f"节点「{node.name}」负责人已提交，等待你审批",
             link=f"/profile/approval/{ap.id}",
+            instance_id=task.instance_id,
         )
         for a_id, ap in created_approvals
     ]
@@ -534,6 +536,7 @@ async def submit_task(db: AsyncSession, task_id: int, current_user_id: int, data
     await clear_related(
         db, user_id=current_user_id,
         types=["task_assigned", "check_returned", "approval_rejected", "final_rejected", "endorsement_rejected"],
+        instance_id=task.instance_id,
     )
 
     return {"message": "任务已提交，等待校验" if checkers else "任务已提交，等待审批", "_pending_sig_ids": _pending_sig_ids}

@@ -378,8 +378,9 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                     title="新的待批准任务",
                     content=f"节点「{node.name}」已通过校验（无审批人，直接进入批准），等待你批准",
                     link=f"/profile/endorse/{endorsement.id}",
+                    instance_id=c.instance_id,
                 )
-                await clear_related(db, user_id=current_user_id, types=["check_assigned"])
+                await clear_related(db, user_id=current_user_id, types=["check_assigned"], instance_id=c.instance_id)
                 return {"all_passed": True, "message": "全部校验通过（无审批人），已进入批准阶段", "_pending_sig_ids": _pending_signature_ids}
 
             # 无审批人且不需要批准 → 跳过审批，直接完成节点
@@ -388,7 +389,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
             node.status = InstanceNodeStatus.FINISHED
             node.completed_at = now
             await db.flush()
-            await clear_related(db, user_id=current_user_id, types=["check_assigned"])
+            await clear_related(db, user_id=current_user_id, types=["check_assigned"], instance_id=c.instance_id)
 
             # 传播到下游节点
             from app.engine.flow_engine import propagate_from_node
@@ -423,6 +424,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                 title="新的待审批任务",
                 content=f"节点「{node.name}」已通过校验，等待你审批",
                 link=f"/profile/approval/{ap.id}",
+                instance_id=c.instance_id,
             )
             for ap in created_approvals
         ]
@@ -436,6 +438,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
         await clear_related(
             db, user_id=current_user_id, types=["check_assigned"],
+            instance_id=c.instance_id,
         )
 
         return {"all_passed": True, "message": "全部校验通过，已进入审批阶段", "_pending_sig_ids": _pending_signature_ids}
@@ -528,12 +531,14 @@ async def return_check(db: AsyncSession, check_id: int, current_user_id: int, op
         title="校验退回",
         content=f"节点「{node.name}」校验退回：{opinion}",
         link=f"/profile/task/{task.id}",
+        instance_id=task.instance_id,
     )
 
     # ---- 通知清除：校验退回后删除该校验人的待校验通知 (#11) ----
 
     await clear_related(
         db, user_id=current_user_id, types=["check_assigned"],
+        instance_id=c.instance_id,
     )
 
     return {"message": "已退回，负责人可重新处理"}

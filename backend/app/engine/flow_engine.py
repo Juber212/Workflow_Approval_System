@@ -206,6 +206,7 @@ async def propagate_from_node(
             title="新的待办任务",
             content=f"节点「{_node.name}」已激活，等待你处理",
             link=f"/profile/task/{_task.id}",
+            instance_id=instance_id,
         )
         for _node, _task in _tasks_for_notify
         if _task.id and _node.assignee_id
@@ -234,6 +235,7 @@ async def propagate_from_node(
                     title="待终审",
                     content=f"「{inst.name}」已到达终审环节，请审核全部文件",
                     link=link,
+                    instance_id=instance_id,
                 )
 
     return activated_ids
