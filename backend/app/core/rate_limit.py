@@ -73,8 +73,10 @@ STRICT_RULES: list[tuple[str, str]] = [
     ("POST", "/api/v1/auth/login"),
 ]
 
-# 中等规则：60次/分钟（文件上传、发起/终止流程、提交任务，2026-07-24 从 30 提升）
-MEDIUM_LIMIT = 60
+# 中等规则：300次/分钟（文件上传、发起/终止流程、提交任务）
+# 2026-08-03 从 60 提升至 300，且配合「按 method+path 独立计数」（见 _get_limit_key），
+# 上传/提交/终止等操作互不挤占配额，避免测试与正常操作共享窗口触发 429
+MEDIUM_LIMIT = 300
 MEDIUM_RULES: list[tuple[str, str] | Callable[[str, str], bool]] = [
     # 精确路径匹配
     ("POST", "/api/v1/instances"),            # 发起项目
@@ -91,15 +93,17 @@ MEDIUM_RULES: list[tuple[str, str] | Callable[[str, str], bool]] = [
 
 # ==================== 限流键函数 ====================
 
-def _get_limit_key(request: Request) -> str:
+def _get_limit_key(request: Request, method: str, path: str) -> str:
     """获取请求的限流键
 
     优先级：
     1. 系统管理员 → 每次请求唯一键，永不触发限制
-    2. 已认证用户 → user:{user_id}
-    3. 未认证请求 → ip:{客户端IP}
+    2. 已认证用户 → user:{user_id}:{method}:{path}
+    3. 未认证请求 → ip:{客户端IP}:{method}:{path}
 
-    注意：admin 键使用 uuid4() 确保每次请求都进入独立桶，永不会被限流。
+    按 method+path 独立计数（2026-08-03 用户调整）：上传/提交/终止/发起等
+    操作各自独立配额，互不挤占，避免高频操作拖累其他接口触发 429。
+    admin 键使用 uuid4() 确保每次请求都进入独立桶，永不会被限流。
     """
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -112,7 +116,7 @@ def _get_limit_key(request: Request) -> str:
                 roles = payload.get("roles", [])
                 if "system_admin" in roles:
                     return f"admin:{uuid.uuid4()}"
-                return f"user:{user_id}"
+                return f"user:{user_id}:{method}:{path}"
         except (AttributeError, ValueError, KeyError):
             pass  # JWT 解析失败 / payload 为 None / 缺少字段 → 降级为 IP 限流
 
@@ -124,7 +128,7 @@ def _get_limit_key(request: Request) -> str:
         client_ip = request.client.host
     else:
         client_ip = "unknown"
-    return f"ip:{client_ip}"
+    return f"ip:{client_ip}:{method}:{path}"
 
 
 def _get_limit_for_request(method: str, path: str) -> int:
@@ -166,8 +170,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith("/api/"):
             return await call_next(request)
 
-        # 提取限流键（带管理员旁路）
-        key = _get_limit_key(request)
+        # 提取限流键（带管理员旁路；按 method+path 独立计数）
+        key = _get_limit_key(request, request.method, request.url.path)
         if key.startswith("admin:"):
             return await call_next(request)
 

@@ -71,29 +71,29 @@ class TestGetLimitKey:
     """限流键获取测试"""
 
     def test_ip_key_no_auth_header(self):
-        """无 Authorization 头 → 按 IP 限流"""
+        """无 Authorization 头 → 按 IP + method+path 限流"""
         request = MagicMock()
         request.headers = {}
         request.client = MagicMock(host="10.0.0.1")
-        key = _get_limit_key(request)
-        assert key == "ip:10.0.0.1"
+        key = _get_limit_key(request, "POST", "/api/v1/instances")
+        assert key == "ip:10.0.0.1:POST:/api/v1/instances"
 
     def test_ip_key_x_forwarded_for(self):
         """有 X-Forwarded-For → 优先使用转发 IP"""
         request = MagicMock()
         request.headers = {"X-Forwarded-For": "192.168.1.1, 10.0.0.1"}
         request.client = MagicMock(host="10.0.0.1")
-        key = _get_limit_key(request)
-        assert key == "ip:192.168.1.1"
+        key = _get_limit_key(request, "GET", "/api/v1/dashboard")
+        assert key == "ip:192.168.1.1:GET:/api/v1/dashboard"
 
     @patch("app.core.rate_limit.decode_access_token")
     def test_user_key_with_valid_jwt(self, mock_decode):
-        """有效 JWT → 按用户 ID 限流"""
+        """有效 JWT → 按用户 ID + method+path 限流（操作独立计数）"""
         mock_decode.return_value = {"sub": "42", "username": "test", "roles": ["manager"]}
         request = MagicMock()
         request.headers = {"Authorization": "Bearer valid.token.here"}
-        key = _get_limit_key(request)
-        assert key == "user:42"
+        key = _get_limit_key(request, "POST", "/api/v1/instances")
+        assert key == "user:42:POST:/api/v1/instances"
 
     @patch("app.core.rate_limit.decode_access_token")
     def test_admin_bypass(self, mock_decode):
@@ -101,8 +101,8 @@ class TestGetLimitKey:
         mock_decode.return_value = {"sub": "1", "username": "admin", "roles": ["system_admin"]}
         request = MagicMock()
         request.headers = {"Authorization": "Bearer admin.token.here"}
-        key1 = _get_limit_key(request)
-        key2 = _get_limit_key(request)
+        key1 = _get_limit_key(request, "POST", "/api/v1/instances")
+        key2 = _get_limit_key(request, "POST", "/api/v1/instances")
         assert key1.startswith("admin:")
         assert key2.startswith("admin:")
         assert key1 != key2  # 每次请求唯一键，永不冲突
@@ -114,8 +114,8 @@ class TestGetLimitKey:
         request = MagicMock()
         request.headers = {"Authorization": "Bearer invalid.token"}
         request.client = MagicMock(host="10.0.0.5")
-        key = _get_limit_key(request)
-        assert key == "ip:10.0.0.5"
+        key = _get_limit_key(request, "POST", "/api/v1/tasks/1/files")
+        assert key == "ip:10.0.0.5:POST:/api/v1/tasks/1/files"
 
 
 class TestGetLimitForRequest:
@@ -126,40 +126,40 @@ class TestGetLimitForRequest:
         assert _get_limit_for_request("POST", "/api/v1/auth/login") == STRICT_LIMIT
 
     def test_medium_create_instance(self):
-        """发起项目 → 中等限制 30/min"""
+        """发起项目 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/instances") == MEDIUM_LIMIT
 
     def test_medium_create_proposal(self):
-        """发起方案 → 中等限制 30/min"""
+        """发起方案 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/proposals") == MEDIUM_LIMIT
 
     def test_medium_terminate(self):
-        """终止流程 → 中等限制 30/min"""
+        """终止流程 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/instances/123/terminate") == MEDIUM_LIMIT
 
     def test_medium_file_upload(self):
-        """文件上传 → 中等限制 30/min"""
+        """文件上传 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/tasks/456/files") == MEDIUM_LIMIT
 
     def test_medium_submit(self):
-        """提交任务 → 中等限制 30/min"""
+        """提交任务 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/tasks/456/submit") == MEDIUM_LIMIT
 
     def test_medium_prepare_sign(self):
-        """预提交 → 中等限制 30/min"""
+        """预提交 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/tasks/456/prepare-sign") == MEDIUM_LIMIT
 
     def test_medium_signature_upload(self):
-        """签名上传 → 中等限制 30/min"""
+        """签名上传 → 中等限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/auth/signature") == MEDIUM_LIMIT
 
     def test_default_relaxed_get(self):
-        """普通 GET 请求 → 默认宽松限制 120/min"""
+        """普通 GET 请求 → 默认宽松限制 300/min"""
         assert _get_limit_for_request("GET", "/api/v1/dashboard") == DEFAULT_LIMIT
         assert _get_limit_for_request("GET", "/api/v1/instances") == DEFAULT_LIMIT
 
     def test_default_relaxed_other_post(self):
-        """非特殊 POST（校验/审批操作）→ 默认宽松限制 120/min"""
+        """非特殊 POST（校验/审批操作）→ 默认宽松限制 300/min"""
         assert _get_limit_for_request("POST", "/api/v1/checks/1/pass") == DEFAULT_LIMIT
         assert _get_limit_for_request("POST", "/api/v1/approvals/1/approve") == DEFAULT_LIMIT
         assert _get_limit_for_request("POST", "/api/v1/endorsements/1/approve") == DEFAULT_LIMIT
