@@ -168,10 +168,15 @@ const forcePwdRules: FormRules = {
 
 /** 首次登录强制改密码 */
 async function handleForceChangePassword() {
-  const valid = await forcePwdFormRef.value?.validate().catch(() => false)
-  if (!valid) return
-
+  // 防并发双提交：按钮 loading 的 DOM 更新有延迟，双击会在第二次请求时因
+  // must_change_password 已置 False（缺少旧密码）触发 400，弹「修改失败」
+  if (changingPwd.value) return
   changingPwd.value = true
+  const valid = await forcePwdFormRef.value?.validate().catch(() => false)
+  if (!valid) {
+    changingPwd.value = false
+    return
+  }
   try {
     const data = await changePasswordApi({
       // 强制改密场景（首次登录/管理员重置后）无需旧密码：
@@ -200,10 +205,14 @@ async function handleForceChangePassword() {
 
 /** 执行登录 */
 async function handleLogin() {
-  const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid) return
-
+  // 防并发双提交：双击会发两次登录请求，重复占用登录限流配额（20 次/分钟/IP）
+  if (loading.value) return
   loading.value = true
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) {
+    loading.value = false
+    return
+  }
   errorMsg.value = ''
 
   try {
