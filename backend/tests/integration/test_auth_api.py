@@ -75,6 +75,13 @@ class TestLogin:
         })
         assert resp.status_code == 401
 
+    def test_login_overlong_password(self, client):
+        """超长密码（>72字节）→ 422（P1-23 bcrypt 截断防护）"""
+        resp = client.post("/api/v1/auth/login", json={
+            "username": "test", "password": "a" * 100
+        })
+        assert resp.status_code == 422
+
 
 class TestProfile:
     """个人资料更新 API 测试"""
@@ -173,3 +180,37 @@ class TestChangePassword:
             assert resp.status_code == 403
         finally:
             self._cleanup()
+
+    def test_change_password_overlong(self, client):
+        """新密码或旧密码超过 72 字节 → 422（P1-23 bcrypt 截断防护）"""
+        self._mock_current_user()
+        try:
+            # 新密码超长
+            resp = client.put("/api/v1/auth/password", json={"new_password": "a" * 100 + "b1"})
+            assert resp.status_code == 422
+            # 旧密码超长
+            resp = client.put("/api/v1/auth/password", json={
+                "old_password": "a" * 100, "new_password": "newpass123"})
+            assert resp.status_code == 422
+        finally:
+            self._cleanup()
+
+
+class TestPasswordByteLimit:
+    """bcrypt 72 字节上限（P1-23）—— 纯 schema 边界校验，不依赖 DB"""
+
+    def test_72_bytes_exact_allowed(self):
+        """恰好 72 字节的密码合法（72 英文 或 24 中文）"""
+        from app.schemas.auth import LoginRequest, ChangePasswordRequest
+        LoginRequest(username="test", password="a" * 72)          # 72 字节 ASCII
+        LoginRequest(username="test", password="密" * 24)          # 24×3=72 字节 UTF-8
+        ChangePasswordRequest(new_password="pass1234" + "a" * 64)  # 72 字节（含字母数字）
+
+    def test_exceed_72_bytes_rejected(self):
+        """超过 72 字节 → 拒绝（字符数未超但字节超限也要拦）"""
+        from pydantic import ValidationError
+        from app.schemas.auth import LoginRequest, ChangePasswordRequest
+        with pytest.raises(ValidationError):
+            LoginRequest(username="test", password="密" * 25)  # 25×3=75 字节
+        with pytest.raises(ValidationError):
+            ChangePasswordRequest(new_password="pass1234" + "密" * 23)  # 8+69=77 字节
