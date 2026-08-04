@@ -275,6 +275,7 @@ async def create_instance(
         detail={
             "template_id": request.template_id,
             "priority": priority,
+            "difficulty": difficulty,
             "node_count": len(instance_nodes),
         },
     ))
@@ -286,6 +287,7 @@ async def create_instance(
         organization_id=instance.organization_id,
         initiator_id=instance.initiator_id,
         priority=instance.priority,
+        difficulty=instance.difficulty,  # P1-21：发起响应补难度等级，前端发起后回显
         status=instance.status,
         nodes=[
             InstanceNodeBrief(
