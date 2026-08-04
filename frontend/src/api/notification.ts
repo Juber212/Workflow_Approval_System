@@ -119,6 +119,9 @@ export function useNotificationSocket() {
   const wsConnected = ref(false)
   let ws: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  // P1-30：孤儿连接防护——组件卸载后任何重连路径都必须拒绝建连
+  let disposed = false   // 组件已卸载标记（connect 入口检查）
+  let manualClose = false  // 手动关闭标记（onclose 不再触发重连）
 
   /** 刷新侧边栏红点 + 个人中心角标（notifyStore）并派发事件供 profile 页面更新 Tab 角标 */
   function refreshStoreCounts() {
@@ -133,6 +136,8 @@ export function useNotificationSocket() {
   }
 
   function connect() {
+    // P1-30：组件已卸载则不再建连（防孤儿连接：卸载后的重连 timer 触发到此直接退出）
+    if (disposed) return
     const token = getToken()
     if (!token) return
 
@@ -179,7 +184,9 @@ export function useNotificationSocket() {
 
     ws.onclose = (event) => {
       wsConnected.value = false
-      // 认证失败（4001）不重连，其他情况 5 秒后自动重连
+      // 手动关闭（disconnect 发起）不重连
+      if (manualClose) { manualClose = false; return }
+      // 认证失败（4001）不重连，其他情况 5 秒后自动重连（connect 入口会校验 disposed）
       if (event.code !== 4001) {
         reconnectTimer = setTimeout(connect, 5000)
       }
@@ -191,8 +198,14 @@ export function useNotificationSocket() {
   }
 
   function disconnect() {
+    disposed = true  // P1-30：组件已卸载，任何重连路径不再执行
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-    if (ws) { ws.close(); ws = null }
+    if (ws) {
+      manualClose = true   // 手动关闭：onclose 不再重连
+      ws.onclose = null    // 双保险：直接断开回调，避免 close 触发重连
+      ws.close()
+      ws = null
+    }
     wsConnected.value = false
   }
 
