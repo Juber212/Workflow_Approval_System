@@ -55,13 +55,20 @@ async def close_pubsub_redis() -> None:
 
 
 async def get_token_blacklist_redis() -> Redis:
-    """获取 Token 黑名单 Redis 客户端（惰性初始化，DB 2）"""
+    """获取 Token 黑名单 Redis 客户端（惰性初始化，DB 2）
+
+    P1-26：socket_connect_timeout/socket_timeout 各 1 秒 —— 黑名单中间件每个请求
+    都查 Redis，若 Redis 挂起默认连接会阻塞数秒至数十秒拖垮全站；
+    1 秒快速失败后走 is_blacklisted 的 except 分支放行请求。
+    """
     global _token_blacklist_redis
     if _token_blacklist_redis is None:
         _token_blacklist_redis = Redis.from_url(
             _get_token_blacklist_redis_url(),
             encoding="utf-8",
             decode_responses=True,
+            socket_connect_timeout=1,  # 连接建立 1 秒超时
+            socket_timeout=1,          # 读写操作 1 秒超时
         )
     return _token_blacklist_redis
 
