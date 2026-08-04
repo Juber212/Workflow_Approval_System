@@ -13,7 +13,6 @@ from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.core.rate_limit import RateLimitMiddleware
 from app.core.token_blacklist import TokenBlacklistMiddleware
-from app.core.auth_middleware import MustChangePasswordMiddleware
 from app.schemas.common import ApiResponse
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
@@ -84,14 +83,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API 限流中间件（CORS 之后加载，确保跨域请求也能被限流）
-app.add_middleware(RateLimitMiddleware)
-
-# Token 黑名单中间件（限流之后，拦截已吊销的 JWT）
-app.add_middleware(TokenBlacklistMiddleware)
-
-# 强制改密码中间件（黑名单之后，拦截 must_change_password 用户）
-app.add_middleware(MustChangePasswordMiddleware)
+# 中间件执行顺序：Starlette 的 add_middleware 把新中间件插入到栈顶（最外层），
+# 因此最后注册的 RateLimit 最先执行。目标顺序（外层→内层）：RateLimit → TokenBlacklist → CORS → 路由。
+# 限流放最外层：恶意高频请求在最便宜的内存层被拦截，不进入后续 Redis/DB 查询。
+app.add_middleware(TokenBlacklistMiddleware)  # 拦截已吊销的 JWT（查 Redis）
+# 强制改密检查已合并进 get_current_active_user 依赖（P1-28），不再需要独立中间件
+app.add_middleware(RateLimitMiddleware)       # 最后注册 → 最外层（最先执行）
 
 
 # ================= 全局异常处理器 =================

@@ -1,6 +1,6 @@
 """FastAPI 依赖注入 —— JWT 认证 + 当前用户"""
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -34,6 +34,29 @@ class CurrentUser:
         return self.has_role("manager")
 
 
+# ==================== 强制改密检查（P1-28 从 auth_middleware 迁移合并进依赖） ====================
+
+# must_change_password=True 时仍允许访问的路径白名单
+_MUST_CHANGE_WHITELIST = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/password",   # 修改密码本身
+    "/api/v1/auth/logout",     # 退出登录
+    "/api/v1/auth/me",         # 获取用户信息（前端恢复状态需要）
+    "/api/v1/health",          # 健康检查
+    "/docs",                   # API 文档
+    "/redoc",
+    "/openapi.json",
+}
+
+
+def _is_must_change_whitelisted(path: str) -> bool:
+    """路径是否豁免强制改密检查（登录/改密/登出/me/健康/文档/WS）"""
+    for w in _MUST_CHANGE_WHITELIST:
+        if path == w or path.startswith(w):
+            return True
+    return path.startswith("/api/v1/ws")
+
+
 async def get_current_user(
     authorization: str | None = Header(None, description="Bearer <token>"),
 ) -> CurrentUser:
@@ -54,6 +77,7 @@ async def get_current_user(
 
 
 async def get_current_active_user(
+    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
@@ -62,6 +86,11 @@ async def get_current_active_user(
     JWT 中的 roles 是签发时的快照——管理员降级/升级用户后旧 token 仍携带旧角色。
     这里每次请求从 DB 重查角色覆盖快照，require_admin/require_manager 基于最新角色判断。
     仅当 DB 角色查询到非空结果才覆盖（避免 mock 环境与「无角色用户」误清空 JWT 快照）。
+
+    P1-28：强制改密检查合并进本次查询——原 MustChangePasswordMiddleware 每请求
+    独立开 DB 会话查 must_change_password，与本函数查的同一用户重复。这里直接用
+    已查到的 user.must_change_password，白名单路径（登录/改密/登出/me）放行，
+    其余 must_change=True 用户抛 40310。
     """
     stmt = select(User).where(User.id == current_user.id)
     result = await db.execute(stmt)
@@ -69,6 +98,10 @@ async def get_current_active_user(
 
     if user is None or not user.is_active:
         raise AppException(ErrorCode.FORBIDDEN, "账号已被禁用")
+
+    # 强制改密拦截（白名单路径豁免，例如改密接口本身）
+    if user.must_change_password and not _is_must_change_whitelisted(request.url.path):
+        raise AppException(ErrorCode.MUST_CHANGE_PASSWORD, "请先修改密码后再操作")
 
     # 重查实时角色（与账号状态校验在同一次依赖解析内完成）
     role_result = await db.execute(

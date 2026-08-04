@@ -93,6 +93,39 @@ class TestProfile:
         resp = client.get("/api/v1/auth/me")
         assert resp.status_code == 401
 
+
+class TestMustChangePassword:
+    """强制改密拦截（P1-28 合并进 get_current_active_user 依赖）"""
+
+    @staticmethod
+    def _make_token(user_id=1, username="test"):
+        from app.core.security import create_access_token
+        return create_access_token({"sub": str(user_id), "username": username, "roles": ["user"]})
+
+    def test_non_whitelist_blocked(self, client):
+        """must_change_password=True 用户访问非白名单端点 → 403 40310"""
+        from app.models import User
+        user = User(id=1, username="test", real_name="测试",
+                    organization_id=1, is_active=True, must_change_password=True)
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+
+        resp = client.get("/api/v1/instances",
+                          headers={"Authorization": f"Bearer {self._make_token()}"})
+        assert resp.status_code == 403
+        assert resp.json()["code"] == 40310
+        assert "请先修改密码" in resp.json()["message"]
+
+    def test_whitelist_allowed(self, client):
+        """must_change_password=True 用户访问白名单端点（/auth/me）→ 放行"""
+        from app.models import User
+        user = User(id=1, username="test", real_name="测试",
+                    organization_id=1, is_active=True, must_change_password=True)
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
+
+        resp = client.get("/api/v1/auth/me",
+                          headers={"Authorization": f"Bearer {self._make_token()}"})
+        assert resp.status_code == 200
+
     def test_update_profile_unauthorized(self, client):
         """未登录请求 → 401 或 422（FastAPI 先校验 body 再跑依赖）"""
         resp = client.put("/api/v1/auth/profile", json={"email": "test@test.com"})

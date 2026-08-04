@@ -74,6 +74,15 @@ class TestSlidingWindow:
             window.is_allowed(f"key_{i}", 100)
         assert len(window._buckets) <= 5
 
+    def test_rate_limit_is_outermost_middleware(self):
+        """限流中间件在最外层执行（P1-28：恶意高频请求先被内存层拦截）"""
+        from app.main import app
+        from app.core.rate_limit import RateLimitMiddleware
+        from app.core.token_blacklist import TokenBlacklistMiddleware
+        middleware = [m.cls for m in app.user_middleware]
+        assert middleware[0] is RateLimitMiddleware  # 栈顶 = 最外层
+        assert middleware.index(TokenBlacklistMiddleware) > middleware.index(RateLimitMiddleware)
+
     def test_periodic_sweep_removes_expired(self):
         """定期全量清理：过期 key 被移除（P1-25）"""
         window = _SlidingWindow()
