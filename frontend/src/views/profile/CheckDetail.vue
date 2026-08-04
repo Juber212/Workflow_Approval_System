@@ -1,6 +1,8 @@
 <template>
   <!-- 校验处理页 —— 顶部摘要 + 进度条 + 单栏表单 -->
-  <div class="check-detail" v-loading="loading">
+  <!-- P1-34：非本人校验记录后端返回 403，渲染「无权查看」而非误导的「记录不存在」空态 -->
+  <ForbiddenPage v-if="forbidden" />
+  <div class="check-detail" v-if="!forbidden" v-loading="loading">
     <el-empty v-if="!loading && !detail" description="校验记录不存在" />
 
     <template v-if="detail">
@@ -179,6 +181,7 @@ import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
+import ForbiddenPage from '@/views/error/403.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
@@ -186,6 +189,7 @@ const router = useRouter()
 const AUTH_TOKEN = () => getToken() || ''
 
 const loading = ref(false)
+const forbidden = ref(false)  // P1-34：403 无权限 → 渲染「无权查看」页
 const detail = ref<CheckDetail | null>(null)
 const opinion = ref('')
 const passing = ref(false)
@@ -241,7 +245,10 @@ async function loadCheckData() {
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true
-  try { detail.value = await getCheckDetail(id) } finally { loading.value = false }
+  forbidden.value = false  // P1-34：同组件切换路由参数时重置 403 状态
+  try { detail.value = await getCheckDetail(id) }
+  catch (e: any) { if (e?.status === 403) forbidden.value = true }
+  finally { loading.value = false }
 }
 
 onMounted(loadCheckData)

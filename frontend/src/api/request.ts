@@ -57,6 +57,13 @@ function showErrorOnce(msg: string): void {
 // 401 跳转守卫 —— 防止并发 401 响应触发多次跳转
 let _isRedirecting = false
 
+/** 构造带 HTTP 状态码的错误对象（P1-34：供组件识别 403 等权限错误，渲染「无权查看」而非误导空态） */
+function buildApiError(msg: string, status: number): Error & { status?: number } {
+  const err = new Error(msg) as Error & { status?: number }
+  err.status = status
+  return err
+}
+
 /** 响应拦截器 —— 统一错误处理、401 跳转登录 */
 request.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -79,12 +86,12 @@ request.interceptors.response.use(
         }
         // 用后端返回的中文消息，避免 Axios 英文 error message
         const msg = data?.message || '认证失败'
-        return Promise.reject(new Error(msg))
+        return Promise.reject(buildApiError(msg, status))
       }
       // 提取后端返回的中文错误消息
       const msg = data?.message || '请求失败，请稍后重试'
       showErrorOnce(msg)
-      return Promise.reject(new Error(msg))
+      return Promise.reject(buildApiError(msg, status))
     }
     // 无响应的网络异常
     showErrorOnce('网络连接异常，请检查网络')

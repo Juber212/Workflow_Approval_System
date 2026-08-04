@@ -1,6 +1,8 @@
 <template>
   <!-- 任务处理页 —— 顶部摘要 + 进度条 + 单栏表单 -->
-  <div class="task-detail" v-loading="loading">
+  <!-- P1-34：非本人任务后端返回 403，渲染「无权查看」而非误导的「任务不存在」空态 -->
+  <ForbiddenPage v-if="forbidden" />
+  <div class="task-detail" v-if="!forbidden" v-loading="loading">
     <el-empty v-if="!loading && !detail" description="任务不存在" :image-size="50" />
 
     <template v-if="detail">
@@ -280,6 +282,7 @@ import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
+import ForbiddenPage from '@/views/error/403.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const route = useRoute()
@@ -302,6 +305,7 @@ function canPreview(f: TaskFileItem): boolean {
 }
 
 const loading = ref(false)
+const forbidden = ref(false)  // P1-34：403 无权限 → 渲染「无权查看」页
 const detail = ref<TaskDetail | null>(null)
 const assigneeNote = ref('')
 const uploading = ref(false)
@@ -441,11 +445,14 @@ async function loadTaskData() {
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true
+  forbidden.value = false  // P1-34：同组件切换路由参数时重置 403 状态
   try {
     detail.value = await getTaskDetail(id)
     assigneeNote.value = detail.value.assignee_note || ''
     await loadDocTemplates()
-  } finally { loading.value = false }
+  }
+  catch (e: any) { if (e?.status === 403) forbidden.value = true }
+  finally { loading.value = false }
 }
 
 onMounted(loadTaskData)

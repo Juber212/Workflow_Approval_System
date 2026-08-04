@@ -1,6 +1,8 @@
 <template>
   <!-- 审批处理页 —— 顶部摘要 + 进度条 + 单栏表单 -->
-  <div class="approval-detail" v-loading="loading">
+  <!-- P1-34：非本人审批记录后端返回 403，渲染「无权查看」而非误导的「记录不存在」空态 -->
+  <ForbiddenPage v-if="forbidden" />
+  <div class="approval-detail" v-if="!forbidden" v-loading="loading">
     <el-empty v-if="!loading && !detail" description="审批记录不存在" />
 
     <template v-if="detail">
@@ -198,6 +200,7 @@ import { formatTime, formatFileSize } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel } from '@/utils/labels'
 import ProgressBar from '@/views/flows/components/ProgressBar.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
+import ForbiddenPage from '@/views/error/403.vue'
 const AUTH_TOKEN = () => getToken() || ''
 
 const { setBreadcrumb } = useBreadcrumb()
@@ -205,6 +208,7 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const forbidden = ref(false)  // P1-34：403 无权限 → 渲染「无权查看」页
 const detail = ref<ApprovalDetail | null>(null)
 const opinion = ref('')
 const rejectTargetId = ref<number | null>(null)
@@ -267,10 +271,13 @@ async function loadApprovalData() {
   const id = Number(route.params.id)
   if (!id) return
   loading.value = true
+  forbidden.value = false  // P1-34：同组件切换路由参数时重置 403 状态
   try {
     detail.value = await getApprovalDetail(id)
     if (detail.value?.is_end_node) showHistoryFiles.value = true  // 终审默认展开历史文件
-  } finally { loading.value = false }
+  }
+  catch (e: any) { if (e?.status === 403) forbidden.value = true }
+  finally { loading.value = false }
 }
 
 onMounted(loadApprovalData)
