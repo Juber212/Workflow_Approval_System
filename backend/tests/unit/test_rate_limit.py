@@ -66,6 +66,37 @@ class TestSlidingWindow:
             fake_time._offset = 61
             assert window.is_allowed("key", 3) is True
 
+    def test_key_cap_evicts_oldest(self):
+        """key 超过上限 → 淘汰最早 key，桶数量受控（P1-25 防内存增长）"""
+        window = _SlidingWindow()
+        window._MAX_KEYS = 5  # 缩小上限便于测试
+        for i in range(10):
+            window.is_allowed(f"key_{i}", 100)
+        assert len(window._buckets) <= 5
+
+    def test_periodic_sweep_removes_expired(self):
+        """定期全量清理：过期 key 被移除（P1-25）"""
+        window = _SlidingWindow()
+        window._CLEAN_EVERY_CALLS = 3  # 每 3 次调用触发全量清理
+        real_time = time.time
+        fake_now = real_time()
+
+        class FakeTime:
+            def __init__(self):
+                self._offset = 0
+
+            def __call__(self):
+                return real_time() + self._offset
+
+        fake_time = FakeTime()
+        with patch("app.core.rate_limit.time.time", fake_time):
+            window.is_allowed("expired_key", 100)   # call 1
+            fake_time._offset = 61                    # 61 秒后过期
+            window.is_allowed("live_key", 100)        # call 2
+            window.is_allowed("live_key", 100)        # call 3 → 触发全量清理
+            assert "expired_key" not in window._buckets
+            assert "live_key" in window._buckets
+
 
 class TestGetLimitKey:
     """限流键获取测试"""
@@ -78,13 +109,13 @@ class TestGetLimitKey:
         key = _get_limit_key(request, "POST", "/api/v1/instances")
         assert key == "ip:10.0.0.1:POST:/api/v1/instances"
 
-    def test_ip_key_x_forwarded_for(self):
-        """有 X-Forwarded-For → 优先使用转发 IP"""
+    def test_ip_key_ignores_x_forwarded_for(self):
+        """X-Forwarded-For 可伪造，不信任——一律用直连 IP（P1-25）"""
         request = MagicMock()
         request.headers = {"X-Forwarded-For": "192.168.1.1, 10.0.0.1"}
         request.client = MagicMock(host="10.0.0.1")
         key = _get_limit_key(request, "GET", "/api/v1/dashboard")
-        assert key == "ip:192.168.1.1:GET:/api/v1/dashboard"
+        assert key == "ip:10.0.0.1:GET:/api/v1/dashboard"
 
     @patch("app.core.rate_limit.decode_access_token")
     def test_user_key_with_valid_jwt(self, mock_decode):

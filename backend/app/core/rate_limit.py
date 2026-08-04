@@ -24,11 +24,18 @@ from app.core.security import decode_access_token
 # ==================== 滑动窗口计数器 ====================
 
 class _SlidingWindow:
-    """线程安全的滑动窗口计数器，按 key 独立计数"""
+    """线程安全的滑动窗口计数器，按 key 独立计数
+
+    P1-25：加 key 数量上限 + 定期全量清理，防止长时间运行内存无限增长
+    （攻击者可通过伪造大量 IP/用户 ID 制造海量 key）。
+    """
+    _MAX_KEYS = 10000            # key 数量上限（用户/IP 规模兜底）
+    _CLEAN_EVERY_CALLS = 500     # 每 N 次调用触发一次全量过期清理
 
     def __init__(self):
         self._buckets: dict[str, list[float]] = defaultdict(list)
         self._lock = threading.Lock()
+        self._call_count = 0
 
     def is_allowed(self, key: str, max_requests: int, window_seconds: float = 60.0) -> bool:
         """检查是否允许请求，如允许则记录时间戳
@@ -44,6 +51,16 @@ class _SlidingWindow:
         now = time.time()
         cutoff = now - window_seconds
         with self._lock:
+            self._call_count += 1
+            # 定期全量清理过期 key（低频，O(n) 但间隔大，可忽略开销）
+            if self._call_count % self._CLEAN_EVERY_CALLS == 0:
+                self._sweep_expired(cutoff)
+            # key 上限保护：超限先清过期，仍超限则淘汰最早访问的 key
+            if len(self._buckets) >= self._MAX_KEYS:
+                self._sweep_expired(cutoff)
+                if len(self._buckets) >= self._MAX_KEYS:
+                    self._evict_oldest()
+
             timestamps = self._buckets[key]
             # 惰性清理：只保留窗口内的记录
             if timestamps and timestamps[0] <= cutoff:
@@ -51,11 +68,31 @@ class _SlidingWindow:
                 if cleaned:
                     self._buckets[key] = cleaned
                 else:
-                    del self._buckets[key]  # 过期后删除 key，防止长期内存泄漏
+                    del self._buckets[key]  # 过期后删除 key
             if len(self._buckets[key]) >= max_requests:
                 return False
             self._buckets[key].append(now)
             return True
+
+    def _sweep_expired(self, cutoff: float) -> None:
+        """全量清理：删除所有记录已全部过期的 key"""
+        for k in list(self._buckets.keys()):
+            ts_list = self._buckets[k]
+            if not ts_list or ts_list[-1] <= cutoff:
+                del self._buckets[k]
+
+    def _evict_oldest(self) -> None:
+        """淘汰最早记录的 key（上限兜底，罕见触发）"""
+        oldest_key = None
+        oldest_ts = None
+        for k, ts_list in self._buckets.items():
+            if ts_list:
+                first = ts_list[0]
+                if oldest_ts is None or first < oldest_ts:
+                    oldest_ts = first
+                    oldest_key = k
+        if oldest_key is not None:
+            del self._buckets[oldest_key]
 
 
 # 全局窗口实例（跨请求共享）
@@ -120,14 +157,11 @@ def _get_limit_key(request: Request, method: str, path: str) -> str:
         except (AttributeError, ValueError, KeyError):
             pass  # JWT 解析失败 / payload 为 None / 缺少字段 → 降级为 IP 限流
 
-    # 未认证：优先反向代理转发的真实 IP
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
-    elif request.client:
-        client_ip = request.client.host
-    else:
-        client_ip = "unknown"
+    # 未认证：用直连 IP，不信任 X-Forwarded-For（P1-25）
+    # XFF 可被客户端任意伪造，攻击者变换伪造 IP 即可绕过限流；
+    # 内网直连部署下 client.host 即真实来源。若未来加反向代理，需配置
+    # trusted proxy 解析真实 IP，而非直接信任请求头。
+    client_ip = request.client.host if request.client else "unknown"
     return f"ip:{client_ip}:{method}:{path}"
 
 
