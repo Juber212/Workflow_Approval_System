@@ -93,3 +93,5 @@ class DashboardData(BaseModel):
     my_task_counts: MyTaskCounts = MyTaskCounts()  # 当前用户个人待办计数（侧边栏角标用）
     my_pending: list[MyPendingItem] = []           # 当前用户待办列表（项目视图）
     proposal_my_pending: list[MyPendingItem] = []   # 当前用户待办列表（方案视图）
+    my_pending_total: int = 0            # 项目待办真实全量条数（P1-33：列表仅展示前 8 条，此为完整计数）
+    proposal_my_pending_total: int = 0   # 方案待办真实全量条数（P1-33）

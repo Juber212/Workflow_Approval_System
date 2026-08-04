@@ -119,6 +119,7 @@
         <span class="card__title">我的待办</span>
         <span class="pt-summary">
           <span class="pt-summary__total">共 {{ pendingCount }} 条</span>
+          <span v-if="pendingCount > curPending.length" class="pt-summary__hint">最多显示 8 条</span>
           <span v-if="urgentCount > 0" class="pt-summary__urgent">紧急 {{ urgentCount }} 条</span>
         </span>
         <el-button text type="primary" size="small" @click="$router.push({ name: 'Profile' })">查看更多 →</el-button>
@@ -205,6 +206,8 @@ const data = reactive<DashboardData>({
   my_task_counts: { pending: 0, checking: 0, approval: 0 },
   my_pending: [],           // 当前用户待办列表（项目视图）
   proposal_my_pending: [],   // 当前用户待办列表（方案视图）
+  my_pending_total: 0,       // 项目待办真实全量条数（P1-33）
+  proposal_my_pending_total: 0,  // 方案待办真实全量条数（P1-33）
 })
 
 onMounted(() => fetchData())
@@ -225,8 +228,12 @@ const curOrgOverview = computed(() => catTab.value === 'project' ? data.org_over
 // ─── 我的待办列表（跟随 tab 切换项目/方案） ───
 const curPending = computed(() => catTab.value === 'project' ? data.my_pending : data.proposal_my_pending)
 
-/** 我的待办计数（当前 tab 列表统计，紧急=urgent/high） */
-const pendingCount = computed(() => curPending.value.length)
+// P1-33：总数用后端真实全量计数（my_pending_total），列表仅展示前 8 条，避免「共 8 条」误导
+/** 我的待办总数（当前 tab 真实全量计数） */
+const pendingCount = computed(() =>
+  catTab.value === 'project' ? data.my_pending_total : data.proposal_my_pending_total
+)
+/** 当前列表内的紧急/高优先级条数（列表快照，供快速识别） */
 const urgentCount = computed(() => curPending.value.filter(p => p.priority === 'urgent' || p.priority === 'high').length)
 
 /** 格式化截止时间 */
@@ -336,6 +343,7 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
   font-size: 13px; color: var(--el-text-color-secondary);
 
   &__total { font-weight: 600; color: var(--el-text-color-primary); }
+  &__hint { font-size: 12px; color: var(--el-text-color-placeholder); }  // P1-33：列表仅展示前 8 条说明
   &__urgent {
     font-weight: 500; color: var(--el-color-danger);
     background: #fde2e2; padding: 1px 10px; border-radius: 10px;

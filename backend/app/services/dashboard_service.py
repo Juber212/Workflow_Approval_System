@@ -149,7 +149,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
         pending_items = await _get_my_pending_items(db, user_id)
         my_task_counts = await _get_my_task_counts(db, user_id)
     else:
-        pending_items = {"project": [], "proposal": []}
+        pending_items = {"project": [], "project_total": 0, "proposal": [], "proposal_total": 0}
         my_task_counts = MyTaskCounts()
 
     return DashboardData(
@@ -163,7 +163,9 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
         proposal_org_overview=proposal_org_overview,
         my_task_counts=my_task_counts,
         my_pending=pending_items["project"],
+        my_pending_total=pending_items["project_total"],
         proposal_my_pending=pending_items["proposal"],
+        proposal_my_pending_total=pending_items["proposal_total"],
     )
 
 
@@ -578,7 +580,8 @@ async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:
     三张表（Task / CheckRecord / Approval）各查一次，
     在 Python 层合并 → 按优先级 + 截止时间排序 → 按 template_type 分组。
 
-    返回 {"project": [...], "proposal": [...]}，每组最多 8 条
+    返回 {"project": [...], "project_total": N, "proposal": [...], "proposal_total": M}，
+    每组最多 8 条（_MAX_PENDING_ITEMS），project_total / proposal_total 为该组真实全量条数（P1-33）
     """
     from datetime import datetime as dt
 
@@ -656,14 +659,24 @@ async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:
     ))
 
     # ── 5. 按 template_type 分组 + Top N ──
+    # P1-33：分组时同时统计每组真实全量条数（不截断），供前端「共 N 条」真实展示
     projects: list[dict] = []
     proposals: list[dict] = []
+    project_total = 0
+    proposal_total = 0
     for it in all_items:
         t = it.pop("_tpl_type")
         if t == "project":
+            project_total += 1
             if len(projects) < _MAX_PENDING_ITEMS:
                 projects.append(it)
         else:
+            proposal_total += 1
             if len(proposals) < _MAX_PENDING_ITEMS:
                 proposals.append(it)
-    return {"project": projects, "proposal": proposals}
+    return {
+        "project": projects,
+        "project_total": project_total,
+        "proposal": proposals,
+        "proposal_total": proposal_total,
+    }
