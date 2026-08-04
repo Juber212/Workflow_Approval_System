@@ -1,5 +1,7 @@
 """应用配置管理 —— 基于 Pydantic Settings 从环境变量加载"""
 
+import urllib.parse
+
 from pydantic_settings import BaseSettings
 
 
@@ -95,11 +97,17 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """MySQL 连接 URL（charset 确保中文注释不乱码；READ COMMITTED 防止 fork-join 并发竞态）"""
+        """MySQL 连接 URL（charset 确保中文注释不乱码；READ COMMITTED 防止 fork-join 并发竞态）
+
+        P1-27：DB_USER/DB_PASSWORD 经 quote_plus 编码——密码含 @ : / % 等
+        特殊字符时，未编码会让 SQLAlchemy 误解析连接串（如 pa@ss 被当作用户:密码分隔）。
+        """
         # 注意：isolation_level 不能放 URL 查询参数（aiomysql 不支持），
         # 需通过 create_async_engine 的 connect_args 传递
+        user = urllib.parse.quote_plus(self.DB_USER, safe="")
+        password = urllib.parse.quote_plus(self.DB_PASSWORD, safe="")
         return (
-            f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}"
+            f"mysql+aiomysql://{user}:{password}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
             f"?charset=utf8mb4"
         )
