@@ -83,27 +83,35 @@ function handleChange(val: number | number[] | undefined) {
 
 // ========== 本所成员浏览 ==========
 
+/** P1-38：本所成员是否已加载 —— 独立 flag 判断，避免预填（initialOptions）后 options 非空导致无法浏览全所 */
+const orgMembersLoaded = ref(false)
+
+/** 加载当前用户所属组织的成员列表（下拉展开浏览用），成功置 flag、失败允许下次重试 */
+async function loadOrgMembers(): Promise<void> {
+  const orgId = userStore.userInfo?.organization_id
+  if (!orgId) return
+  loading.value = true
+  try {
+    options.value = await searchUsers(undefined, 100, orgId)
+    orgMembersLoaded.value = true
+    emit('options-loaded', options.value)
+  } catch {
+    options.value = []
+    orgMembersLoaded.value = false
+  } finally {
+    loading.value = false
+  }
+}
+
 /** 下拉框展开/收起事件 */
 async function handleVisibleChange(visible: boolean) {
   if (!visible) return
   if (!props.orgMembers) return
   // 已有搜索关键词 → 走远程搜索逻辑，不覆盖
   if (isSearching.value) return
-  // 已加载过 → 不重复请求
-  if (options.value.length > 0 && !isSearching.value) return
-
-  const orgId = userStore.userInfo?.organization_id
-  if (!orgId) return
-
-  loading.value = true
-  try {
-    options.value = await searchUsers(undefined, 100, orgId)
-    emit('options-loaded', options.value)
-  } catch {
-    options.value = []
-  } finally {
-    loading.value = false
-  }
+  // 已加载过本所成员 → 不重复请求
+  if (orgMembersLoaded.value) return
+  await loadOrgMembers()
 }
 
 // ========== 远程搜索 ==========
@@ -111,21 +119,11 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null
 
 async function handleSearch(keyword: string) {
   if (!keyword || keyword.length < 1) {
-    // 清空搜索 → 切回本所浏览模式
+    // 清空搜索 → 切回本所浏览模式，重新加载本所成员
     isSearching.value = false
     options.value = []
-    // 重新加载本所成员
-    const orgId = userStore.userInfo?.organization_id
-    if (props.orgMembers && orgId) {
-      loading.value = true
-      try {
-        options.value = await searchUsers(undefined, 100, orgId)
-        emit('options-loaded', options.value)
-      } catch {
-        options.value = []
-      } finally {
-        loading.value = false
-      }
+    if (props.orgMembers && userStore.userInfo?.organization_id) {
+      await loadOrgMembers()
     }
     return
   }
