@@ -35,10 +35,14 @@ class CurrentUser:
 
 
 async def get_current_user(
-    authorization: str = Header(..., description="Bearer <token>"),
+    authorization: str | None = Header(None, description="Bearer <token>"),
 ) -> CurrentUser:
-    """从 Authorization Header 解析 JWT，返回当前用户"""
-    if not authorization.startswith("Bearer "):
+    """从 Authorization Header 解析 JWT，返回当前用户
+
+    P1-24：Header(None) 使缺头时不再被 FastAPI 判 422，而是走手动 401
+    （前端 401 拦截器才会跳转登录；422 会误显示「请求失败」）。
+    """
+    if not authorization or not authorization.startswith("Bearer "):
         raise AppException(ErrorCode.UNAUTHORIZED)
 
     token = authorization[7:]  # 去掉 "Bearer " 前缀

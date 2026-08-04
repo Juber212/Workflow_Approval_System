@@ -88,6 +88,11 @@ class TestLogin:
 class TestProfile:
     """个人资料更新 API 测试"""
 
+    def test_missing_authorization_header_returns_401(self, client):
+        """缺失 Authorization 头 → 401（P1-24，不再被 FastAPI 判 422）"""
+        resp = client.get("/api/v1/auth/me")
+        assert resp.status_code == 401
+
     def test_update_profile_unauthorized(self, client):
         """未登录请求 → 401 或 422（FastAPI 先校验 body 再跑依赖）"""
         resp = client.put("/api/v1/auth/profile", json={"email": "test@test.com"})
