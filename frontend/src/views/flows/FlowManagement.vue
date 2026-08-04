@@ -359,7 +359,7 @@ async function handlePermanentDelete(row: InstanceListItem) {
     ElMessage.success('项目已永久删除')
     fetchInstances()
     fetchStatusCounts()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
+  } catch { /* 拦截器已统一弹错（P1-35），无需重复提示 */ }
 }
 
 // 时间/状态标签 —— 统一从 @/utils 导入

@@ -193,9 +193,8 @@ async function handleSubmit() {
     ElMessage.success('文件补交成功')
     visible.value = false
     emit('success')
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '补交失败'
-    ElMessage.error(msg)
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     submitting.value = false
   }

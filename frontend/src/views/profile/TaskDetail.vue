@@ -492,8 +492,8 @@ async function handleDeleteFile(fileId: number) {
     await deleteTaskFile(detail.value.id, fileId)
     ElMessage.success('已删除')
     detail.value = await getTaskDetail(detail.value.id)
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '删除失败，请稍后重试')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -557,10 +557,8 @@ async function handleSubmit() {
         }
         sigSlots.value = null
         showSignatureDialog.value = true
-      } catch (err: any) {
-        if (!err?.response) {
-          ElMessage.error('网络连接异常，请检查网络')
-        }
+      } catch {
+        // 拦截器已统一弹错（P1-35）：网络异常与业务错误均不再重复提示，消除误报
       } finally {
         preparing.value = false
       }
@@ -671,10 +669,8 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
     }
     sigSlots.value = null
     showSignatureDialog.value = true
-  } catch (err: any) {
-    if (!err?.response) {
-      ElMessage.error('获取 PDF 文件列表失败，请刷新重试')
-    }
+  } catch {
+    // 拦截器已统一弹错（P1-35）：网络异常与业务错误均不再重复提示，消除误报
   }
 }
 

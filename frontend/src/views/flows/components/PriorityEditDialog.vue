@@ -88,9 +88,8 @@ async function handleConfirm() {
     ElMessage.success('优先级已修改')
     visible.value = false
     emit('changed')
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '修改失败'
-    ElMessage.error(msg)
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     submitting.value = false
   }

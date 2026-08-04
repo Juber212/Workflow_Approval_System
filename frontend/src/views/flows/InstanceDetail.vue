@@ -150,7 +150,6 @@
 /** 实例详情页 —— 项目/方案共用，根据 template_type 切换面包屑和文案 */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief } from '@/api/instance'
 import { previewFile, downloadFile } from '@/api/task'
 import { useUserStore } from '@/stores/user'
@@ -256,9 +255,8 @@ async function fetchDetail() {
         ])
       }
     }
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '加载实例详情失败'
-    ElMessage.error(msg)
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     loading.value = false
   }

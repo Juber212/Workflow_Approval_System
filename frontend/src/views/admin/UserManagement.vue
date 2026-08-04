@@ -258,8 +258,8 @@ async function handleToggleStatus(row: UserItem) {
     await toggleUserStatus(row.id, !row.is_active)
     ElMessage.success(row.is_active ? '已禁用' : '已启用')
     fetchList()
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '操作失败，请稍后重试')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 

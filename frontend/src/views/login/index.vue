@@ -196,8 +196,8 @@ async function handleForceChangePassword() {
     // 跳转
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '修改失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     changingPwd.value = false
   }

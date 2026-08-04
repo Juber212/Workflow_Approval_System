@@ -311,8 +311,8 @@ async function handlePermanentDelete(row: ProposalListItem) {
     ElMessage.success('方案已永久删除')
     fetchList()
     fetchStatusCounts()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '删除失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 

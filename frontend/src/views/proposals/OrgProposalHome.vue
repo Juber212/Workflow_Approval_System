@@ -256,8 +256,8 @@ async function handleCreate() {
     ElMessage.success('方案已发起')
     showCreateDialog.value = false
     router.push({ name: 'ProposalDetail', params: { id: result.id } })
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '发起失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally { creating.value = false }
 }
 

@@ -331,8 +331,8 @@ async function handleLinkDoc(doc: DocTemplateItem) {
     await linkDocTemplates(templateId, [doc.id])
     ElMessage.success(`已关联「${doc.name}」`)
     await loadDocTemplates()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '关联失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -344,8 +344,8 @@ async function handleLinkCategory(cat: TemplateCategorySummary) {
     await linkDocTemplates(templateId, undefined, [cat.id])
     ElMessage.success(`已关联分类「${cat.name}」`)
     await loadDocTemplates()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '关联失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -781,8 +781,8 @@ async function handleDeletePreset(preset: PresetItem) {
     await deletePreset(preset.id)
     ElMessage.success('预设已删除')
     await fetchPresets()
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '删除失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -895,8 +895,8 @@ async function handleSave() {
 
     await saveDesign(templateId, { nodes, edges })
     ElMessage.success(`保存成功（${nodes.length} 节点 · ${edges.length} 连线）`)
-  } catch (err: any) {
-    if (err?.response?.data?.message) ElMessage.error(`保存失败：${err.response.data.message}`)
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally { saving.value = false }
 }
 
@@ -985,9 +985,8 @@ async function handleLaunch() {
     ElMessage.success('流程发起成功')
     showLaunchDialog.value = false
     router.push({ name: 'InstanceDetail', params: { id: result.id } })
-  } catch (err: any) {
-    if (err?.response?.data?.message) ElMessage.error(err.response.data.message)
-    else ElMessage.error('发起项目失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally { launching.value = false }
 }
 </script>

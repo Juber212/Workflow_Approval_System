@@ -209,8 +209,8 @@ async function saveProfile() {
     ElMessage.success('个人信息已更新')
     await refreshUserInfoDetail()
     cancelEditProfile()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     savingProfile.value = false
   }
@@ -317,8 +317,8 @@ async function handleSignatureUpload(file: File): Promise<boolean> {
     ElMessage.success('签名图片已上传')
     await refreshUserInfoDetail()
     await loadSignatureBlob()
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '上传失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally { uploadingSignature.value = false }
   return false
 }

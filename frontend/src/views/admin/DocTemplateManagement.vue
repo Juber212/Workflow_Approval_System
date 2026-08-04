@@ -283,8 +283,8 @@ async function handleUpload(file: File) {
     await adminUploadDocTemplate(file, uploadOrgId.value as number)
     ElMessage.success(`"${file.name}" 上传成功`)
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '上传失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally { loading.value = false }
   return false
 }
@@ -295,8 +295,8 @@ async function handleDeleteDoc(doc: AdminDocTemplateItem) {
     await deleteAdminDocTemplate(doc.id)
     ElMessage.success('已删除')
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '删除失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -334,8 +334,8 @@ async function handlePackSave() {
     }
     packDialogVisible.value = false
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -344,8 +344,8 @@ async function handlePackDelete(pack: PackItem) {
     await deleteAdminCategory(pack.id)
     ElMessage.success('包已删除')
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '删除失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -355,8 +355,8 @@ async function handleRemoveFromPack(pack: PackItem, doc: AdminDocTemplateItem) {
     await unlinkDocsFromCategory(pack.id, [doc.id])
     ElMessage.success(`已从「${pack.name}」移除`)
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '移除失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -367,8 +367,8 @@ async function handleAddToPack(pack: PackItem) {
     ElMessage.success(`已加入 ${pack._addIds.length} 个模板`)
     pack._addIds = []
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '加入失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 
@@ -378,8 +378,8 @@ async function handleQuickAdd(doc: AdminDocTemplateItem, packId: number) {
     ElMessage.success('已加入')
     quickAddMap[doc.id] = ''
     fetchAll()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '加入失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
 }
 

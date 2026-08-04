@@ -396,8 +396,8 @@ async function handleSave() {
     }
     emit('update:modelValue', false)
     emit('saved')
-  } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || '保存失败')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     saving.value = false
   }

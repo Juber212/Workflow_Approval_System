@@ -197,9 +197,8 @@ async function handleSave() {
     ElMessage.success(`人员修改成功：${result.changes?.join('；') ?? '已修改'}`)
     visible.value = false
     emit('success')
-  } catch (err: any) {
-    const msg = err?.response?.data?.message || err?.message || '修改失败'
-    ElMessage.error(msg)
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   } finally {
     submitting.value = false
   }
