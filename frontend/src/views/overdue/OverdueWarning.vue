@@ -42,7 +42,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="goTask(row.id)">查看</el-button>
+            <el-button text type="primary" size="small" @click="goInstance(row.instance_id)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -69,7 +69,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push({ name: 'CheckDetail', params: { id: row.id } })">查看</el-button>
+            <el-button text type="primary" size="small" @click="goInstance(row.instance_id)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -96,7 +96,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push({ name: 'ApprovalDetail', params: { id: row.id } })">查看</el-button>
+            <el-button text type="primary" size="small" @click="goInstance(row.instance_id)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -123,7 +123,7 @@
         </el-table-column>
         <el-table-column label="操作" min-width="100">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="router.push({ name: 'EndorseDetail', params: { id: row.id } })">查看</el-button>
+            <el-button text type="primary" size="small" @click="goInstance(row.instance_id)">查看</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -178,9 +178,13 @@ const isEmpty = computed(() => {
   return s.tasks.length === 0 && s.checks.length === 0 && s.approvals.length === 0 && s.endorsements.length === 0
 })
 
-/** 跳转到任务详情 */
-function goTask(taskId: number) {
-  router.push({ name: 'TaskDetail', params: { id: taskId } })
+/**
+ * 跳转到实例详情页（项目/方案，组件按 template_type 自动区分文案）
+ * P1-34 调整：超期项跳详情而非处理页——非本人的处理页会 403 无权查看，
+ * 实例详情对所有登录用户可见，可查看完整流程上下文。
+ */
+function goInstance(instanceId: number) {
+  router.push({ name: 'InstanceDetail', params: { id: instanceId } })
 }
 
 onMounted(async () => {
