@@ -277,6 +277,7 @@ async def list_document_templates(
             })
 
     # 拆分为 linked / available
+    # 契约：linked_categories 必带 documents（发起弹窗分类勾选联动依赖，前端 loadLaunchDocTemplates 用它做初始全选），勿删
     linked_categories = [
         {"id": c.id, "name": c.name, "description": c.description,
          "document_count": doc_count_map.get(c.id, 0),

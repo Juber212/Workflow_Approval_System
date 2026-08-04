@@ -157,19 +157,23 @@ export interface DocTemplateItem {
   created_at: string | null
 }
 
-/** 分类（模板包）摘要 */
+/** 分类（模板包）摘要 —— 列表展示用，不含分类内模板详情 */
 export interface TemplateCategorySummary {
   id: number
   name: string
   description: string | null
   document_count: number  // 分类下文件模板数量
-  documents?: DocTemplateItem[]  // 分类内模板详情（发起弹窗勾选联动用）
+}
+
+/** 已关联分类（含分类内模板详情）—— 后端 GET /templates/{id}/documents 的 linked_categories 必带 documents，发起弹窗勾选联动依赖 */
+export interface LinkedTemplateCategory extends TemplateCategorySummary {
+  documents: DocTemplateItem[]
 }
 
 /** 文件模板列表响应（含已关联 + 未关联 + 分类） */
 export interface DocTemplateListResponse {
   linked: DocTemplateItem[]                 // 已关联的单个模板
-  linked_categories: TemplateCategorySummary[]  // 已关联的分类（模板包）
+  linked_categories: LinkedTemplateCategory[]  // 已关联的分类（模板包，必带 documents）
   available: DocTemplateItem[]              // 组织内可用但未关联的单个模板
   available_categories: TemplateCategorySummary[]  // 组织内可用但未关联的分类
   available_variables: string[]             // 可用变量列表
@@ -359,6 +363,12 @@ export async function createAdminCategory(data: {
 /** 管理员获取分类详情 */
 export async function getAdminCategoryDetail(categoryId: number): Promise<TemplateCategoryDetail> {
   const res = await request.get(`/admin/template-categories/${categoryId}`)
+  return res.data
+}
+
+/** 获取分类详情（含分类内文件模板列表）—— 普通用户可调用（仅本组织，非管理员只读） */
+export async function getCategoryDetail(categoryId: number): Promise<TemplateCategoryDetail> {
+  const res = await request.get(`/template-categories/${categoryId}`)
   return res.data
 }
 

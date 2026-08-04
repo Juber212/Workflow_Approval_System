@@ -220,7 +220,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, getCategoryDetail, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary, type LinkedTemplateCategory } from '@/api/template'
 import request from '@/api/request'
 import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
 import { createInstance, calculateDeadlines } from '@/api/instance'
@@ -241,7 +241,7 @@ const showLaunchDialog = ref(false)
 // ─── 发起弹窗文件模板 ────────────────────────────────────
 const launchDocTemplates = ref<DocTemplateItem[]>([])
 const launchDocSelected = ref<number[]>([])
-const launchLinkedCategories = ref<TemplateCategorySummary[]>([])
+const launchLinkedCategories = ref<LinkedTemplateCategory[]>([])
 const launchCategorySelected = ref<number[]>([])  // 选中的分类 ID（默认全选）
 
 const launchFormRef = ref<FormInstance>()
@@ -384,9 +384,26 @@ async function loadLaunchDocTemplates() {
   try {
     const data = await getDocTemplates(templateId)
     launchDocTemplates.value = data.linked
-    // 默认全选：单个模板 + 分类内模板
-    launchLinkedCategories.value = (data as any).linked_categories || []
+
+    // 后端 GET /templates/{id}/documents 的 linked_categories 必带 documents（发起弹窗勾选联动依赖）。
+    // 防御兜底（P1-40）：个别分类 documents 缺失但 document_count>0（异常路径/旧数据）时，补拉分类详情
+    const missingCats = data.linked_categories.filter(
+      c => (!c.documents || c.documents.length === 0) && c.document_count > 0,
+    )
+    const fillMap = new Map<number, DocTemplateItem[]>()
+    if (missingCats.length > 0) {
+      await Promise.all(missingCats.map(async (c) => {
+        try { fillMap.set(c.id, (await getCategoryDetail(c.id)).documents || []) }
+        catch { /* 拦截器已统一弹错（P1-35），单个分类失败不影响其余 */ }
+      }))
+    }
+    // 合并补拉结果，保证每个分类都带 documents
+    launchLinkedCategories.value = data.linked_categories.map(c => ({
+      ...c,
+      documents: fillMap.has(c.id) ? fillMap.get(c.id)! : c.documents,
+    }))
     launchCategorySelected.value = launchLinkedCategories.value.map(c => c.id)  // 分类默认全选
+
     // 收集分类内模板 ID 作为初始选中
     const catDocIds: number[] = []
     launchLinkedCategories.value.forEach(c => {
