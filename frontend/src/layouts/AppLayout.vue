@@ -100,7 +100,7 @@
 <script setup lang="ts">
 /** 应用布局 —— 侧边栏 + 内容区（飞书风格） */
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getToken } from '@/api/request'
 import { useUserStore } from '@/stores/user'
@@ -113,6 +113,7 @@ import { fetchSummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const notifyStore = useNotificationStore()
 
@@ -151,6 +152,20 @@ onMounted(refreshNotifyCounts)
 // ==================== 个人信息弹窗 ====================
 const showUserInfoDialog = ref(false)
 const showPasswordDialog = ref(false)
+
+// P1-32：签名跳转 —— 校验/审批/批准等详情页要求签批但未上传签名时
+// 跳转 Profile?tab=signature，此处响应并自动打开个人信息弹窗（内含签名上传区），
+// 同时清除 query 标记，避免刷新页面重复弹窗。
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (tab !== 'signature') return
+    showUserInfoDialog.value = true
+    const { tab: _omit, ...restQuery } = route.query
+    router.replace({ query: restQuery })
+  },
+  { immediate: true },
+)
 const userInfoDetail = ref<{
   user_id: number; username: string; real_name: string
   email: string | null; phone: string | null; roles: string[]
