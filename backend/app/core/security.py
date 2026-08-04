@@ -25,11 +25,24 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
 
+def ensure_password_byte_limit(password: str, label: str = "密码") -> None:
+    """bcrypt 只处理前 72 字节，超长密码会被静默截断（P1-23），直接拒绝
+
+    注意按 UTF-8 字节而非字符计数：中文字符占 3 字节，24 个中文即达 72 字节。
+    """
+    if len(password.encode("utf-8")) > 72:
+        raise AppException(
+            ErrorCode.BAD_REQUEST,
+            f"{label}过长（bcrypt 最多支持 72 字节，约 72 个英文或 24 个中文字符）",
+        )
+
+
 def validate_password_strength(password: str, username: str) -> None:
     """密码强度校验：≥8位 + 必须包含字母和数字 + 不能与用户名相同
 
     用户自己改密码时调用；管理员重置密码/创建用户用默认密码，不受此限制。
     """
+    ensure_password_byte_limit(password)
     if len(password) < 8:
         raise AppException(ErrorCode.BAD_REQUEST, "密码长度不能少于8位")
     if not re.search(r'[a-zA-Z]', password) or not re.search(r'\d', password):

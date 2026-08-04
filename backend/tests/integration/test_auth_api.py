@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.deps import get_db
+from app.core.exceptions import AppException
 from app.models import User
 from tests.conftest import MockResult
 
@@ -76,11 +77,12 @@ class TestLogin:
         assert resp.status_code == 401
 
     def test_login_overlong_password(self, client):
-        """超长密码（>72字节）→ 422（P1-23 bcrypt 截断防护）"""
+        """超长密码（>72字节）→ 400 中文错误（P1-23 bcrypt 截断防护）"""
         resp = client.post("/api/v1/auth/login", json={
             "username": "test", "password": "a" * 100
         })
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert "密码过长" in resp.json()["message"]
 
 
 class TestProfile:
@@ -182,35 +184,41 @@ class TestChangePassword:
             self._cleanup()
 
     def test_change_password_overlong(self, client):
-        """新密码或旧密码超过 72 字节 → 422（P1-23 bcrypt 截断防护）"""
+        """新/旧密码超过 72 字节 → 400 中文错误（P1-23 bcrypt 截断防护）"""
+        user = self._make_user(must_change=False, raw_password="correct")
+        client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=user))
         self._mock_current_user()
         try:
-            # 新密码超长
-            resp = client.put("/api/v1/auth/password", json={"new_password": "a" * 100 + "b1"})
-            assert resp.status_code == 422
-            # 旧密码超长
+            # 新密码超长：走完原密码校验后由 validate_password_strength 拦截
+            resp = client.put("/api/v1/auth/password", json={
+                "old_password": "correct", "new_password": "a" * 100 + "b1"})
+            assert resp.status_code == 400
+            assert "密码过长" in resp.json()["message"]
+            # 旧密码超长：handler 开头拦截（未到用户查询）
+            client.mock_db.execute = AsyncMock(return_value=MockResult(scalar_one=None))
             resp = client.put("/api/v1/auth/password", json={
                 "old_password": "a" * 100, "new_password": "newpass123"})
-            assert resp.status_code == 422
+            assert resp.status_code == 400
+            assert "密码过长" in resp.json()["message"]
         finally:
             self._cleanup()
 
 
 class TestPasswordByteLimit:
-    """bcrypt 72 字节上限（P1-23）—— 纯 schema 边界校验，不依赖 DB"""
+    """bcrypt 72 字节上限（P1-23）—— service 层校验（schema 不再承担长度校验，
+    统一走 AppException 中文错误，避免 pydantic 英文 422）"""
 
     def test_72_bytes_exact_allowed(self):
         """恰好 72 字节的密码合法（72 英文 或 24 中文）"""
-        from app.schemas.auth import LoginRequest, ChangePasswordRequest
-        LoginRequest(username="test", password="a" * 72)          # 72 字节 ASCII
-        LoginRequest(username="test", password="密" * 24)          # 24×3=72 字节 UTF-8
-        ChangePasswordRequest(new_password="pass1234" + "a" * 64)  # 72 字节（含字母数字）
+        from app.core.security import ensure_password_byte_limit
+        ensure_password_byte_limit("a" * 72)  # 72 字节 ASCII
+        ensure_password_byte_limit("密" * 24)  # 24×3=72 字节 UTF-8
 
     def test_exceed_72_bytes_rejected(self):
         """超过 72 字节 → 拒绝（字符数未超但字节超限也要拦）"""
-        from pydantic import ValidationError
-        from app.schemas.auth import LoginRequest, ChangePasswordRequest
-        with pytest.raises(ValidationError):
-            LoginRequest(username="test", password="密" * 25)  # 25×3=75 字节
-        with pytest.raises(ValidationError):
-            ChangePasswordRequest(new_password="pass1234" + "密" * 23)  # 8+69=77 字节
+        from app.core.security import ensure_password_byte_limit
+        from app.core.error_codes import ErrorCode
+        with pytest.raises(AppException) as exc:
+            ensure_password_byte_limit("密" * 25)  # 25×3=75 字节
+        assert exc.value.code == ErrorCode.BAD_REQUEST
+        assert "密码过长" in exc.value.message

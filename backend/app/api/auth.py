@@ -9,7 +9,10 @@ import uuid
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, hash_password, validate_password_strength
+from app.core.security import (
+    verify_password, create_access_token, hash_password,
+    validate_password_strength, ensure_password_byte_limit,
+)
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.schemas.common import ApiResponse
@@ -23,6 +26,9 @@ router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 @router.post("/login")
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     """用户登录 —— 校验用户名密码，返回 JWT Token 和用户信息"""
+    # P1-23：bcrypt 只处理前 72 字节，超长密码先拒绝（避免截断后与短密码语义等同）
+    ensure_password_byte_limit(req.password)
+
     # 查询用户（含组织）
     stmt = (
         select(User)
@@ -124,6 +130,10 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     """用户修改自己的密码 —— 需验证原密码 + 密码强度校验"""
+    # P1-23：原密码超 72 字节同样被 bcrypt 截断，先拒绝
+    if req.old_password:
+        ensure_password_byte_limit(req.old_password, "原密码")
+
     # 查询用户
     stmt = select(User).where(User.id == current_user.id)
     result = await db.execute(stmt)

@@ -3,26 +3,10 @@
 import re
 from pydantic import BaseModel, Field, field_validator
 
-# bcrypt 只处理前 72 字节，超长密码会被静默截断（P1-23）
-MAX_PASSWORD_BYTES = 72
-
-
-def _validate_password_bytes(v: str) -> str:
-    """按 UTF-8 字节数校验密码长度（bcrypt 限制是 72 字节，非 72 字符）"""
-    if len(v.encode("utf-8")) > MAX_PASSWORD_BYTES:
-        raise ValueError(f"密码过长（bcrypt 最多支持 {MAX_PASSWORD_BYTES} 字节，约 72 个英文或 24 个中文字符）")
-    return v
-
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=30, description="登录用户名")
-    password: str = Field(..., min_length=1, max_length=72, description="密码")
-
-    @field_validator("password")
-    @classmethod
-    def validate_password_bytes(cls, v: str) -> str:
-        """登录密码同样受 bcrypt 72 字节限制"""
-        return _validate_password_bytes(v)
+    password: str = Field(..., min_length=1, description="密码")
 
 
 class LoginResponse(BaseModel):
@@ -52,16 +36,8 @@ class UserInfoResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     """用户修改自己的密码（密码强度由后端 validate_password_strength 校验）"""
-    old_password: str | None = Field(None, max_length=72, description="原密码（强制改密场景可省略）")
-    new_password: str = Field(..., min_length=8, max_length=72, description="新密码（≥8位，含字母和数字）")
-
-    @field_validator("old_password", "new_password")
-    @classmethod
-    def validate_password_bytes(cls, v: str | None) -> str | None:
-        """新旧密码均受 bcrypt 72 字节限制"""
-        if v is not None:
-            _validate_password_bytes(v)
-        return v
+    old_password: str | None = Field(None, description="原密码（强制改密场景可省略）")
+    new_password: str = Field(..., min_length=8, description="新密码（≥8位，含字母和数字）")
 
 
 class UpdateProfileRequest(BaseModel):
