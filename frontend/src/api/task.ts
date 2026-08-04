@@ -136,13 +136,13 @@ export async function getTaskDetail(id: number): Promise<TaskDetail> {
 
 export async function saveTaskDraft(id: number, data: { assignee_note?: string | null }) {
   const res = await request.put(`/tasks/${id}`, data)
-  return res
+  return res.data
 }
 
 /** 提交任务 —— 支持签名 */
 export async function submitTask(id: number, data: { assignee_note?: string | null; signatures?: SignatureSlot[] | null }) {
   const res = await request.post(`/tasks/${id}/submit`, data)
-  return res
+  return res.data
 }
 
 /** 预提交签名准备 —— 转换文件为 PDF 并返回文件列表，供签批弹窗预览 */

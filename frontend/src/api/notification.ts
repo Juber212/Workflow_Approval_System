@@ -29,8 +29,8 @@ export async function fetchNotifications(page = 1, pageSize = 20): Promise<{
   page: number
   page_size: number
 }> {
-  const { data } = await request.get('/notifications', { params: { page, page_size: pageSize } })
-  return data
+  const res = await request.get('/notifications', { params: { page, page_size: pageSize } })
+  return res.data
 }
 
 /** 待办汇总计数响应 —— 含完整 project/proposal 分类 breakdown */
@@ -54,14 +54,14 @@ export interface SummaryCounts {
 
 /** 获取待办/校验/审批汇总计数 —— 一次请求替代 7 次独立分页查询 */
 export async function fetchSummaryCounts(): Promise<SummaryCounts> {
-  const { data } = await request.get('/notifications/summary')
-  return data
+  const res = await request.get('/notifications/summary')
+  return res.data
 }
 
 /** 获取未读通知数量 */
 export async function fetchUnreadCount(): Promise<UnreadCount> {
-  const { data } = await request.get('/notifications/unread-count')
-  return data
+  const res = await request.get('/notifications/unread-count')
+  return res.data
 }
 
 /** 标记单条通知为已读 */

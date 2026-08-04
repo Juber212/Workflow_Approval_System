@@ -81,11 +81,11 @@ export async function endorseApprove(
     opinion,
     signatures,
   })
-  return res
+  return res.data
 }
 
 /** 批准驳回 */
 export async function endorseReject(id: number, opinion: string) {
   const res = await request.post(`/endorsements/${id}/reject`, { opinion })
-  return res
+  return res.data
 }

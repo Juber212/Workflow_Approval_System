@@ -74,10 +74,10 @@ export async function getCheckDetail(id: number): Promise<CheckDetail> {
 /** 校验通过 —— 支持签名 */
 export async function passCheck(id: number, opinion?: string | null, signatures?: SignatureSlot[] | null) {
   const res = await request.post(`/checks/${id}/pass`, { opinion, signatures })
-  return res
+  return res.data
 }
 
 export async function returnCheck(id: number, opinion: string) {
   const res = await request.post(`/checks/${id}/return`, { opinion })
-  return res
+  return res.data
 }

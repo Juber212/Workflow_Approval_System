@@ -84,10 +84,10 @@ export async function approveApproval(
     opinion,
     signatures,
   })
-  return res
+  return res.data
 }
 
 export async function rejectApproval(id: number, opinion: string, target_node_id?: number | null) {
   const res = await request.post(`/approvals/${id}/reject`, { opinion, target_node_id })
-  return res
+  return res.data
 }
