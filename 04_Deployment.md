@@ -102,6 +102,15 @@ mysql -u root -p workflow_approval -e "
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
+> ⚠️ **连接池与 Worker 数匹配（P1-29）**：
+> 每个 worker 是独立进程、各自维护独立连接池。默认 `pool_size=20 + max_overflow=20`，
+> 连接总量 = `workers × (pool_size + max_overflow)`。`--workers 4` 时最多 **160** 个连接，
+> 可能超过 MySQL 默认 `max_connections`（通常 151），触发 "Too many connections"。
+>
+> **约束**：单 worker 最省心；多 worker 时须保证 `workers × (pool_size + max_overflow) ≤ MySQL max_connections - 预留`。
+> 可在 `.env` 中调小 `DB_POOL_SIZE` / `DB_MAX_OVERFLOW`（如 4 worker 时各设 10/5，共 60 连接）。
+> 查看当前上限：`SHOW VARIABLES LIKE 'max_connections';`
+
 ### 4.2 部署前端
 
 ```bash
@@ -262,10 +271,10 @@ backend/storage/
 
 | 组件 | 参数 | 说明 |
 |------|------|------|
-| Uvicorn | `--workers 4` | Worker 数 ≈ CPU 核数 |
+| Uvicorn | `--workers 4` | Worker 数 ≈ CPU 核数；**多 worker 时连接池须同步调小（见 7 节约束）** |
 | LibreOffice | `asyncio.Semaphore(2)` | 最多 2 个并发转换进程 |
 | 文件上传 | ≤50MB | 可配置，Nginx `client_max_body_size` 需同步调整 |
-| MySQL 连接池 | SQLAlchemy 默认 | 可根据并发量调整 `pool_size` |
+| MySQL 连接池 | `pool_size=20 + max_overflow=20` | 可经 `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` 调整；总量 = workers×(pool+overflow)，须 ≤ max_connections |
 
 ### 8.4 安全清单
 

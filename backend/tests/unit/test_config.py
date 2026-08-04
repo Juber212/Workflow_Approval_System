@@ -31,3 +31,14 @@ def test_database_url_normal_unchanged():
     s = Settings(DB_HOST="localhost", DB_PORT=3306, DB_USER="root",
                  DB_PASSWORD="secret", DB_NAME="workflow_approval")
     assert s.database_url == "mysql+aiomysql://root:secret@localhost:3306/workflow_approval?charset=utf8mb4"
+
+
+def test_db_pool_size_defaults():
+    """连接池默认值（P1-29）：pool_size + max_overflow 可配置且默认 20/20"""
+    s = Settings()
+    assert s.DB_POOL_SIZE == 20
+    assert s.DB_MAX_OVERFLOW == 20
+    # 多 worker 场景可调小
+    s2 = Settings(DB_POOL_SIZE=10, DB_MAX_OVERFLOW=5)
+    assert s2.DB_POOL_SIZE == 10
+    assert s2.DB_MAX_OVERFLOW == 5

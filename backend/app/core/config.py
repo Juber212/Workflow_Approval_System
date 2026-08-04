@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
     DB_NAME: str = "workflow_approval"
+    # 连接池（P1-29）：多 worker 部署时须保证 worker×(pool_size+max_overflow) ≤ MySQL max_connections。
+    # 默认 20+20（单进程最多 40 连接）；`--workers 4` 时应调小 pool_size 或减少 worker，防止连接数翻倍超限。
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
 
     # JWT
     SECRET_KEY: str = ""  # 必须在环境变量中设置，空值会导致启动失败
