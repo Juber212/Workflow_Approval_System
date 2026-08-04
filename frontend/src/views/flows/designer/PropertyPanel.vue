@@ -186,6 +186,7 @@
             placeholder="选择截止日期"
             value-format="YYYY-MM-DD"
             style="width: 100%; margin-top: 8px"
+            :disabled-date="disabledDeadlineDate"
             @change="handleDeadlineChange"
           />
           <div class="field-hint">
@@ -642,6 +643,11 @@ const folderNameConflict = computed<string | null>(() => {
 function isWeekend(date: Date): boolean {
   const d = date.getDay()
   return d === 0 || d === 6
+}
+
+/** 截止日期选择器禁用规则：禁止选择周末作为截止日（P1-39 补充，截止日对齐工作日语义；法定节假日由后端预填/级联自动跳过） */
+function disabledDeadlineDate(date: Date): boolean {
+  return isWeekend(date)
 }
 
 /** 从 start 的下一日到 end（含 end）的工作日数 —— 不含起始日，与后端 add_workdays(start, N) 口径一致（P1-39 消除 off-by-one） */
