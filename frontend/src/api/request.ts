@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
+import type { AxiosInstance, AxiosRequestConfig, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
 
 /** API 基础 URL（不含 /api/v1 后缀） */
@@ -10,13 +10,34 @@ export function getToken(): string | null {
   return localStorage.getItem('token')
 }
 
+/** 后端统一响应包裹 —— {code, message, data}（P1-36：契约从注释级变编译级） */
+export interface ApiResponse<T = any> {
+  code: number
+  message: string
+  data: T
+}
+
+/**
+ * 自定义请求客户端类型 —— 覆盖 axios 默认返回 AxiosResponse，
+ * 改为返回后端 body（响应拦截器已 `return response.data`，resolve 值即 ApiResponse<T>）。
+ * 不用 `declare module 'axios'` 全局增强：axios 的 get 是三泛型 `get<T,R,D>`，
+ * module augmentation 追加的重载会被原签名优先匹配而不生效，且会波及裸 axios 调用。
+ */
+export type ApiClient = Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete' | 'patch'> & {
+  get<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>>
+  post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>>
+  put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>>
+  delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>>
+  patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>>
+}
+
 /** Axios 实例 —— 统一 baseURL、超时、拦截器 */
 const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-const request: AxiosInstance = axios.create({
+const request: ApiClient = axios.create({
   baseURL: BASE,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-})
+}) as unknown as ApiClient
 
 /** 请求拦截器 —— 自动注入 Token */
 request.interceptors.request.use(
