@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
-from app.core.config import settings
+from app.core.config import settings, KNOWN_DEFAULT_SECRETS
 from app.core.logging import setup_logging
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
@@ -41,13 +41,32 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     setup_logging()
 
-    # 安全校验：生产环境必须设置强 SECRET_KEY
-    if not settings.SECRET_KEY:
-        import sys
-        print("❌ 严重安全错误: SECRET_KEY 未设置！")
-        print("   请通过环境变量 SECRET_KEY 设置一个至少 64 字符的随机密钥。")
-        print("   示例: openssl rand -hex 32")
+    import sys
+
+    # ── 生产守卫（P1-49）：防止弱配置带上线 ──
+    # 1. DEBUG=true 只允许在开发环境开启：非开发环境开调试会暴露敏感信息
+    if settings.DEBUG and settings.ENV != "development":
+        print(f"[错误] 生产守卫: DEBUG=true 不允许在非开发环境（ENV={settings.ENV}）启动！")
+        print("       请将 .env 中 DEBUG 设为 false，或显式设置 ENV=development。")
         sys.exit(1)
+
+    # 2. SECRET_KEY 校验（分环境策略：生产/测试强制强密钥，开发环境弱密钥仅警告）
+    if settings.ENV == "development":
+        if not settings.SECRET_KEY:
+            print("[错误] 严重安全错误: SECRET_KEY 未设置！")
+            print("       请通过环境变量 SECRET_KEY 设置。")
+            sys.exit(1)
+        if len(settings.SECRET_KEY) < 32 or settings.SECRET_KEY in KNOWN_DEFAULT_SECRETS:
+            print("[警告] 提示: SECRET_KEY 为弱密钥，仅限开发环境使用。部署前请更换为随机强密钥。")
+    else:
+        if not settings.SECRET_KEY or len(settings.SECRET_KEY) < 32:
+            print("[错误] 严重安全错误: SECRET_KEY 必须至少 32 字符！")
+            print("       请通过环境变量 SECRET_KEY 设置一个至少 64 字符的随机密钥。")
+            print("       示例: openssl rand -hex 32")
+            sys.exit(1)
+        if settings.SECRET_KEY in KNOWN_DEFAULT_SECRETS:
+            print("[错误] 严重安全错误: SECRET_KEY 是已知默认值，必须更换！")
+            sys.exit(1)
 
     # 启动时加载系统配置到内存缓存
     await config_service.load(async_session_factory)

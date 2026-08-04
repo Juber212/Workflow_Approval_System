@@ -4,6 +4,9 @@ import urllib.parse
 
 from pydantic_settings import BaseSettings
 
+# 已知默认 SECRET_KEY（P1-49：非开发环境禁止使用）
+KNOWN_DEFAULT_SECRETS = {"dev-secret-key-change-in-production", "change-this-to-a-random-secret-key"}
+
 
 class Settings(BaseSettings):
     """应用配置（自动从环境变量 / .env 文件加载）"""
@@ -12,6 +15,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "企业项目审批系统"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    # 运行环境（development / test / prod）——P1-49 生产守卫、P1-50 Swagger 开关共用。
+    # 生产部署须显式设为 prod，否则默认 development 不会触发生产守卫。
+    ENV: str = "development"
 
     # 数据库
     DB_HOST: str = "localhost"
