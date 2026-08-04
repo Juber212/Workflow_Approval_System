@@ -28,7 +28,7 @@ from app.engine.flow_engine import (
     activate_start_node,
     propagate_from_node,
 )
-from app.utils.workday import add_workdays
+from app.utils.workday import add_workdays, next_workday
 from app.services.validation_service import extract_person_ids, validate_user_ids_exist
 
 
@@ -245,14 +245,17 @@ async def create_instance(
             os.makedirs(os.path.join(instance_dir, fname), exist_ok=True)
 
     # ========== 6.5 计算工作日截止日期 ==========
-    # 从发起日期起，按模板节点顺序累加每个工作节点的 time_limit_days（工作日），
-    # 用 add_workdays 跳过法定节假日和周末，提前算出所有节点的 deadline。
+    # 从发起日期起，按模板节点顺序链式推算每个工作节点的截止日期（P1-39 统一口径）：
+    #   - 首个工作节点 开始 = 发起日，截止 = 开始 + time_limit_days 工作日
+    #   - 后续节点 开始 = 上一节点截止日的下一个工作日，截止 = 开始 + time_limit_days 工作日
+    # 用 add_workdays / next_workday 跳过法定节假日和周末，
+    # 与 /api/v1/utils/calculate-deadlines 接口语义完全一致。
     # 已通过 node_override 手动指定 deadline 的节点跳过此计算。
     initiation_date = date_type.today()
-    cumulative_workdays = 0
 
     # 构建节点 ID → 实例节点映射，按模板 sort_order 遍历（V1 线性流程）
     tpl_node_order = sorted(tpl_nodes, key=lambda n: n.sort_order)
+    prev_deadline: date_type | None = None
     for tn in tpl_node_order:
         in_id = node_id_map.get(tn.id)
         if not in_id:
@@ -266,13 +269,16 @@ async def create_instance(
             continue
 
         wd = inode.time_limit_days or 0
-        cumulative_workdays += wd
+        if wd <= 0:
+            continue
 
-        if cumulative_workdays > 0:
-            inode.deadline = datetime.combine(
-                add_workdays(initiation_date, cumulative_workdays),
-                datetime.min.time(),
-            )
+        # 链式衔接：本节点开始日 = 上一节点截止日的下一个工作日（首个工作节点从发起日起算）
+        begin_date = initiation_date if prev_deadline is None else next_workday(prev_deadline)
+        inode.deadline = datetime.combine(
+            add_workdays(begin_date, wd),
+            datetime.min.time(),
+        )
+        prev_deadline = inode.deadline.date()
 
     # ========== 7. 计算 incoming_count + 激活 ==========
     await calculate_incoming_counts(db, instance.id)

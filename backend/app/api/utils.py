@@ -16,6 +16,7 @@ class DeadlineCalcItem(BaseModel):
     """单个节点的截止日期计算入参"""
     node_id: int = Field(..., description="模板节点 ID")
     time_limit_days: int | None = Field(None, description="该节点的完成时限（工作日）")
+    deadline: str | None = Field(None, description="已锁定的截止日期（锚点）——有此值则跳过计算直接采用，作为后续节点顺延起点")
 
 
 class CalculateDeadlinesRequest(BaseModel):
@@ -48,9 +49,11 @@ async def calculate_deadlines(
     - 节点2 开始 = 节点1截止的下一个工作日，截止 = 开始 + time_limit_days 工作日
     - 以此类推链式递推
     - time_limit_days 为 0 或 None 的节点不计算
+    - 传入 deadline（锚点）的节点跳过计算直接采用，作为后续节点顺延起点
+      （用于前端发起模式：用户已锁定某节点截止日，下游基于该日期级联）
 
     超出 chinesecalendar 支持年份时退化为仅跳过周末。
-    用于发起项目设计器（FlowDesigner launch 模式）的日历预填。
+    用于发起项目设计器（FlowDesigner launch 模式）的日历预填与截止日级联。
     """
     try:
         start = date_type.fromisoformat(body.start_date)
@@ -64,6 +67,20 @@ async def calculate_deadlines(
     prev_deadline: date_type | None = None
 
     for node in body.nodes:
+        # 锚点节点：跳过计算，直接采用给定截止日（用户已在发起页锁定该日期）
+        if node.deadline:
+            try:
+                anchor = date_type.fromisoformat(node.deadline)
+            except (ValueError, TypeError):
+                from app.core.exceptions import AppException
+                from app.core.error_codes import ErrorCode
+                raise AppException(ErrorCode.VALIDATION_ERROR, "节点截止日期格式不正确，应为 YYYY-MM-DD")
+            results.append(DeadlineCalcResult(
+                node_id=node.node_id, begin=None, deadline=node.deadline,
+            ))
+            prev_deadline = anchor
+            continue
+
         wd = node.time_limit_days or 0
         if wd <= 0:
             results.append(DeadlineCalcResult(

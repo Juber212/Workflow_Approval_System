@@ -189,7 +189,7 @@
             @change="handleDeadlineChange"
           />
           <div class="field-hint">
-            预估 {{ form.time_limit_days ?? '?' }} 个工作日（周末已跳过，节假日以发起时后端计算为准）
+            预估 {{ form.time_limit_days ?? '?' }} 个工作日（不含起始日，调整截止日后下游已按法定节假日自动顺延）
           </div>
         </el-form-item>
 
@@ -334,6 +334,7 @@ import { InfoFilled, Setting, ArrowRight, Folder } from '@element-plus/icons-vue
 import UserSelector from '@/components/UserSelector.vue'
 import type { UserSearchItem } from '@/api/admin'
 import type { FileFolderConfig } from '@/api/designer'
+import { calculateDeadlines } from '@/api/instance'
 
 /** Props */
 const props = defineProps<{
@@ -643,11 +644,12 @@ function isWeekend(date: Date): boolean {
   return d === 0 || d === 6
 }
 
-/** 两个日期之间的工作日数（含首尾） */
-function countBusinessDays(startStr: string, endStr: string): number {
+/** 从 start 的下一日到 end（含 end）的工作日数 —— 不含起始日，与后端 add_workdays(start, N) 口径一致（P1-39 消除 off-by-one） */
+function countWorkdaysExcludingStart(startStr: string, endStr: string): number {
   let count = 0
   const cur = new Date(startStr)
   const end = new Date(endStr)
+  cur.setDate(cur.getDate() + 1)  // 从起始日的下一天开始数
   while (cur <= end) {
     if (!isWeekend(cur)) count++
     cur.setDate(cur.getDate() + 1)
@@ -655,20 +657,9 @@ function countBusinessDays(startStr: string, endStr: string): number {
   return count
 }
 
-/** 从 start 起加 N 个工作日，返回结果日期 YYYY-MM-DD */
-function addBusinessDays(startStr: string, days: number): string {
-  const cur = new Date(startStr)
-  let added = 0
-  while (added < days) {
-    cur.setDate(cur.getDate() + 1)
-    if (!isWeekend(cur)) added++
-  }
-  return cur.toISOString().slice(0, 10)
-}
+// ========== 发起模式：截止日期变更 → 锚定当前节点 + 级联下游（P1-39 统一走后端 calculate-deadlines，节假日正确） ==========
 
-// ========== 发起模式：截止日期变更 → 级联下游 ==========
-
-function handleDeadlineChange(newDeadline: string | undefined) {
+async function handleDeadlineChange(newDeadline: string | undefined) {
   if (!newDeadline || !props.lf || !props.launchMode) {
     syncToNode()
     return
@@ -680,14 +671,13 @@ function handleDeadlineChange(newDeadline: string | undefined) {
     return
   }
 
-  // 反向计算当前节点的工作日数
-  const newDays = countBusinessDays(begin, newDeadline)
-  form.time_limit_days = Math.max(1, newDays)
+  // 反向计算当前节点占用的工作日数（不含起始日，与后端 add_workdays 对齐）
+  form.time_limit_days = Math.max(1, countWorkdaysExcludingStart(begin, newDeadline))
 
   // 同步当前节点到 LogicFlow（含新 deadline 和 time_limit_days）
   syncToNode()
 
-  // ── 级联更新下游节点 ──
+  // ── 级联更新下游节点：当前节点截止日作锚点，后端链式顺延（跳过法定节假日）──
   const allNodes = props.lf.getGraphData().nodes || []
   const workNodes = allNodes
     .filter((n: any) => {
@@ -697,30 +687,36 @@ function handleDeadlineChange(newDeadline: string | undefined) {
     .sort((a: any, b: any) => (a.properties?.sort_order ?? 0) - (b.properties?.sort_order ?? 0))
 
   const currentIdx = workNodes.findIndex((n: any) => String(n.id) === String(props.nodeData?.id))
+  // 已是最后一个工作节点 → 无下游可级联
   if (currentIdx < 0 || currentIdx >= workNodes.length - 1) return
 
-  // 逐级推进：每个下游节点开始 = 前一个截止日 + 1 工作日
-  let prevDeadline = newDeadline
-  for (let i = currentIdx + 1; i < workNodes.length; i++) {
-    const node = workNodes[i]
-    const existingProps = node.properties || {}
-    const limitDays = existingProps.time_limit_days || 1
+  const downstream = workNodes.slice(currentIdx + 1)
+  const currentDbId = Number(props.nodeData?.properties?.db_id ?? props.nodeData?.id)
 
-    // 下游开始日 = 前一个截止日 + 1（跳过周末到下一个工作日）
-    const nextStart = addBusinessDays(prevDeadline, 1)
-    const nextDeadline = addBusinessDays(nextStart, limitDays)
-
-    props.lf.setProperties(node.id, {
-      ...existingProps,
-      plan_begin: nextStart,
-      deadline: nextDeadline,
-    })
-
-    prevDeadline = nextDeadline
+  try {
+    const results = await calculateDeadlines(begin, [
+      // 锚点：当前节点截止日已锁定，后端从该日期起顺延下游
+      { node_id: currentDbId, time_limit_days: null, deadline: newDeadline },
+      ...downstream.map((n: any) => ({
+        node_id: Number(n.properties?.db_id ?? n.id),
+        time_limit_days: n.properties?.time_limit_days || 1,
+      })),
+    ])
+    // 写回下游节点（results[0] 为锚点当前节点，从 1 开始）
+    for (let i = 1; i < results.length; i++) {
+      const r = results[i]
+      const node = downstream[i - 1]
+      if (!r.begin || !r.deadline) continue
+      props.lf.setProperties(node.id, {
+        ...(node.properties || {}),
+        plan_begin: r.begin,
+        deadline: r.deadline,
+      })
+    }
+    ElMessage.success('截止日期已更新，下游节点已级联')
+  } catch {
+    // 拦截器已统一弹错（P1-35），无需重复提示
   }
-
-  // 如果当前选中的是下游节点，也需要更新面板表单
-  ElMessage.success('截止日期已更新，下游节点已级联')
 }
 
 /** 是否配置了至少一个人员字段（显示"一键应用"按钮的条件） */
