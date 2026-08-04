@@ -455,6 +455,24 @@ watch(activeTab, (tab) => {
   else if (tab === 'instance') fetchInstances()
 }, { immediate: true })
 
+// P1-41：跨组织切换（route.params.orgId 变化，组件复用、onMounted 不重跑）→ 重置筛选并重新加载
+watch(() => route.params.orgId, () => {
+  // 切换组织后呈现干净列表：重置分页与筛选，避免带入上一组织的筛选条件/深页码
+  instancePage.value = 1
+  instanceStatusFilter.value = 'all'
+  instanceKeyword.value = ''
+  instanceDateRange.value = null
+  instancePriority.value = ''
+  instanceInitiatorId.value = null
+  tplPage.value = 1
+  tplSearch.keyword = ''
+  orgName.value = ''
+  fetchOrgInfo()
+  fetchStatusCounts()
+  if (activeTab.value === 'template') fetchTemplates()
+  else fetchInstances()
+})
+
 /** 从组织列表中获取当前所信息 */
 async function fetchOrgInfo() {
   try {

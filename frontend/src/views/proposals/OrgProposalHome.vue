@@ -114,7 +114,7 @@
 
 <script setup lang="ts">
 /** 所内方案主页 —— 该所方案列表 + 发起方案 */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -188,6 +188,18 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
+})
+
+// P1-41：跨组织切换（route.params.orgId 变化，组件复用、onMounted 不重跑）→ 重置筛选并重新加载
+watch(() => route.params.orgId, async () => {
+  // 切换组织后呈现干净列表：重置分页与筛选，避免带入上一组织的筛选条件/深页码
+  page.value = 1
+  statusFilter.value = 'all'
+  keyword.value = ''
+  orgName.value = ''
+  await loadOrgName()
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '方案管理', to: '/proposals' }, { label: orgName.value }])
+  await Promise.all([fetchList(), fetchStatusCounts()])
 })
 
 async function loadOrgName() {
