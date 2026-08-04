@@ -45,8 +45,6 @@ def _setup_service_mocks(mocker):
     # PDF 签名（service 内部按需导入，本测试不涉及真实 PDF）
     mocker.patch("app.services.pdf_signature.apply_signatures_to_files", AsyncMock())
     mocker.patch("app.services.pdf_signature.get_role_signature_defaults", return_value={})
-    # 物理文件系统：mock 为「文件不存在」，batch_delete_files_with_physical 跳过物理删除
-    mocker.patch("os.path.exists", return_value=False)
 
 
 # ============================================================

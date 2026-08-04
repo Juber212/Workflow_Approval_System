@@ -32,8 +32,8 @@ from app.core.config import settings
 # Mock 工厂 —— mock 通知/签名；物理文件系统按需（补交验证落盘需真实 exists）
 # ============================================================
 
-def _setup_mocks(mocker, mock_fs: bool = True):
-    """Mock 通知与 PDF 签名；mock_fs=True 时顺带 mock os.path.exists（对齐其余测试）"""
+def _setup_mocks(mocker):
+    """Mock 通知与 PDF 签名（物理文件系统保持真实，不 mock os.path.exists）"""
     for mod in ["task_service", "check_service", "approval_service", "endorsement_service"]:
         for fn in ["create_notification", "clear_related"]:
             mocker.patch(f"app.services.{mod}.{fn}", AsyncMock())
@@ -42,8 +42,6 @@ def _setup_mocks(mocker, mock_fs: bool = True):
     mocker.patch("app.engine.flow_engine.create_notification", AsyncMock())
     mocker.patch("app.services.pdf_signature.apply_signatures_to_files", AsyncMock())
     mocker.patch("app.services.pdf_signature.get_role_signature_defaults", return_value={})
-    if mock_fs:
-        mocker.patch("os.path.exists", return_value=False)
 
 
 # ============================================================
@@ -244,7 +242,7 @@ class TestSupplementFiles:
 
     async def test_supplement_after_completion(self, mysql_session, mocker, tmp_path):
         """流程完成后发起人补交 PDF → File 记录 + 操作日志 + 物理文件落盘"""
-        _setup_mocks(mocker, mock_fs=False)  # 需真实 os.path.exists 验证物理文件
+        _setup_mocks(mocker)
         db = mysql_session
         # 补交物理写入指向临时目录，测试结束自动清理
         mocker.patch.object(settings, "STORAGE_ROOT", str(tmp_path))

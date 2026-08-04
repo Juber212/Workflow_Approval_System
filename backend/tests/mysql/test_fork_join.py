@@ -38,7 +38,6 @@ def _setup_service_mocks(mocker):
     mocker.patch("app.engine.flow_engine.create_notification", AsyncMock())
     mocker.patch("app.services.pdf_signature.apply_signatures_to_files", AsyncMock())
     mocker.patch("app.services.pdf_signature.get_role_signature_defaults", return_value={})
-    mocker.patch("os.path.exists", return_value=False)
 
 
 # ============================================================

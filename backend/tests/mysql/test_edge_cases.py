@@ -157,17 +157,15 @@ class TestEdgeCases:
             await db.flush()
 
     async def test_unique_constraint_on_org_name(self, mysql_session):
-        """唯一约束：组织名重复 → IntegrityError"""
+        """唯一约束：组织名重复 → IntegrityError（name 有 UNIQUE 约束，必须抛错）"""
         db = mysql_session
         db.add(Organization(id=1, name="测试所", is_active=True))
         await db.flush()
 
+        # 同名组织插入必须被唯一约束拒绝，严格断言而非静默吞错
         db.add(Organization(id=2, name="测试所", is_active=True))
-        # 如果 name 有唯一约束，会报错
-        try:
+        with pytest.raises(IntegrityError):
             await db.flush()
-        except IntegrityError:
-            pass  # name 有 UNIQUE 约束 ✓
 
     async def test_work_node_requires_assignee(self, mysql_session):
         """工作节点 assignee_id 可空 → 允许不设负责人"""

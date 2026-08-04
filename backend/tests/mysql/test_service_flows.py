@@ -50,8 +50,6 @@ def _setup_service_mocks(mocker):
         except AttributeError:
             pass
 
-    # 文件系统（terminate）
-    mocker.patch("os.path.exists", return_value=False)
 
 
 # ============================================================
@@ -417,23 +415,26 @@ class TestEndorse:
         await db.flush()
 
         result = await approve(db, approval_id=ap.id, current_user_id=4, opinion="同意")
-
-        # difficulty=4 + 有 endorser → 节点 should be WAITING_ENDORSEMENT
+        # difficulty=4 + 有 endorser → 强制断言进入批准环节（无条件守卫，防「永远通过」）
+        assert result["all_approved"] is True
+        # 显式 flush：真实链路由 API 层 commit 落库，此处 flush 后节点状态才可断言
+        await db.flush()
         await db.refresh(work_node)
-        if result["all_approved"]:
-            # 如果有 endorser，approve 函数会创建 Endorsement 记录
-            endorsements = (await db.execute(
-                select(Endorsement).where(Endorsement.node_id == work_node.id)
-            )).scalars().all()
-            if len(endorsements) > 0:
-                en = endorsements[0]
-                assert en.endorser_id == 5
-                assert en.status == EndorsementStatus.PENDING
+        assert work_node.status == InstanceNodeStatus.WAITING_ENDORSEMENT
 
-                # 批准通过
-                from app.services.endorsement_service import endorse
-                en_result = await endorse(db, endorsement_id=en.id, current_user_id=5,
-                                         opinion="批准同意")
-                assert "通过" in en_result["message"]
-                await db.refresh(work_node)
-                assert work_node.status == InstanceNodeStatus.FINISHED
+        # Endorsement 记录必已创建
+        endorsements = (await db.execute(
+            select(Endorsement).where(Endorsement.node_id == work_node.id)
+        )).scalars().all()
+        assert len(endorsements) == 1
+        en = endorsements[0]
+        assert en.endorser_id == 5
+        assert en.status == EndorsementStatus.PENDING
+
+        # 批准通过 → 节点完成
+        from app.services.endorsement_service import endorse
+        en_result = await endorse(db, endorsement_id=en.id, current_user_id=5,
+                                  opinion="批准同意")
+        assert "通过" in en_result["message"]
+        await db.refresh(work_node)
+        assert work_node.status == InstanceNodeStatus.FINISHED
