@@ -586,6 +586,9 @@ function startAutoRefresh() {
     try {
       const summary = await fetchSummaryCounts()
       applySummaryToTabBadges(summary)
+      // P1-42：同时更新 notifyStore —— WS 断开时侧边栏角标也能兜底刷新
+      notifyStore.setCounts(summary.task_count, summary.check_count, summary.approval_count, summary.endorsement_count)
+      notifyStore.setTypedCounts(summary.project_pending, summary.proposal_pending)
     } catch { /* 静默失败 */ }
   }, 30000)
 }
