@@ -96,6 +96,36 @@ class TestCreateInstance:
         assert exc.value.code == ErrorCode.VALIDATION_ERROR
         assert "设计" in exc.value.message  # 指出未配置批准人的节点
 
+    @pytest.mark.asyncio
+    async def test_node_override_missing_user(self, mock_db):
+        """node_overrides 引用了不存在的用户 ID → 拒绝发起（P1-22）"""
+        from app.models import FlowTemplate, TemplateNode
+        tpl = FlowTemplate(id=1, name="模板", organization_id=1, type="project")
+        nodes = [
+            TemplateNode(id=1, template_id=1, name="发起", is_start=True, is_end=False, sort_order=1),
+            TemplateNode(id=2, template_id=1, name="设计", is_start=False, is_end=False, sort_order=2,
+                         assignee_id=1, checkers=[{"user_id": 3}], approvers=[{"user_id": 4}]),
+            TemplateNode(id=3, template_id=1, name="终审", is_start=False, is_end=True, sort_order=3),
+        ]
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=tpl),     # 0: SELECT template
+            MockResult(scalars_all=nodes),  # 1: SELECT template nodes
+            MockResult(scalars_all=[]),     # 2: SELECT template edges
+            MockResult(scalars_all=[]),     # 3: 人员 ID 存在性校验 → 999 不存在
+        ]
+
+        from app.schemas.instance import CreateInstanceRequest, NodeOverride
+        req = CreateInstanceRequest(
+            template_id=1, name="测试项目",
+            node_overrides=[NodeOverride(node_id=2, assignee_id=999)],
+        )
+
+        with pytest.raises(AppException) as exc:
+            await create_instance(mock_db, req, FakeUser())
+        assert exc.value.code == ErrorCode.VALIDATION_ERROR
+        assert "999" in exc.value.message
+
 
 # ============================================================
 # terminate_instance —— 终止实例

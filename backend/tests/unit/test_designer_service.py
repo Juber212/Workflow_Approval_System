@@ -54,23 +54,24 @@ class TestSaveDesignData:
             MockResult(scalar_one=tpl),                              # 0: SELECT template (FOR UPDATE)
             MockResult(scalars_all=[]),                              # 1: existing nodes → empty
             MockResult(scalars_all=[]),                              # 2: existing edges → empty
-            MockResult(scalar_one=None),                             # 3: create node_1 → check existing
-            MagicMock(),                                              # 4: add node_1
-            MagicMock(),                                              # 5: flush
-            MockResult(scalar_one=None),                             # 6: create node_2 → check existing
-            MagicMock(),                                              # 7: add node_2
-            MagicMock(),                                              # 8: flush
-            MockResult(scalar_one=None),                             # 9: create node_3 → check existing
-            MagicMock(),                                              # 10: add node_3
-            MagicMock(),                                              # 11: flush
-            MockResult(scalar_one=None),                             # 12: create edge_1 → check existing
-            MagicMock(),                                              # 13: add edge_1
-            MagicMock(),                                              # 14: flush
-            MockResult(scalar_one=None),                             # 15: create edge_2 → check existing
-            MagicMock(),                                              # 16: add edge_2
-            MagicMock(),                                              # 17: flush
+            MockResult(scalars_all=[2, 3, 4]),                        # 3: 人员 ID 存在性校验（P1-22）→ 全存在
+            MockResult(scalar_one=None),                             # 4: create node_1 → check existing
+            MagicMock(),                                              # 5: add node_1
+            MagicMock(),                                              # 6: flush
+            MockResult(scalar_one=None),                             # 7: create node_2 → check existing
+            MagicMock(),                                              # 8: add node_2
+            MagicMock(),                                              # 9: flush
+            MockResult(scalar_one=None),                             # 10: create node_3 → check existing
+            MagicMock(),                                              # 11: add node_3
+            MagicMock(),                                              # 12: flush
+            MockResult(scalar_one=None),                             # 13: create edge_1 → check existing
+            MagicMock(),                                              # 14: add edge_1
+            MagicMock(),                                              # 15: flush
+            MockResult(scalar_one=None),                             # 16: create edge_2 → check existing
+            MagicMock(),                                              # 17: add edge_2
+            MagicMock(),                                              # 18: flush
             # topological sort
-            MockResult(scalars_all=[]),                              # 18: SELECT nodes for topo
+            MockResult(scalars_all=[]),                              # 19: SELECT nodes for topo
         ]
 
         result = await save_design_data(mock_db, template_id=1,
@@ -79,6 +80,30 @@ class TestSaveDesignData:
         assert result["template_id"] == 1
         assert "node_count" in result
         assert "edge_count" in result
+
+    @pytest.mark.asyncio
+    async def test_save_node_missing_user(self, mock_db):
+        """节点配置了不存在的用户 ID → 拒绝保存（P1-22）"""
+        tpl = FlowTemplate(id=1, name="测试模板", type="project", organization_id=1)
+        nodes_data = [
+            {"id": "node_1", "name": "审批", "is_start": False, "is_end": False,
+             "assignee_id": 999, "approvers": [{"user_id": 3}], "checkers": [{"user_id": 4}]},
+        ]
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=tpl),   # 0: SELECT template (FOR UPDATE)
+            MockResult(scalars_all=[]),   # 1: existing nodes → empty
+            MockResult(scalars_all=[]),   # 2: existing edges → empty
+            MockResult(scalars_all=[]),   # 3: 人员 ID 存在性校验 → 999 不存在
+        ]
+
+        with pytest.raises(AppException) as exc:
+            await save_design_data(mock_db, template_id=1,
+                                   nodes_data=nodes_data, edges_data=[])
+        assert exc.value.code == ErrorCode.VALIDATION_ERROR
+        assert "999" in exc.value.message
+        assert "审批" in exc.value.message
 
 
 # ============================================================

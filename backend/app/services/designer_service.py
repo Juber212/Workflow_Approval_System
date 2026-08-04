@@ -52,6 +52,31 @@ async def save_design_data(
 
     logger.debug(f"[designer] 现有节点={len(existing_nodes)} 现有连线={len(existing_edges)}")
 
+    # === 1.5 节点人员 ID 存在性校验（P1-22，先于任何写操作）===
+    # 设计器里人员通常从用户搜索选择，此处兜底拦截悬空引用（脏数据/手工传 ID）
+    from app.services.validation_service import extract_person_ids, validate_user_ids_exist
+    missing_by_node: list[str] = []
+    for item in nodes_data:
+        person_ids: set[int] = set()
+        if item.get("assignee_id"):
+            person_ids.add(item["assignee_id"])
+        if item.get("endorser_id"):
+            person_ids.add(item["endorser_id"])
+        person_ids |= extract_person_ids(item.get("approvers"))
+        person_ids |= extract_person_ids(item.get("checkers"))
+        if person_ids:
+            missing = await validate_user_ids_exist(db, person_ids)
+            if missing:
+                node_label = item.get("name") or f"ID:{item.get('id')}"
+                missing_by_node.append(
+                    f"节点「{node_label}」配置了不存在的用户 ID：{'、'.join(map(str, sorted(missing)))}"
+                )
+    if missing_by_node:
+        raise AppException(
+            ErrorCode.VALIDATION_ERROR,
+            "模板保存失败：" + "；".join(missing_by_node),
+        )
+
     existing_node_ids = {n.id for n in existing_nodes}
     existing_edge_ids = {e.id for e in existing_edges}
     # 系统节点（开始/结束）的 ID，不可删除

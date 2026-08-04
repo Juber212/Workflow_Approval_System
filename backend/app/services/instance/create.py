@@ -29,6 +29,7 @@ from app.engine.flow_engine import (
     propagate_from_node,
 )
 from app.utils.workday import add_workdays
+from app.services.validation_service import extract_person_ids, validate_user_ids_exist
 
 
 
@@ -72,6 +73,25 @@ async def create_instance(
         for override in request.node_overrides:
             override_map[override.node_id] = override.model_dump(
                 exclude_none=True, exclude={"node_id"}
+            )
+
+    # ========== 3.5 人员 ID 存在性校验（P1-22） ==========
+    # node_overrides 里的负责人/审批人/校验人/批准人必须真实存在，
+    # 否则实例节点留下悬空引用，任务会分派给不存在的用户
+    if request.node_overrides:
+        person_ids: set[int] = set()
+        for override in request.node_overrides:
+            if override.assignee_id:
+                person_ids.add(override.assignee_id)
+            if override.endorser_id:
+                person_ids.add(override.endorser_id)
+            person_ids |= extract_person_ids(override.approvers)
+            person_ids |= extract_person_ids(override.checkers)
+        missing = await validate_user_ids_exist(db, person_ids)
+        if missing:
+            raise AppException(
+                ErrorCode.VALIDATION_ERROR,
+                f"以下用户 ID 不存在，请重新选择：{'、'.join(map(str, sorted(missing)))}",
             )
 
     # ========== 4. 创建 FlowInstance ==========

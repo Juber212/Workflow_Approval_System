@@ -1,10 +1,10 @@
-"""模板发布校验服务 —— 7 项校验 + BFS 连通性"""
+"""模板发布校验服务 —— 7 项校验 + BFS 连通性 + 人员 ID 存在性校验"""
 from collections import deque
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import FlowTemplate, TemplateNode, TemplateEdge
+from app.models import FlowTemplate, TemplateNode, TemplateEdge, User
 
 
 async def validate_template_for_publish(db: AsyncSession, template_id: int) -> list[str]:
@@ -158,3 +158,29 @@ def _optional_and_end_no_outgoing(
     for n in end_nodes:
         if n.id in adj:
             errors.append(f"结束节点「{n.name}」不应有出边")
+
+
+# ==================== 人员 ID 存在性校验（P1-22） ====================
+
+def extract_person_ids(raw) -> set[int]:
+    """从 approvers/checkers 提取用户 ID 集合（兼容 dict 与 int 两种历史格式）"""
+    ids: set[int] = set()
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                uid = item.get("user_id") or item.get("id")
+                if isinstance(uid, int):
+                    ids.add(uid)
+            elif isinstance(item, int):
+                ids.add(item)
+    return ids
+
+
+async def validate_user_ids_exist(db: AsyncSession, user_ids: set[int]) -> set[int]:
+    """批量校验用户 ID 存在性，返回缺失集合（空集 = 全部存在）"""
+    if not user_ids:
+        return set()
+    existing = set((await db.execute(
+        select(User.id).where(User.id.in_(list(user_ids)))
+    )).scalars().all())
+    return user_ids - existing
