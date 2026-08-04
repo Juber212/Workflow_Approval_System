@@ -138,7 +138,7 @@ storage/archive/{实例名称}/
 - ✅ Frontend (Vue3 + LogicFlow + Element Plus) — 全部页面完成
 - ✅ Backend (FastAPI + SQLAlchemy + JWT) — 全部模块完成
 - ✅ Flow Engine (FlowEngine 类 → API 层调用) — BFS 激活/传播/fork-join 汇合
-- ✅ 自动化测试 227 条（169 单元 + 39 集成 + 19 MySQL 真实），零业务逻辑 bug
+- ✅ 自动化测试 317 条（225 单元 + 65 集成 + 27 MySQL 真实），无已知未修复问题
 - ✅ 首页柱状图重写、签批预览、通知系统（WebSocket + 30s 轮询兜底）
 - ✅ 批准人（Endorser）+ 难度等级、方案（Proposal）模块、文件模板、节点预设
 - ✅ 截止时间逾期/临期行标色（全部列表页）
@@ -158,10 +158,10 @@ storage/archive/{实例名称}/
 
 | 类型 | 数量 | 位置 | 说明 |
 |------|:--:|------|------|
-| 单元测试 | 169 | `tests/unit/` | 内存运行，毫秒级 |
-| 集成测试 | 39 | `tests/integration/` | TestClient + mock_db |
-| MySQL 真实测试 | 19 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
-| **合计** | **227** | | **P0 批次新增 37 条** |
+| 单元测试 | 225 | `tests/unit/` | 内存运行，毫秒级 |
+| 集成测试 | 65 | `tests/integration/` | TestClient + mock_db（含真实 SQLite 单表测试） |
+| MySQL 真实测试 | 27 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
+| **合计** | **317** | | 当前全量通过（P1-47 后测试库凭据走环境变量） |
 
 运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
 

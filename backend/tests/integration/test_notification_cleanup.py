@@ -16,8 +16,8 @@ from app.services.notification_service import clear_related
 async def notif_session():
     """只建 notifications 表的 SQLite 会话
 
-    不用 conftest 的 sqlite_session（其 Base.metadata.create_all 因 operation_logs
-    复合主键在 SQLite 下报错，见 P1-48）。此处仅建本测试用到的表。
+    全量 Base.metadata.create_all 因 operation_logs 复合主键在 SQLite 下报错
+    （P1-48 已删除 conftest 的 sqlite_session 死 fixture），此处仅建本测试用到的表。
     """
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:

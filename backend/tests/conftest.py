@@ -10,8 +10,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import Base
-
 
 # ============================================================
 # 单元测试 fixtures —— Mock AsyncSession
@@ -105,37 +103,3 @@ def mock_db():
     return db
 
 
-@pytest.fixture
-def mock_db_factory(mock_db):
-    """返回一个总是产生同一个 mock_db 的异步生成器工厂
-
-    用法：
-        mocker.patch("app.api.deps.get_db", return_value=mock_db_factory)
-    """
-    async def _get_db():
-        yield mock_db
-    return _get_db()
-
-
-# ============================================================
-# 集成测试 fixtures —— SQLite 内存数据库
-# ============================================================
-
-@pytest.fixture
-async def sqlite_session():
-    """每个测试函数独立的 SQLite 会话（自动建表/回滚，函数级隔离）"""
-    from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
-
-    # 建表
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    # 创建会话
-    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with session_factory() as session:
-        yield session
-        await session.rollback()
-
-    await engine.dispose()
