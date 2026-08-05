@@ -41,6 +41,12 @@ def client_with_mocks():
     # SQLAlchemy 同步方法用 MagicMock（非 AsyncMock），避免 coroutine 未 await 警告
     mock_db.add = MagicMock()
     mock_db.delete = MagicMock()
+    # savepoint 上下文（notification_service 的 async with db.begin_nested()）——
+    # 不配置时 AsyncMock 默认行为产生未 await coroutine 的 RuntimeWarning（P2-7）
+    _nested_ctx = MagicMock()
+    _nested_ctx.__aenter__ = AsyncMock()
+    _nested_ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_db.begin_nested = MagicMock(return_value=_nested_ctx)
 
     async def override_get_db():
         yield mock_db
