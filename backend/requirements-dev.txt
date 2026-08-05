@@ -1,0 +1,17 @@
+# 企业流程审批系统 — 测试与开发工具依赖
+# P1-51：与运行时依赖分离，避免把测试/格式工具装进生产环境
+# 安装：pip install -r requirements-dev.txt（自动包含 requirements.txt 运行时依赖）
+
+-r requirements.txt
+
+# 测试
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-mock==3.15.1
+httpx==0.28.1
+aiosqlite==0.22.1  # 集成测试用 SQLite 内存数据库
+
+# 开发工具
+black==26.5.1
+isort==8.0.1
+mypy==2.2.0

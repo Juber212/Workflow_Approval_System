@@ -1,42 +1,33 @@
-# 企业流程审批系统 — 后端依赖
+# 企业流程审批系统 — 后端运行时依赖
 # Python 3.10+
+# P1-51：精确版本 pin，部署环境与开发环境保持一致，避免版本漂移
+# 安装：pip install -r requirements.txt
+# 测试/开发工具在 requirements-dev.txt（-r requirements.txt 引用本文件）
 
 # Web 框架
-fastapi>=0.115.0
-uvicorn[standard]>=0.34.0
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
 
 # 数据库
-sqlalchemy[asyncio]>=2.0.30
-aiomysql>=0.2.0
-alembic>=1.14.0
+sqlalchemy[asyncio]==2.0.36
+aiomysql==0.3.2
+alembic==1.14.1
 
 # 认证
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
 
 # 文件处理
-pypdf>=4.3.0
-Pillow>=10.4.0
+pypdf==6.14.2
+Pillow==12.2.0
 
 # 工作日计算（中国法定节假日 + 调休）
-chinesecalendar>=1.11.0
+chinesecalendar==1.11.0
 
 # 配置管理
-pydantic-settings>=2.6.0
+pydantic-settings==2.7.1
 
 # 异步任务队列（ARQ + Redis）
-arq>=0.26.0
-redis>=5.0.0
-hiredis>=2.3.0  # Redis 高性能解析器
-
-# 测试
-pytest>=8.0.0
-pytest-asyncio>=0.24.0
-pytest-mock>=3.14.0
-httpx>=0.28.0
-aiosqlite>=0.20.0  # 集成测试用 SQLite 内存数据库
-
-# 开发工具
-black>=24.0.0
-isort>=5.13.0
-mypy>=1.13.0
+arq==0.28.0
+redis==5.2.1
+hiredis==3.4.0  # Redis 高性能解析器
