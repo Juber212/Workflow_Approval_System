@@ -126,10 +126,13 @@
               :show-file-list="false"
               :http-request="(opt: any) => handleUpload(opt, folder.name)"
               :before-upload="beforeUpload"
+              :disabled="isFolderFull(folder)"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
               style="margin-top:8px"
             >
-              <el-button size="small" :loading="uploading">+ 上传到此文件夹</el-button>
+              <el-button size="small" :loading="uploading" :disabled="isFolderFull(folder)">
+                {{ isFolderFull(folder) ? '已达数量上限' : '+ 上传到此文件夹' }}
+              </el-button>
             </el-upload>
             <!-- 实时状态提示 -->
             <div v-if="!isFolderSatisfied(folder)" class="folder-warn">{{ getFolderWarning(folder) }}</div>
@@ -304,6 +307,20 @@ function resetConversionProgress() {
   stopProgressAnimation()
 }
 
+/** 进入转换等待时立即启动进度动画（不等首次轮询，避免转换过快时进度条来不及显示） */
+function bootProgressForCurrentFiles() {
+  if (!detail.value) return
+  const ids = new Set<number>()
+  detail.value.node_files.forEach((f) => {
+    if (f.conversion_status && f.conversion_status !== 'ready') {
+      ids.add(f.id)
+      fileProgress[f.id] = 15  // 立即给基础进度，让进度条可见
+    }
+  })
+  convertingIds.value = ids
+  if (ids.size > 0) startProgressAnimation()
+}
+
 /** 轮询状态同步到每文件进度条：ready 补 100%，converting 启动动画，failed 置红，pending 归零 */
 function syncConversionProgress(files: FileStatusItem[]) {
   const converting = new Set<number>()
@@ -455,6 +472,12 @@ function isFolderSatisfied(folder: FileFolderConfig): boolean {
   return count === folder.file_count  // 精确匹配
 }
 
+/** 文件夹是否已达精确数量上限（达到后禁止继续上传，防止超传导致提交校验失败） */
+function isFolderFull(folder: FileFolderConfig): boolean {
+  if (!folder.required || folder.file_count == null) return false
+  return getFolderFileCount(folder.name) >= folder.file_count
+}
+
 /** 文件夹状态标签 */
 function folderStatusLabel(folder: FileFolderConfig): string {
   if (!folder.required) return '可选'
@@ -468,6 +491,7 @@ function getFolderWarning(folder: FileFolderConfig): string {
   if (!folder.required) return ''
   if (folder.file_count == null) return count === 0 ? '⚠ 至少上传 1 个文件' : ''
   if (count < folder.file_count) return `⚠ 还需上传 ${folder.file_count - count} 个文件`
+  if (count > folder.file_count) return `⚠ 已达上限 ${folder.file_count} 个，请先移除多余文件`
   return ''
 }
 
@@ -549,8 +573,9 @@ async function handleSubmit() {
         if (result.conversion_pending) {
           // 文件需要后台转换，进入等待模式
           waitingConversion.value = true
-          resetConversionProgress()  // 重置每文件进度，等待轮询同步
-          // 启动轮询兜底（每 2 秒检查一次，直到全部完成或失败）
+          resetConversionProgress()  // 重置每文件进度
+          bootProgressForCurrentFiles()  // 立即启动进度动画，不等首次轮询
+          // 启动轮询兜底（每 1 秒检查一次，直到全部完成或失败）
           startConversionPolling(detail.value!.id)
           // 也监听 WebSocket 通知（由 notification.ts 的 useNotificationSocket 触发自定义事件）
           listenConversionDone()
@@ -611,7 +636,7 @@ function startConversionPolling(taskId: number) {
     } catch {
       // 轮询静默失败，下次继续
     }
-  }, 2000)
+  }, 1000)
 }
 
 /** 停止轮询 */
