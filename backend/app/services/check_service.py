@@ -26,6 +26,10 @@ from app.schemas.check import CheckListItem, CheckDetail
 from app.services.notification_service import create_notification, clear_related, clear_related_for_users
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.instance._helpers import compute_progress, compute_deadline_info
+from app.services.detail_helpers import (
+    fetch_users_map, user_name, load_instance_files, serialize_files,
+    node_signature_position, signature_image_url,
+)
 from app.services.file_service import batch_delete_files_with_physical
 
 logger = logging.getLogger(__name__)
@@ -129,12 +133,7 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         raise AppException(ErrorCode.FORBIDDEN, "仅校验人可查看详情")
 
     # 批量查询相关用户（一次 IN 查询替代 3 次独立查询）
-    user_ids_needed = {c.checker_id, inst.initiator_id, task.assignee_id}
-    user_ids_needed.discard(None)
-    users_result = await db.execute(
-        select(User).where(User.id.in_(user_ids_needed))
-    )
-    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    users_map = await fetch_users_map(db, {c.checker_id, inst.initiator_id, task.assignee_id})
     checker_user = users_map.get(c.checker_id)
     initiator = users_map.get(inst.initiator_id)
     submitter = users_map.get(task.assignee_id)
@@ -142,20 +141,8 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     total_nodes, current_node_index, all_nodes = await compute_progress(db, c.instance_id)
 
-    # 文件 —— 查实例全部文件（校验人需了解完整上下文）
-    files_result = await db.execute(
-        select(File).where(File.instance_id == c.instance_id).order_by(File.node_id, File.id.desc())
-    )
-    files = files_result.scalars().all()
-
-    # 批量查询文件所属节点名称
-    file_node_ids = list(set(f.node_id for f in files if f.node_id))
-    file_node_names: dict[int, str] = {}
-    if file_node_ids:
-        fn_result = await db.execute(
-            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
-        )
-        file_node_names = {row[0]: row[1] for row in fn_result.all()}
+    # 文件 —— 查实例全部文件 + 所属节点名称映射（校验人需了解完整上下文）
+    files, file_node_names = await load_instance_files(db, c.instance_id)
 
     # 并行校验进度（排除被系统终止的记录）
     all_checks_result = await db.execute(
@@ -204,36 +191,15 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
             }
             for n in all_nodes
         ],
-        files=[
-            {
-                "id": f.id,
-                "original_name": f.original_name,
-                "mime_type": f.mime_type,
-                "file_size": f.file_size,
-                "uploader_name": "",
-                "upload_type": f.upload_type,
-                "round": f.round,
-                "node_id": f.node_id,
-                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
-                "created_at": f.created_at.isoformat() if f.created_at else None,
-            }
-            for f in files
-        ],
+        files=serialize_files(files, file_node_names, with_upload_meta=True),
         # 仅本节点文件（签批预览用，后端过滤）
-        node_files=[
-            {
-                "id": f.id, "original_name": f.original_name,
-                "mime_type": f.mime_type, "file_size": f.file_size,
-                "round": f.round,
-            }
-            for f in files if f.node_id == c.node_id
-        ],
+        node_files=serialize_files(files, file_node_names, node_id=c.node_id),
         assignee_note=task.assignee_note,
         check_progress=[
             {
                 "id": ac.id,
                 "checker_id": ac.checker_id,
-                "checker_name": checker_users.get(ac.checker_id).real_name if checker_users.get(ac.checker_id) else "",
+                "checker_name": user_name(checker_users, ac.checker_id),
                 "status": ac.status,
                 "opinion": ac.opinion,
                 "round": ac.round or 1,
@@ -245,11 +211,9 @@ async def get_check_detail(db: AsyncSession, check_id: int, current_user_id: int
         require_assignee_signature=node.require_assignee_signature,
         require_checker_signature=node.require_checker_signature,
         require_approver_signature=node.require_approver_signature,
-        signature_x=node.signature_x,
-        signature_y=node.signature_y,
-        signature_page=node.signature_page,
+        **node_signature_position(node),
         # 当前校验人的签名图片 URL
-        current_signature_url=f"/api/v1/auth/users/{c.checker_id}/signature-image" if checker_user and checker_user.signature_image else None,
+        current_signature_url=signature_image_url(checker_user),
         # 角色维度签名默认配置
         role_signature=await get_role_signature_defaults(db, "checker"),
         decided_at=c.decided_at,

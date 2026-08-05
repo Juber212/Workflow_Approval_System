@@ -10,6 +10,10 @@ from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related, clear_related_for_users
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.instance._helpers import compute_progress, compute_deadline_info
+from app.services.detail_helpers import (
+    fetch_users_map, user_name, load_instance_files, serialize_files,
+    node_signature_position, signature_image_url,
+)
 from app.services.file_service import batch_delete_files_with_physical
 from app.models import (
     Approval,
@@ -217,32 +221,15 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         raise AppException(ErrorCode.FORBIDDEN, "仅审批人可查看")
 
     # 批量查询相关用户（一次 IN 查询替代 2 次独立查询）
-    user_ids_needed = {a.approver_id, inst.initiator_id}
-    user_ids_needed.discard(None)
-    users_result = await db.execute(
-        select(User).where(User.id.in_(user_ids_needed))
-    )
-    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    users_map = await fetch_users_map(db, {a.approver_id, inst.initiator_id})
     approver_user = users_map.get(a.approver_id)
     initiator = users_map.get(inst.initiator_id)
 
     # 查询实例所有节点（供 ProgressBar 流程进度条使用）
     total_nodes, current_node_index, all_nodes = await compute_progress(db, a.instance_id)
 
-    # 文件 —— 查实例全部文件（审批人需了解完整上下文）
-    files_result = await db.execute(
-        select(File).where(File.instance_id == a.instance_id).order_by(File.node_id, File.id.desc())
-    )
-    files = files_result.scalars().all()
-
-    # 批量查询文件所属节点名称
-    file_node_ids = [f.node_id for f in files if f.node_id]
-    file_node_names: dict[int, str] = {}
-    if file_node_ids:
-        fn_result = await db.execute(
-            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
-        )
-        file_node_names = {row[0]: row[1] for row in fn_result.all()}
+    # 文件 —— 查实例全部文件 + 所属节点名称映射（审批人需了解完整上下文）
+    files, file_node_names = await load_instance_files(db, a.instance_id)
 
     # 校验进度（排除被系统终止的记录）
     if a.task_id:
@@ -261,7 +248,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         check_progress = [
             {
                 "id": c.id, "checker_id": c.checker_id,
-                "checker_name": checker_users.get(c.checker_id).real_name if checker_users.get(c.checker_id) else "",
+                "checker_name": user_name(checker_users, c.checker_id),
                 "status": c.status, "opinion": c.opinion,
                 "round": c.round or 1,
                 "decided_at": c.decided_at.isoformat() if c.decided_at else None,
@@ -284,7 +271,7 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
     approval_progress = [
         {
             "id": ap.id, "approver_id": ap.approver_id,
-            "approver_name": approver_users.get(ap.approver_id).real_name if approver_users.get(ap.approver_id) else "",
+            "approver_name": user_name(approver_users, ap.approver_id),
             "status": ap.status, "opinion": ap.opinion,
             "signature_applied": ap.signature_applied,
             "round": ap.round or 1,
@@ -355,28 +342,9 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
             }
             for n in all_nodes
         ],
-        files=[
-            {
-                "id": f.id, "original_name": f.original_name,
-                "mime_type": f.mime_type,
-                "file_size": f.file_size,
-                "node_id": f.node_id,
-                "node_name": file_node_names.get(f.node_id, "") if f.node_id else "",
-                "uploader_name": "", "upload_type": f.upload_type,
-                "round": f.round,
-                "created_at": f.created_at.isoformat() if f.created_at else None,
-            }
-            for f in files
-        ],
+        files=serialize_files(files, file_node_names, with_upload_meta=True),
         # 仅本节点文件（签批预览用，后端过滤）
-        node_files=[
-            {
-                "id": f.id, "original_name": f.original_name,
-                "mime_type": f.mime_type, "file_size": f.file_size,
-                "round": f.round,
-            }
-            for f in files if f.node_id == a.node_id
-        ],
+        node_files=serialize_files(files, file_node_names, node_id=a.node_id),
         check_progress=check_progress,
         approval_progress=approval_progress,
         reject_target_nodes=reject_target_nodes,
@@ -385,11 +353,9 @@ async def get_approval_detail(db: AsyncSession, approval_id: int, current_user_i
         require_assignee_signature=node.require_assignee_signature,
         require_checker_signature=node.require_checker_signature,
         require_approver_signature=node.require_approver_signature,
-        signature_x=node.signature_x,
-        signature_y=node.signature_y,
-        signature_page=node.signature_page,
+        **node_signature_position(node),
         # 当前审批人的签名图片 URL
-        current_signature_url=f"/api/v1/auth/users/{a.approver_id}/signature-image" if approver_user and approver_user.signature_image else None,
+        current_signature_url=signature_image_url(approver_user),
         # 角色维度签名默认配置
         role_signature=await get_role_signature_defaults(db, "approver"),
         # 本审批记录的签名明细（从 signatures 表获取）

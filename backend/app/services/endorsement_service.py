@@ -12,7 +12,7 @@ from app.models import (
     Endorsement, FlowInstance, FlowTemplate, InstanceNode, Task,
     EndorsementStatus, InstanceNodeStatus, TaskStatus, ApprovalStatus,
     InstanceStatus, Signature, OperationLog,
-    File, CheckRecord, Approval, User,
+    File, CheckRecord, Approval,
 )
 from app.core.exceptions import AppException, ErrorCode
 from app.engine.flow_engine import propagate_from_node
@@ -20,6 +20,10 @@ from app.services.notification_service import create_notification, clear_related
 from app.services.pdf_signature import get_role_signature_defaults, create_signature_records
 from app.services.file_service import batch_delete_files_with_physical
 from app.services.instance._helpers import compute_deadline_info
+from app.services.detail_helpers import (
+    fetch_users_map, user_name, load_instance_files, serialize_files,
+    node_signature_position, signature_image_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -126,22 +130,8 @@ async def get_endorsement_detail(
             select(Task).where(Task.id == e.task_id)
         )).scalar_one_or_none()
 
-    # 查询实例全部文件（批准人需查看完整上下文，含之前所有节点文件）
-    files_result = await db.execute(
-        select(File).where(
-            File.instance_id == e.instance_id,
-        ).order_by(File.node_id, File.id.desc())
-    )
-    files = files_result.scalars().all()
-
-    # 批量查询文件所属节点名称
-    file_node_ids = list(set(f.node_id for f in files if f.node_id))
-    file_node_names: dict[int, str] = {}
-    if file_node_ids:
-        fn_result = await db.execute(
-            select(InstanceNode.id, InstanceNode.name).where(InstanceNode.id.in_(file_node_ids))
-        )
-        file_node_names = {row[0]: row[1] for row in fn_result.all()}
+    # 查询实例全部文件 + 所属节点名称映射（批准人需查看完整上下文，含之前所有节点文件）
+    files, file_node_names = await load_instance_files(db, e.instance_id)
 
     # 查询校验/审批记录
     checks_result = await db.execute(
@@ -163,11 +153,7 @@ async def get_endorsement_detail(
     # 批量查询校验人和审批人的真实姓名（与 approval_service 保持一致）
     checker_ids = list(set(c.checker_id for c in checks))
     approver_ids = list(set(a.approver_id for a in approvals))
-    name_user_ids = checker_ids + [uid for uid in approver_ids if uid not in checker_ids]
-    name_users_map: dict[int, User] = {}
-    if name_user_ids:
-        name_result = await db.execute(select(User).where(User.id.in_(name_user_ids)))
-        name_users_map = {u.id: u for u in name_result.scalars().all()}
+    name_users_map = await fetch_users_map(db, set(checker_ids + approver_ids))
 
     # 查询节点列表（进度链）
     nodes_result = await db.execute(
@@ -178,19 +164,12 @@ async def get_endorsement_detail(
     all_nodes = nodes_result.scalars().all()
 
     # 批量查询相关用户（一次 IN 查询替代 2 次独立查询）
-    user_ids_needed = {e.endorser_id, inst.initiator_id}
-    user_ids_needed.discard(None)
-    users_result = await db.execute(
-        select(User).where(User.id.in_(user_ids_needed))
-    )
-    users_map: dict[int, User] = {u.id: u for u in users_result.scalars().all()}
+    users_map = await fetch_users_map(db, {e.endorser_id, inst.initiator_id})
     endorser_user = users_map.get(e.endorser_id)
     initiator_user = users_map.get(inst.initiator_id)
 
     # 查询批准人签名图片
-    current_signature_url = None
-    if endorser_user and endorser_user.signature_image:
-        current_signature_url = f"/api/v1/auth/users/{endorser_user.id}/signature-image"
+    current_signature_url = signature_image_url(endorser_user)
 
     return {
         "id": e.id,
@@ -214,9 +193,7 @@ async def get_endorsement_detail(
         "opinion": e.opinion,
         "round": e.round,
         "require_endorser_signature": node.require_endorser_signature,
-        "signature_x": node.signature_x,
-        "signature_y": node.signature_y,
-        "signature_page": node.signature_page,
+        **node_signature_position(node),
         "current_signature_url": current_signature_url,
         "current_node_index": next(
             (i + 1 for i, n in enumerate(all_nodes) if n.id == e.node_id), 0
@@ -224,21 +201,15 @@ async def get_endorsement_detail(
         "total_nodes": len(all_nodes),
         "nodes": [{"id": n.id, "name": n.name, "status": n.status, "is_start": n.is_start, "is_end": n.is_end}
                    for n in all_nodes],
-        "files": [{"id": f.id, "original_name": f.original_name, "mime_type": f.mime_type,
-                    "file_size": f.file_size, "round": f.round,
-                    "node_id": f.node_id,
-                    "node_name": file_node_names.get(f.node_id, "") if f.node_id else ""}
-                   for f in files],
+        "files": serialize_files(files, file_node_names),
         # 仅本节点文件（签批预览用，后端过滤，不可信前端）
-        "node_files": [{"id": f.id, "original_name": f.original_name, "mime_type": f.mime_type,
-                         "file_size": f.file_size, "round": f.round}
-                        for f in files if f.node_id == node.id],
+        "node_files": serialize_files(files, file_node_names, node_id=node.id),
         "checks": [{"id": c.id, "checker_id": c.checker_id,
-                     "checker_name": name_users_map.get(c.checker_id).real_name if name_users_map.get(c.checker_id) else "",
+                     "checker_name": user_name(name_users_map, c.checker_id),
                      "status": c.status, "opinion": c.opinion,
                      "decided_at": c.decided_at} for c in checks],
         "approvals": [{"id": a.id, "approver_id": a.approver_id,
-                       "approver_name": name_users_map.get(a.approver_id).real_name if name_users_map.get(a.approver_id) else "",
+                       "approver_name": user_name(name_users_map, a.approver_id),
                        "status": a.status, "opinion": a.opinion,
                        "signature_applied": a.signature_applied,
                        "decided_at": a.decided_at} for a in approvals],
