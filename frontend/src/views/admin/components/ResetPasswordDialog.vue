@@ -43,8 +43,8 @@ const submitting = ref(false)
 async function handleSubmit() {
   submitting.value = true
   try {
+    // M22：不自行关闭——由父组件提交成功后关闭 v-model（失败时保留弹窗）
     emit('submit')
-    visible.value = false
   } finally {
     submitting.value = false
   }

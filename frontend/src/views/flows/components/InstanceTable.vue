@@ -151,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -173,6 +173,8 @@ const props = defineProps<{
   pageSize: number
   /** 是否显示所属组织列（全局视图为 true） */
   showOrgColumn?: boolean
+  /** M19：外部传入初始日期范围（如首页「本月归档」跳转预筛），非空时初始化日期筛选并刷新 */
+  initDateRange?: [string, string] | null
 }>()
 
 /** 组件内筛选条件（keyword/日期/优先级/发起人），随 refresh 事件上抛给父组件用于请求参数 */
@@ -227,6 +229,14 @@ const pageSize = computed({
 function resetPage() {
   if (props.page !== 1) emit('update:page', 1)
 }
+
+// M19：外部初始日期范围（首页「本月归档」跳转带本月起止日期）→ 初始化日期筛选并刷新
+watch(() => props.initDateRange, (val) => {
+  if (val) {
+    dateRange.value = val
+    emit('refresh', buildQuery())
+  }
+}, { immediate: true })
 
 /** 当前筛选条件（keyword/日期/优先级/发起人） */
 function buildQuery(): InstanceQuery {

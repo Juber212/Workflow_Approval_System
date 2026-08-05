@@ -243,22 +243,22 @@ async function fetchAll(showLoading = true) {
     }
     allDocs.value = docs
 
-    // 为每个包加载内部文档
-    const packs: PackItem[] = []
-    for (const cat of catRes.items || []) {
-      let documents: AdminDocTemplateItem[] = []
-      try {
-        const detail = await getAdminCategoryDetail(cat.id)
-        const docIdSet = new Set(detail.documents.map((d: any) => d.id))
-        documents = docs.filter(d => docIdSet.has(d.id))
-      } catch { /* ignore */ }
-
-      packs.push({
-        id: cat.id, name: cat.name, description: cat.description,
-        organization_id: cat.organization_id,
-        documents, expanded: true, _addIds: [],
+    // M32：并行加载每个包的内部文档（原串行逐个请求，包多时页面加载明显变慢）
+    const packs: PackItem[] = await Promise.all(
+      (catRes.items || []).map(async (cat): Promise<PackItem> => {
+        let documents: AdminDocTemplateItem[] = []
+        try {
+          const detail = await getAdminCategoryDetail(cat.id)
+          const docIdSet = new Set(detail.documents.map((d: any) => d.id))
+          documents = docs.filter(d => docIdSet.has(d.id))
+        } catch { /* ignore */ }
+        return {
+          id: cat.id, name: cat.name, description: cat.description,
+          organization_id: cat.organization_id,
+          documents, expanded: true, _addIds: [],
+        }
       })
-    }
+    )
     allPacks.value = packs
   } catch { /* ignore */ } finally {
     if (showLoading) loading.value = false

@@ -17,7 +17,8 @@
 
     <!-- 选择模板并填写业务信息（发起项目） -->
     <el-dialog v-model="showTemplatePicker" title="发起项目" width="560px" @close="resetPickerForm">
-      <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px" />
+      <el-input v-model="tplKeyword" placeholder="搜索模板名称" clearable style="margin-bottom:12px"
+        @input="onTplKeywordInput" @clear="onTplKeywordInput" />
       <el-table border
         :data="templateList" v-loading="pickerLoading"
         @row-click="handleSelectTemplate" style="cursor:pointer" max-height="280"
@@ -107,6 +108,7 @@
         @design="(id: number) => router.push({ name: 'FlowDesigner', params: { id } })"
         @delete="handleDelete"
         @page-change="handleTplPageChange"
+        @size-change="handleTplSizeChange"
       />
     </template>
 
@@ -204,6 +206,13 @@ const pickerCanConfirm = computed(() =>
 
 watch(showTemplatePicker, (val) => { if (val) { fetchTemplateList(); resetPickerForm() } })
 
+/** M20：搜索框 300ms 防抖重新拉取模板列表（原只绑 v-model 无事件，搜索形同虚设） */
+let tplKeywordTimer: number | undefined
+function onTplKeywordInput() {
+  if (tplKeywordTimer) clearTimeout(tplKeywordTimer)
+  tplKeywordTimer = window.setTimeout(() => { fetchTemplateList() }, 300)
+}
+
 /** 重置弹窗表单 */
 function resetPickerForm() {
   selectedTplId.value = null
@@ -273,6 +282,7 @@ const templates = ref<TemplateItem[]>([])
 const tplLoading = ref(false)
 const tplTotal = ref(0)
 const tplPage = ref(1)
+const tplPageSize = ref(20)  // M18：模板列表每页条数（配合 size-change 切换）
 const tplSearch = reactive({ keyword: '' })
 
 // ========== 模板表单 ==========
@@ -389,6 +399,7 @@ async function fetchTemplates() {
   try {
     const data = await getTemplates({
       page: tplPage.value,
+      page_size: tplPageSize.value,  // M18：切每页条数后按新 size 拉取（原后端默认 20 造成分页错位）
       organization_id: orgId.value,
       keyword: tplSearch.keyword || undefined,
     })
@@ -405,6 +416,13 @@ function handleTplSearch(params: { keyword: string }) {
 
 function handleTplPageChange(page: number) {
   tplPage.value = page
+  fetchTemplates()
+}
+
+/** M18：每页条数变更 → 重置到第一页并按新条数拉取 */
+function handleTplSizeChange(size: number) {
+  tplPageSize.value = size
+  tplPage.value = 1
   fetchTemplates()
 }
 

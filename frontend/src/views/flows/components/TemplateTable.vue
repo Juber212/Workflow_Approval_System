@@ -48,6 +48,7 @@
         :page-sizes="[10, 20, 50]"
         layout="total, sizes, prev, pager, next"
         @change="$emit('pageChange', $event)"
+        @size-change="$emit('sizeChange', $event)"
       />
     </div>
   </div>
@@ -73,6 +74,8 @@ const emit = defineEmits<{
   edit: [row: TemplateItem]
   delete: [id: number]
   pageChange: [page: number]
+  /** 每页条数变更（M18：原只绑 @change 导致切条数后仍用默认 page_size 拉取） */
+  sizeChange: [size: number]
 }>()
 
 const keyword = ref('')

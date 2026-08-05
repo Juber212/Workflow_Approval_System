@@ -72,8 +72,8 @@ async function handleSubmit() {
   if (!valid) return
   submitting.value = true
   try {
+    // M22：不自行关闭——由父组件提交成功后关闭 v-model（失败时保留用户输入，不丢数据）
     emit('submit', { name: form.name, description: form.description || null })
-    visible.value = false
   } finally {
     submitting.value = false
   }

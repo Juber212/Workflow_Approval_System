@@ -62,8 +62,8 @@
       <!-- 待办列表 -->
       <template v-if="activeTab === 'tasks'">
         <div class="list-toolbar">
-          <el-input v-model="taskKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchTasks" />
-          <el-select v-model="taskStatus" placeholder="状态" clearable style="width:140px" @change="fetchTasks">
+          <el-input v-model="taskKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleTaskSearch" />
+          <el-select v-model="taskStatus" placeholder="状态" clearable style="width:140px" @change="handleTaskSearch">
             <el-option label="待处理" value="pending" />
             <el-option label="处理中" value="processing" />
           </el-select>
@@ -101,7 +101,7 @@
       <!-- 校验列表 -->
       <template v-if="activeTab === 'checks'">
         <div class="list-toolbar">
-          <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchChecks" />
+          <el-input v-model="checkKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleCheckSearch" />
         </div>
         <el-table border :data="checks" stripe v-loading="checkLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'CheckDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
@@ -135,7 +135,7 @@
       <!-- 审批列表 -->
       <template v-if="activeTab === 'approvals'">
         <div class="list-toolbar">
-          <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchApprovals" />
+          <el-input v-model="approvalKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleApprovalSearch" />
         </div>
         <el-table border :data="approvals" stripe v-loading="approvalLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'ApprovalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
@@ -172,7 +172,7 @@
       <!-- 批准列表 -->
       <template v-if="activeTab === 'endorsements'">
         <div class="list-toolbar">
-          <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchEndorsements" />
+          <el-input v-model="endorsementKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleEndorsementSearch" />
         </div>
         <el-table border :data="endorsements" stripe v-loading="endorsementLoading" :row-class-name="(d: any) => deadlineRowClass(d)" @row-click="(row: any) => router.push({ name: 'EndorseDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="instance_name" label="项目" min-width="140" />
@@ -205,7 +205,7 @@
       <!-- 我发起的流程 -->
       <template v-if="activeTab === 'initiated'">
         <div class="list-toolbar">
-          <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="fetchInitiated" />
+          <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleInitiatedSearch" />
         </div>
         <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push({ name: 'InstanceDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="name" label="项目" min-width="140" />
@@ -326,7 +326,7 @@
       <!-- 我发起的方案 -->
       <template v-if="propActiveTab === 'initiated'">
         <div class="list-toolbar">
-          <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="fetchPropInitiated" />
+          <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="handlePropInitiatedSearch" />
         </div>
         <el-table border :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push({ name: 'ProposalDetail', params: { id: row.id } })" style="cursor:pointer">
           <el-table-column prop="name" label="方案名称" min-width="140" />
@@ -399,6 +399,33 @@ async function fetchTasks() {
     taskCount.value = data.total
     taskTotal.value = data.total
   } finally { taskLoading.value = false }
+}
+
+// ========== M21：筛选条件变化时先重置到第一页再拉取 ==========
+// 原实现：搜索/状态筛选直接 fetchXxx 用旧页码，深页码下筛选大概率空结果
+function handleTaskSearch() {
+  taskPage.value = 1
+  fetchTasks()
+}
+function handleCheckSearch() {
+  checkPage.value = 1
+  fetchChecks()
+}
+function handleApprovalSearch() {
+  approvalPage.value = 1
+  fetchApprovals()
+}
+function handleEndorsementSearch() {
+  endorsementPage.value = 1
+  fetchEndorsements()
+}
+function handleInitiatedSearch() {
+  initiatedPage.value = 1
+  fetchInitiated()
+}
+function handlePropInitiatedSearch() {
+  propInitiatedPage.value = 1
+  fetchPropInitiated()
 }
 
 // ========== 项目：校验 ==========

@@ -252,6 +252,20 @@ function handleStatusFilter(status: string) {
   fetchList()
 }
 
+// M19：首页「本月归档」卡片跳转带本月起止日期 → 预筛本月完成方案
+const initDateRange = computed<[string, string] | null>(() => {
+  const df = route.query.date_from as string | undefined
+  const dt = route.query.date_to as string | undefined
+  return df && dt ? [df, dt] : null
+})
+watch(initDateRange, (val) => {
+  if (val) {
+    dateRange.value = val
+    page.value = 1
+    fetchList()
+  }
+}, { immediate: true })
+
 // ── URL query ↔ 状态筛选 双向同步 ──
 watch(statusFilter, (val) => {
   if (route.query.status !== val) {

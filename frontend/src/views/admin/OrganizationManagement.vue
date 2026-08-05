@@ -152,6 +152,7 @@ async function handleFormSubmit(data: { name: string; description: string | null
     ElMessage.success('组织创建成功')
   }
   fetchList()
+  formVisible.value = false  // M22：提交成功后才关闭弹窗（失败时保留输入）
 }
 
 async function handleToggleStatus(row: OrgItem) {

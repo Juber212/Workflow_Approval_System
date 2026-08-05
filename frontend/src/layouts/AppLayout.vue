@@ -308,7 +308,8 @@ async function handleSignatureUpload(file: File): Promise<boolean> {
   try {
     const compressed = await compressSignatureImage(file)
     const result = await uploadSignatureApi(compressed)
-    if (result.signature_url) { userInfoDetail.value!.has_signature = true }
+    // M33：userInfoDetail 可能尚未加载（弹窗打开后异步 refresh）——空值时不强改，后续 refresh 会同步
+    if (result.signature_url && userInfoDetail.value) { userInfoDetail.value.has_signature = true }
     ElMessage.success('签名图片已上传')
     await refreshUserInfoDetail()
     await loadSignatureBlob()

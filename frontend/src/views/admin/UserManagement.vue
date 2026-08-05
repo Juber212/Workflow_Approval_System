@@ -250,6 +250,7 @@ async function handleFormSubmit(data: any) {
     ElMessage.success('用户创建成功，初始密码为系统默认密码')
   }
   fetchList()
+  formVisible.value = false  // M22：提交成功后才关闭弹窗（失败时保留输入）
 }
 
 // ========== 启禁用 ==========
@@ -273,6 +274,7 @@ function openResetPassword(row: UserItem) {
 async function handleResetPwdSubmit() {
   await resetUserPassword(resetPwdUserId.value)
   ElMessage.success('密码已重置为默认初始密码')
+  resetPwdVisible.value = false  // M22：提交成功后才关闭弹窗
 }
 </script>
 

@@ -201,7 +201,11 @@ async function loadOrgName() {
   } catch { orgName.value = `组织 #${orgId.value}` }
 }
 
+// M31：请求序号——跨组织快速切换时丢弃过期响应，防旧组织数据覆盖新组织
+let listSeq = 0
+
 async function fetchStatusCounts() {
+  const seq = ++listSeq
   try {
     const results = await Promise.all([
       getProposals({ page_size: 1, organization_id: orgId.value }),
@@ -209,6 +213,7 @@ async function fetchStatusCounts() {
       getProposals({ page_size: 1, organization_id: orgId.value, status: 'completed' }),
       getProposals({ page_size: 1, organization_id: orgId.value, status: 'terminated' }),
     ])
+    if (seq !== listSeq) return  // 过期响应丢弃
     statusCounts.value = {
       all: results[0].total,
       running: results[1].total,
@@ -220,6 +225,7 @@ async function fetchStatusCounts() {
 }
 
 async function fetchList() {
+  const seq = ++listSeq  // M31：过期响应丢弃（跨组织切换竞态）
   loading.value = true
   try {
     const data = await getProposals({
@@ -229,12 +235,16 @@ async function fetchList() {
       page: page.value,
       page_size: pageSize.value,
     })
+    if (seq !== listSeq) return  // 旧组织慢响应后到 → 丢弃
     proposals.value = data?.items || []
     total.value = data?.total || 0
   } catch {
+    if (seq !== listSeq) return
     proposals.value = []
     total.value = 0
-  } finally { loading.value = false }
+  } finally {
+    if (seq === listSeq) loading.value = false
+  }
 }
 
 function handleStatusFilter(status: string) { statusFilter.value = status; page.value = 1; fetchList() }

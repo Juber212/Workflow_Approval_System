@@ -25,6 +25,7 @@
       :loading="instanceLoading"
       :total="instanceTotal"
       :counts="statusCounts"
+      :init-date-range="initDateRange"
       show-org-column
       @refresh="fetchInstances"
       @refresh-counts="fetchStatusCounts"
@@ -38,7 +39,7 @@
  * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
 import { getInstances, type InstanceListItem } from '@/api/instance'
@@ -123,6 +124,13 @@ async function fetchInstances(query?: InstanceQuery) {
   } catch { /* 拦截器统一处理 */ }
   finally { instanceLoading.value = false }
 }
+
+// M19：首页「本月归档」卡片跳转带本月起止日期 → 预筛本月完成项目
+const initDateRange = computed<[string, string] | null>(() => {
+  const df = route.query.date_from as string | undefined
+  const dt = route.query.date_to as string | undefined
+  return df && dt ? [df, dt] : null
+})
 
 // ── URL query ↔ 状态筛选 双向同步 ──
 // 筛选变更 → 写入 URL

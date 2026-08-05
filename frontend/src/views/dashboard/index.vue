@@ -39,9 +39,9 @@
         <div class="stat-card__num stat-card__num--success">{{ curStats.archived_total }}</div>
         <div class="stat-card__label">已归档{{ catLabel }}</div>
       </div>
-      <!-- 本月归档 → 同已归档（用高级搜索日期筛选区分） -->
+      <!-- 本月归档 → 带本月起止日期跳转，列表页预筛本月完成（M19：原跳转全部已完成未按本月筛选） -->
       <div class="stat-card stat-card--info stat-card--clickable"
-           @click="$router.push(catTab === 'project' ? { name: 'Flows', query: { status: 'completed' } } : { name: 'Proposals', query: { status: 'completed' } })">
+           @click="$router.push(catTab === 'project' ? { name: 'Flows', query: { status: 'completed', ...monthDateQuery } } : { name: 'Proposals', query: { status: 'completed', ...monthDateQuery } })">
         <div class="stat-card__num stat-card__num--info">{{ curStats.archived_this_month }}</div>
         <div class="stat-card__label">本月归档</div>
       </div>
@@ -281,6 +281,14 @@ const curTrendPoints = computed(() => trendData.periods)
 
 // ─── 统计卡片 ───
 const catLabel = computed(() => catTab.value === 'project' ? '项目' : '方案')
+
+/** M19：本月归档卡片跳转带本月起止日期（列表页按日期预筛） */
+const monthDateQuery = computed(() => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return { date_from: fmt(start), date_to: fmt(now) }
+})
 const curStats = computed(() => catTab.value === 'project' ? data.stats : data.proposal_stats)
 /** 根据 tab 切换图表数据源 */
 const curOrgOverview = computed(() => catTab.value === 'project' ? data.org_overview : data.proposal_org_overview)

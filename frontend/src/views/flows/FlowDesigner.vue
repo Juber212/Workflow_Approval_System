@@ -198,6 +198,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
 import request from '@/api/request'
@@ -503,6 +504,17 @@ onMounted(async () => {
 
   const id = Number(route.params.id)
   if (!id) return
+
+  // M34：编辑模式前端即时拦截——非所长不可进入设计器（后端保存时仍 403 兜底，此为纵深防御）
+  if (!isLaunchMode.value) {
+    const userStore = useUserStore()
+    if (!userStore.isManager) {
+      ElMessage.error('仅所长可编辑模板')
+      router.replace({ name: 'TemplateDetail', params: { id } })
+      return
+    }
+  }
+
   loading.value = true
   try {
     const detail: TemplateDetail = await getTemplateDetail(id)
@@ -782,17 +794,20 @@ async function handleLaunch() {
 
   launching.value = true
   try {
-    // 1. 先保存模板最新设计（P2-2 与 handleSave 共用序列化）
-    const { nodes, edges } = buildDesignPayload(lf)
-    await saveDesign(templateId, { nodes, edges })
-
-    // 2. 收集节点覆盖配置（截止日期 + 人员调整）
+    // H1（第七轮审查）：发起不再写回共享模板——实例发起用 node_overrides 快照，
+    // 与模板解耦（业务规则 3），避免一次发起永久改动组织级共享模板、并发发起互相覆盖。
+    // 结构改动请通过编辑模式保存模板后再发起；发起只做「人员/截止日期」覆盖。
+    // 2. 收集节点覆盖配置（截止日期 + 负责人/校验人/审批人/批准人调整）
     const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const nodeOverrides: { node_id: number; deadline?: string; assignee_id?: number; checkers?: { user_id: number }[]; approvers?: { user_id: number }[] }[] = []
+    let hasNewWorkNode = false  // M17：新增工作节点不在模板中，无法随实例创建
     for (const n of graphData.nodes) {
-      // 只处理工作节点（有 db_id 的）且存在 deadline 属性
       const dbId = n.properties?.db_id
-      if (dbId == null) continue
+      // M17：新增节点（无 db_id）——非开始/结束的工作节点标记，发起时拦截提示
+      if (dbId == null) {
+        if (!n.properties?.is_start && !n.properties?.is_end) hasNewWorkNode = true
+        continue
+      }
       if (n.properties?.is_start || n.properties?.is_end) continue
       const override: any = { node_id: Number(dbId) }
       let hasOverride = false
@@ -801,7 +816,7 @@ async function handleLaunch() {
         override.deadline = n.properties.deadline
         hasOverride = true
       }
-      // 人员变更覆盖（与模板不同时才传）
+      // 人员变更覆盖（负责人 / 批准人）
       if (n.properties?.assignee_id != null) {
         override.assignee_id = n.properties.assignee_id
         hasOverride = true
@@ -810,7 +825,23 @@ async function handleLaunch() {
         (override as any).endorser_id = n.properties.endorser_id
         hasOverride = true
       }
+      // H1：校验人/审批人调整也进 override（原先只能靠写回模板生效，会污染共享模板）
+      if (n.properties?.checkers && n.properties.checkers.length > 0) {
+        override.checkers = n.properties.checkers
+        hasOverride = true
+      }
+      if (n.properties?.approvers && n.properties.approvers.length > 0) {
+        override.approvers = n.properties.approvers
+        hasOverride = true
+      }
       if (hasOverride) nodeOverrides.push(override)
+    }
+    // M17：发起模式下新增的工作节点不会进入实例（实例从模板复制）——拦截并提示，
+    // 避免「设计器里看到的节点发起后消失」的静默丢失
+    if (hasNewWorkNode) {
+      ElMessage.warning('发起模式下新增的工作节点不会进入实例，请先在「编辑」模式保存模板后再发起')
+      launching.value = false
+      return
     }
 
     // 3. 发起项目

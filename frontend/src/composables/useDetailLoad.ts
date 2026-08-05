@@ -21,8 +21,12 @@ export function useDetailLoad<T>(options: {
   const forbidden = ref(false)  // P1-34：403 无权限 → 渲染「无权查看」页
   const detail = ref<T | null>(null)
 
+  // M29：请求序号——同组件内快速切换记录时丢弃过期响应，防旧记录数据覆盖新记录
+  let reqSeq = 0
+
   /** 加载详情（onMounted + 路由参数变化共用） */
   async function load() {
+    const mySeq = ++reqSeq
     setBreadcrumb([
       { label: '首页', to: '/dashboard' },
       { label: '个人中心', to: '/profile' },
@@ -33,13 +37,16 @@ export function useDetailLoad<T>(options: {
     loading.value = true
     forbidden.value = false  // P1-34：同组件切换路由参数时重置 403 状态
     try {
-      detail.value = await options.loadFn(id)
+      const data = await options.loadFn(id)
+      if (mySeq !== reqSeq) return  // 过期响应丢弃（M29）
+      detail.value = data
       options.onLoaded?.(detail.value)
     } catch (e: any) {
+      if (mySeq !== reqSeq) return
       // 非本人记录后端返回 403 → 渲染「无权查看」页
       if (e?.status === 403) forbidden.value = true
     } finally {
-      loading.value = false
+      if (mySeq === reqSeq) loading.value = false
     }
   }
 

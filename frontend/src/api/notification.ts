@@ -1,6 +1,6 @@
 /** 通知 API —— 站内通知列表 + 未读数 + WebSocket 实时推送 */
 
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, type Ref } from 'vue'
 import request, { API_BASE, getToken } from './request'
 import { useNotificationStore } from '@/stores/notification'
 
@@ -107,21 +107,38 @@ export const NOTICE_TYPE_ICONS: Record<string, string> = {
   instance_terminated: '⛔',
 }
 
+// ========== M30：WebSocket 全局单例（引用计数） ==========
+// AppLayout 面包屑铃铛 + Dashboard 页铃铛各挂载一份 NotificationBell，若各自建连
+// 会在进出 Dashboard 时反复 WS 断连/重连。改为模块级单例：首个使用组件建连、
+// 最后一个组件卸载时断开，最新通知/未读数全局共享。
+const wsState: {
+  latestNotice: Ref<NotificationItem | null>
+  unreadCount: Ref<number>
+  wsConnected: Ref<boolean>
+  ws: WebSocket | null
+  reconnectTimer: ReturnType<typeof setTimeout> | null
+  disposed: boolean      // 所有组件已卸载标记（connect 入口检查，防孤儿连接）
+  manualClose: boolean   // 手动关闭标记（onclose 不再触发重连）
+  refCount: number       // 当前使用该连接的组件数
+} = {
+  latestNotice: ref(null),
+  unreadCount: ref(0),
+  wsConnected: ref(false),
+  ws: null,
+  reconnectTimer: null,
+  disposed: false,
+  manualClose: false,
+  refCount: 0,
+}
+
 /**
- * WebSocket 通知 Hook —— 自动连接/重连，暴露最新通知和未读数
+ * WebSocket 通知 Hook —— 全局单例连接（M30），暴露最新通知和未读数
  *
  * 用法（在组件 setup 中）：
  *   const { latestNotice, unreadCount, wsConnected } = useNotificationSocket()
  */
 export function useNotificationSocket() {
-  const latestNotice = ref<NotificationItem | null>(null)
-  const unreadCount = ref(0)
-  const wsConnected = ref(false)
-  let ws: WebSocket | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  // P1-30：孤儿连接防护——组件卸载后任何重连路径都必须拒绝建连
-  let disposed = false   // 组件已卸载标记（connect 入口检查）
-  let manualClose = false  // 手动关闭标记（onclose 不再触发重连）
+  const { latestNotice, unreadCount, wsConnected } = wsState
 
   /** 刷新侧边栏红点 + 个人中心角标（notifyStore）并派发事件供 profile 页面更新 Tab 角标 */
   function refreshStoreCounts() {
@@ -142,15 +159,17 @@ export function useNotificationSocket() {
   }
 
   function connect() {
-    // P1-30：组件已卸载则不再建连（防孤儿连接：卸载后的重连 timer 触发到此直接退出）
-    if (disposed) return
+    // P1-30：所有组件已卸载则不再建连（防孤儿连接：卸载后的重连 timer 触发到此直接退出）
+    if (wsState.disposed) return
     const token = getToken()
     if (!token) return
 
     const wsUrl = buildWsUrl()
 
+    let ws: WebSocket
     try {
       ws = new WebSocket(wsUrl)
+      wsState.ws = ws
     } catch {
       // WebSocket 不支持时静默降级
       return
@@ -158,9 +177,9 @@ export function useNotificationSocket() {
 
     ws.onopen = () => {
       // 连接建立后立即发送认证消息（首条消息，避免 token 出现在日志中）
-      ws!.send(JSON.stringify({ type: 'auth', token }))
+      ws.send(JSON.stringify({ type: 'auth', token }))
       wsConnected.value = true
-      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+      if (wsState.reconnectTimer) { clearTimeout(wsState.reconnectTimer); wsState.reconnectTimer = null }
     }
 
     ws.onmessage = (event) => {
@@ -189,10 +208,10 @@ export function useNotificationSocket() {
     ws.onclose = (event) => {
       wsConnected.value = false
       // 手动关闭（disconnect 发起）不重连
-      if (manualClose) { manualClose = false; return }
+      if (wsState.manualClose) { wsState.manualClose = false; return }
       // 认证失败（4001）不重连，其他情况 5 秒后自动重连（connect 入口会校验 disposed）
       if (event.code !== 4001) {
-        reconnectTimer = setTimeout(connect, 5000)
+        wsState.reconnectTimer = setTimeout(connect, 5000)
       }
     }
 
@@ -202,26 +221,34 @@ export function useNotificationSocket() {
   }
 
   function disconnect() {
-    disposed = true  // P1-30：组件已卸载，任何重连路径不再执行
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-    if (ws) {
-      manualClose = true   // 手动关闭：onclose 不再重连
-      ws.onclose = null    // 双保险：直接断开回调，避免 close 触发重连
-      ws.close()
-      ws = null
+    wsState.disposed = true  // P1-30：所有组件已卸载，任何重连路径不再执行
+    if (wsState.reconnectTimer) { clearTimeout(wsState.reconnectTimer); wsState.reconnectTimer = null }
+    if (wsState.ws) {
+      wsState.manualClose = true   // 手动关闭：onclose 不再重连
+      wsState.ws.onclose = null    // 双保险：直接断开回调，避免 close 触发重连
+      wsState.ws.close()
+      wsState.ws = null
     }
     wsConnected.value = false
   }
 
-  // 组件挂载时连接，卸载时断开
+  // M30：引用计数——首个组件挂载时建连，最后一个组件卸载时断开
   onMounted(() => {
     // 先拉取当前未读数
     fetchUnreadCount().then(res => { unreadCount.value = res.count }).catch(() => {})
-    connect()
+    wsState.refCount += 1
+    if (wsState.refCount === 1) {
+      wsState.disposed = false  // 重新进入页面：重置卸载标记，允许建连
+      connect()
+    }
   })
 
   onUnmounted(() => {
-    disconnect()
+    wsState.refCount -= 1
+    if (wsState.refCount <= 0) {
+      wsState.refCount = 0
+      disconnect()
+    }
   })
 
   return { latestNotice, unreadCount, wsConnected, fetchUnreadCount }

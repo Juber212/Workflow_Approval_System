@@ -79,9 +79,7 @@ interface ConfigMeta {
 }
 
 const CONFIG_META: Record<string, ConfigMeta> = {
-  // ── 文件上传 ──
-  allowed_file_extensions: { group: 'upload', label: '允许上传的文件扩展名', type: 'text' },
-  max_file_size_mb:        { group: 'upload', label: '上传文件大小限制(MB)', type: 'number' },
+  // ── 文件上传 ──（上传大小/允许扩展名由后端环境变量 settings 控制，不在页面配置——M28 假开关移除）
   // ── PDF 签名通用 ──
   pdf_signature_x:          { group: 'signature', label: '签名默认 X 坐标', type: 'number' },
   pdf_signature_y:          { group: 'signature', label: '签名默认 Y 坐标', type: 'number' },
@@ -97,8 +95,6 @@ const CONFIG_META: Record<string, ConfigMeta> = {
   pdf_signature_approver_y:  { group: 'signature', label: '审批人签名 Y 坐标', type: 'number' },
   pdf_signature_endorser_x:  { group: 'signature', label: '批准人签名 X 坐标', type: 'number' },
   pdf_signature_endorser_y:  { group: 'signature', label: '批准人签名 Y 坐标', type: 'number' },
-  // ── 通用 ──
-  default_time_limit_days: { group: 'general', label: '节点默认完成时限（工作日）', type: 'number' },
   // ── 过时配置（仍显示，但归入"其他"）──
   pdf_signature_page: { group: 'legacy', label: '签名默认页码（已过时）', type: 'number' },
 }

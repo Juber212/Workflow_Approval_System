@@ -176,6 +176,7 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
+    // M22：不自行关闭——由父组件提交成功后关闭 v-model（失败时保留用户输入）
     emit('submit', {
       username: form.username,
       real_name: form.real_name,
@@ -184,7 +185,6 @@ async function handleSubmit() {
       email: form.email || null,
       phone: form.phone || null,
     })
-    visible.value = false
   } catch {
     // 错误由父组件处理
   } finally {

@@ -245,7 +245,8 @@ export async function downloadFile(fileId: number): Promise<void> {
   const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
   const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
   const raw = starMatch?.[1] || plainMatch?.[1] || `file-${fileId}`
-  a.download = decodeURIComponent(raw)
+  // 文件名含非法 % 序列时 decodeURIComponent 抛 URIError → 兜底用原始名
+  try { a.download = decodeURIComponent(raw) } catch { a.download = raw }
   a.click()
   URL.revokeObjectURL(blobUrl)
 }
