@@ -21,7 +21,6 @@ from app.schemas.dashboard import (
     DashboardStats,
     BottleneckItem,
     OrgOverview,
-    MyPendingItem,
     TrendPoint,
     TrendData,
 )
@@ -41,27 +40,23 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
     now = datetime.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # 获取方案模板 ID 集合（用于区分项目/方案）
-    proposal_tpl_ids = set(
-        row[0] for row in (await db.execute(
-            select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
-        )).all()
-    )
-
-    # 项目实例过滤条件：非方案模板
-    not_proposal = FlowInstance.template_id.notin_(proposal_tpl_ids) if proposal_tpl_ids else True
+    # M15：项目/方案区分改用实例快照 template_type（不依赖模板是否仍存在）——
+    # 方案模板被删除后，已完成/已终止的方案实例若按 template_id 集合判断会被误算为项目，
+    # 与列表页「template_type 快照」口径统一
+    project_filter = FlowInstance.template_type == "project"
+    proposal_filter = FlowInstance.template_type == "proposal"
 
     # ─── 1. 项目四大统计卡片 ───
 
     running_count = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
-            FlowInstance.status == "running", not_proposal
+            FlowInstance.status == "running", project_filter
         )
     )).scalar() or 0
 
     archived_count = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
-            FlowInstance.status == "completed", not_proposal
+            FlowInstance.status == "completed", project_filter
         )
     )).scalar() or 0
 
@@ -69,7 +64,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
         select(func.count()).select_from(FlowInstance).where(
             FlowInstance.status == "completed",
             FlowInstance.completed_at >= month_start,
-            not_proposal,
+            project_filter,
         )
     )).scalar() or 0
 
@@ -83,7 +78,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
             Task.status.notin_(["completed", "terminated"]),
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
-            not_proposal,
+            project_filter,
         )
     )).scalar() or 0
 
@@ -95,21 +90,20 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
     }
 
     # ─── 1b. 方案四大统计卡片 ───
-    is_proposal = FlowInstance.template_id.in_(proposal_tpl_ids) if proposal_tpl_ids else False
 
     prop_total = (await db.execute(
-        select(func.count()).select_from(FlowInstance).where(is_proposal)
+        select(func.count()).select_from(FlowInstance).where(proposal_filter)
     )).scalar() or 0
 
     prop_running = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
-            FlowInstance.status == "running", is_proposal
+            FlowInstance.status == "running", proposal_filter
         )
     )).scalar() or 0
 
     prop_completed = (await db.execute(
         select(func.count()).select_from(FlowInstance).where(
-            FlowInstance.status == "completed", is_proposal
+            FlowInstance.status == "completed", proposal_filter
         )
     )).scalar() or 0
 
@@ -117,7 +111,7 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
         select(func.count()).select_from(FlowInstance).where(
             FlowInstance.status == "completed",
             FlowInstance.completed_at >= month_start,
-            is_proposal,
+            proposal_filter,
         )
     )).scalar() or 0
 
@@ -130,12 +124,12 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
     )
 
     # ─── 2. 流程卡点追踪（项目 + 方案分开；列表取前 N 条 + 真实总数，防运行中实例量级拖慢首页） ───
-    bottleneck, bottleneck_total = await _get_bottleneck_tracking(db, now, exclude_proposal_tpl_ids=proposal_tpl_ids)
-    proposal_bottleneck, proposal_bottleneck_total = await _get_bottleneck_tracking(db, now, proposal_only_tpl_ids=proposal_tpl_ids)
+    bottleneck, bottleneck_total = await _get_bottleneck_tracking(db, now, template_type="project")
+    proposal_bottleneck, proposal_bottleneck_total = await _get_bottleneck_tracking(db, now, template_type="proposal")
 
     # ─── 3. 各所流程概览（项目 + 方案分开，前端 tab 切换） ───
-    org_overview = await _get_org_overview(db, exclude_proposal_tpl_ids=proposal_tpl_ids)
-    proposal_org_overview = await _get_org_overview(db, proposal_only_tpl_ids=proposal_tpl_ids)
+    org_overview = await _get_org_overview(db, template_type="project")
+    proposal_org_overview = await _get_org_overview(db, template_type="proposal")
 
     # ─── 4. 我的待办（个人列表，P1-33 已 Top 8 + 真实计数） ───
     if user_id:
@@ -162,14 +156,12 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
 async def _get_bottleneck_tracking(
     db: AsyncSession,
     now: datetime,
-    exclude_proposal_tpl_ids: set = frozenset(),
-    proposal_only_tpl_ids: set = frozenset(),
+    template_type: str | None = None,
 ) -> tuple[list[BottleneckItem], int]:
     """流程卡点追踪 —— 运行中实例的节点进度链（PRD §4.5）
 
     Args:
-        exclude_proposal_tpl_ids: 排除这些模板 ID（用于项目）
-        proposal_only_tpl_ids: 仅统计这些模板 ID（用于方案）
+        template_type: "project" | "proposal"（M15：改用实例快照 template_type 口径）
 
     Returns:
         (items, total)：items 仅取前 _BOTTLENECK_LIMIT 条（按优先级 + 发起时间排序），
@@ -177,10 +169,8 @@ async def _get_bottleneck_tracking(
     """
     # 构建过滤条件
     conditions = [FlowInstance.status == "running"]
-    if exclude_proposal_tpl_ids:
-        conditions.append(FlowInstance.template_id.notin_(exclude_proposal_tpl_ids))
-    elif proposal_only_tpl_ids:
-        conditions.append(FlowInstance.template_id.in_(proposal_only_tpl_ids))
+    if template_type:
+        conditions.append(FlowInstance.template_type == template_type)
 
     # 真实运行中实例总数（独立 count 走 idx_status 索引，避免全量拉取实例再 len）
     total = (await db.execute(
@@ -356,15 +346,12 @@ async def _get_bottleneck_tracking(
 
 async def _get_org_overview(
     db: AsyncSession,
-    exclude_proposal_tpl_ids: set = frozenset(),
-    proposal_only_tpl_ids: set = frozenset(),
+    template_type: str | None = None,
 ) -> list[OrgOverview]:
     """各所流程概览 —— 按组织统计项目/方案数（PRD §4.7）
 
     Args:
-        exclude_proposal_tpl_ids: 排除这些模板 ID（用于项目概览）
-        proposal_only_tpl_ids: 仅统计这些模板 ID（用于方案概览）
-        两个参数互斥，同时只传一个。
+        template_type: "project" | "proposal"（M15：改用实例快照 template_type 口径）
 
     返回每个组织的：全部、运行中、已完成 三组数据，
     供前端柱状图和饼图渲染。
@@ -380,10 +367,8 @@ async def _get_org_overview(
 
     # 构建过滤条件
     conditions = [FlowInstance.organization_id.in_(org_ids)]
-    if exclude_proposal_tpl_ids:
-        conditions.append(FlowInstance.template_id.notin_(exclude_proposal_tpl_ids))
-    elif proposal_only_tpl_ids:
-        conditions.append(FlowInstance.template_id.in_(proposal_only_tpl_ids))
+    if template_type:
+        conditions.append(FlowInstance.template_type == template_type)
 
     # 一次性按组织 + 状态分组统计（单个 SQL，避免 N+1）
     from sqlalchemy import func
@@ -585,14 +570,8 @@ async def get_flow_trends(
     """
     now = datetime.now()
 
-    # ── 1. 项目/方案口径（与 get_dashboard_stats 一致） ──
-    proposal_tpl_ids = set(row[0] for row in (await db.execute(
-        select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
-    )).all())
-    if category == "proposal":
-        inst_filter = FlowInstance.template_id.in_(proposal_tpl_ids) if proposal_tpl_ids else False
-    else:
-        inst_filter = FlowInstance.template_id.notin_(proposal_tpl_ids) if proposal_tpl_ids else True
+    # ── 1. 项目/方案口径（M15：改用实例快照 template_type，与统计卡片一致，不依赖模板存在性） ──
+    inst_filter = FlowInstance.template_type == category
 
     # ── 2. 时间范围（仅 month 粒度需要下限；year 全历史） ──
     gran = _GRAN_YEAR if granularity == "year" else _GRAN_MONTH
@@ -608,9 +587,9 @@ async def get_flow_trends(
         end = None  # 无上限（同当前月）
 
     def _range(column) -> list:
-        """按粒度构造时间范围条件（归档量需先排除 completed_at 为空）"""
+        """按粒度构造时间范围条件（两时间列都排除 NULL——发起量理论非空，防御脏数据防 int(None) 500）"""
         conds = []
-        if column is FlowInstance.completed_at:
+        if column in (FlowInstance.initiated_at, FlowInstance.completed_at):
             conds.append(column.isnot(None))
         if start is not None:
             conds.append(column >= start)

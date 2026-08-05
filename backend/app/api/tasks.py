@@ -20,6 +20,7 @@ from app.services.document_service import (
     collect_instance_doc_ids,
 )
 from app.api.deps import get_current_active_user, CurrentUser
+from app.services.detail_helpers import is_instance_participant
 from app.models import Task, InstanceNode, File, DocumentTemplate, FlowInstance, TemplateDocumentLink, TemplateCategory, TemplateCategoryDocument
 from app.models.enums import TaskStatus
 from sqlalchemy import select
@@ -255,12 +256,13 @@ async def download_file(
     if f is None:
         raise AppException(ErrorCode.NOT_FOUND, "文件不存在")
 
-    # 归属校验：检查文件所属实例的组织是否与当前用户组织一致（管理员除外）
+    # 归属校验（M7）：管理员 或 实例参与者可下载——跨所协作下审批人/负责人也可能来自其他组织，
+    # 与「跨所协作」规则一致（原仅校验同组织导致跨所参与者被 403 阻断文件查看）
     if "system_admin" not in current_user.roles and f.instance_id:
         inst = (await db.execute(
             select(FlowInstance).where(FlowInstance.id == f.instance_id)
         )).scalar_one_or_none()
-        if inst is None or inst.organization_id != current_user.organization_id:
+        if inst is None or not await is_instance_participant(db, inst, current_user.id):
             raise AppException(ErrorCode.FORBIDDEN, "无权访问此文件")
 
     # 安全解析文件路径（防路径遍历攻击）

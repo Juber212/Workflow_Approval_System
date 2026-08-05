@@ -37,7 +37,7 @@ async def convert_to_pdf(file_path: str) -> str | None:
 
     async with _semaphore:
         try:
-            if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+            if ext in (".png", ".jpg", ".jpeg"):
                 return await _image_to_pdf(file_path)
             elif ext in (".doc", ".docx", ".xls", ".xlsx"):
                 return await _libreoffice_convert(file_path)
@@ -104,6 +104,10 @@ async def _libreoffice_convert(input_path: str) -> str | None:
             logger.warning(f"[PDF转换] LibreOffice 超时 (attempt={attempt + 1}/2): file={input_path}")
             if proc:
                 proc.kill()
+                try:
+                    await proc.wait()  # M26：收割子进程，防 soffice 泄漏
+                except Exception:
+                    pass
             if attempt == 0:
                 await asyncio.sleep(2)
 

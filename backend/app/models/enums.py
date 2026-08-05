@@ -27,7 +27,6 @@ class InstanceNodeStatus(str, enum.Enum):
     WAITING_APPROVAL = "waiting_approval"
     WAITING_ENDORSEMENT = "waiting_endorsement"
     FINISHED = "finished"
-    REJECTED = "rejected"
     TERMINATED = "terminated"
 
 
@@ -39,7 +38,6 @@ class TaskStatus(str, enum.Enum):
     WAITING_APPROVAL = "waiting_approval"
     WAITING_ENDORSEMENT = "waiting_endorsement"
     COMPLETED = "completed"
-    REJECTED = "rejected"
     TERMINATED = "terminated"
 
 

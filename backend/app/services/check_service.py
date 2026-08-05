@@ -290,7 +290,10 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
     if not has_pending:
         # 全部校验通过 → 批量写入所有校验人签名到 PDF
-        node = (await db.execute(select(InstanceNode).where(InstanceNode.id == c.node_id))).scalar_one_or_none()
+        # M24：推进前对节点行加锁，与紧急换人（change.py 锁 node）串行，防 TOCTOU
+        node = (await db.execute(
+            select(InstanceNode).where(InstanceNode.id == c.node_id).with_for_update()
+        )).scalar_one_or_none()
         if node is None:
             raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
         if node.require_checker_signature:

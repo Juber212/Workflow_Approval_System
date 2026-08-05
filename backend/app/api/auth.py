@@ -249,11 +249,14 @@ async def upload_signature(
     if file.content_type not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
         raise AppException(ErrorCode.BAD_REQUEST, "仅支持 PNG/JPG/GIF/WebP 格式")
 
-    # 读取文件内容以校验大小
-    contents = await file.read()
+    # M6：先流式校验大小再读取——防超大文件全量读入内存 OOM（复用 file_service.upload_file 模式）
+    file.file.seek(0, 2)  # os.SEEK_END
+    file_size = file.file.tell()
+    file.file.seek(0)
     max_size = 500 * 1024  # 500KB
-    if len(contents) > max_size:
+    if file_size > max_size:
         raise AppException(ErrorCode.BAD_REQUEST, "签名图片不能超过 500KB")
+    contents = await file.read()
 
     # 查询用户
     stmt = select(User).where(User.id == current_user.id)
@@ -284,6 +287,11 @@ async def upload_signature(
         from io import BytesIO
         img = Image.open(BytesIO(contents))
 
+        # M3：解码前预检像素尺寸——open 只读头部不解码，防「解压炸弹」（高分辨率小体积图全量解码 OOM）
+        w, h = img.size
+        if w > 4000 or h > 4000:
+            raise AppException(ErrorCode.BAD_REQUEST, "图片尺寸过大")
+
         # 统一转为 RGBA（保留透明通道，不合成白底）
         if img.mode == "P":
             img = img.convert("RGBA")
@@ -292,8 +300,7 @@ async def upload_signature(
         elif img.mode == "L":
             img = img.convert("RGB")
 
-        # 限制最大宽高，保持比例
-        w, h = img.size
+        # 限制最大宽高，保持比例（宽高已在预检中读取）
         ratio_w = 400 / w if w > 400 else 1.0
         ratio_h = 120 / h if h > 120 else 1.0
         ratio = min(ratio_w, ratio_h)

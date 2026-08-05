@@ -40,7 +40,7 @@ class TestOrgOverview:
             ]),
         ]
 
-        result = await _get_org_overview(mock_db, exclude_proposal_tpl_ids={10, 20})
+        result = await _get_org_overview(mock_db, template_type="project")
 
         assert len(result) == 1
         assert result[0].org_id == 1
@@ -62,7 +62,7 @@ class TestOrgOverview:
             ]),
         ]
 
-        result = await _get_org_overview(mock_db, proposal_only_tpl_ids={30})
+        result = await _get_org_overview(mock_db, template_type="proposal")
 
         assert len(result) == 1
         assert result[0].running_count == 2
@@ -174,13 +174,11 @@ class TestBottleneckTracking:
         ]
 
         now = datetime.now()
-        # 用 exclude_proposal_tpl_ids 排除方案
-        items, total = await _get_bottleneck_tracking(
-            mock_db, now, exclude_proposal_tpl_ids={10, 20, 30}
-        )
+        # M15：用 template_type 快照口径（原 exclude_proposal_tpl_ids 语义 → "project"）
+        items, total = await _get_bottleneck_tracking(mock_db, now, template_type="project")
 
         assert total == 1
-        assert len(items) == 1  # template_id=5 不在排除列表中
+        assert len(items) == 1  # 项目类型实例返回
 
 
 # ============================================================
@@ -247,11 +245,6 @@ class TestMyPendingItems:
 class TestFlowTrends:
     """get_flow_trends 聚合、补零与口径逻辑"""
 
-    @staticmethod
-    def _tpl_query(rows):
-        """构造「查方案模板 ID 集合」的 MockResult（select FlowTemplate.id where type=proposal）"""
-        return MockResult(rows_all=rows)
-
     @pytest.mark.asyncio
     async def test_month_default_last_12(self, mock_db):
         """近 12 个月：连续 12 点，无数据补零，末点为当前月"""
@@ -264,9 +257,8 @@ class TestFlowTrends:
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
-            MockResult(rows_all=[(cur_key, 5), (prev_key, 3)]),  # 发起量
-            MockResult(rows_all=[(cur_key, 2)]),                 # 归档量
+            MockResult(rows_all=[(cur_key, 5), (prev_key, 3)]),  # 发起量聚合
+            MockResult(rows_all=[(cur_key, 2)]),                 # 归档量聚合
         ]
 
         result = await get_flow_trends(mock_db, "month", "project")
@@ -293,7 +285,6 @@ class TestFlowTrends:
         """指定年份：返回该年 12 个月，范围外数据（其他年份 key）不混入"""
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
             # 发起量聚合（2024-12 属范围外，不应出现在 2025 结果中）
             MockResult(rows_all=[("2025-03", 4), ("2024-12", 9)]),
             MockResult(rows_all=[]),
@@ -316,9 +307,8 @@ class TestFlowTrends:
         now_year = datetime.now().year
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
-            MockResult(rows_all=[("2025", 10), ("2024", 8)]),  # 发起量
-            MockResult(rows_all=[("2025", 6)]),                # 归档量
+            MockResult(rows_all=[("2025", 10), ("2024", 8)]),  # 发起量聚合
+            MockResult(rows_all=[("2025", 6)]),                # 归档量聚合
         ]
 
         result = await get_flow_trends(mock_db, "year", "project")
@@ -341,9 +331,8 @@ class TestFlowTrends:
         """年度无任何数据 → 空 periods（不报错）"""
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
-            MockResult(rows_all=[]),
-            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),  # 发起量聚合
+            MockResult(rows_all=[]),  # 归档量聚合
         ]
 
         result = await get_flow_trends(mock_db, "year", "project")
@@ -351,32 +340,30 @@ class TestFlowTrends:
         assert result.periods == []
 
     @pytest.mark.asyncio
-    async def test_proposal_filter_uses_in(self, mock_db):
-        """方案口径：过滤条件为 template_id IN（方案模板集合），与统计卡片口径一致"""
+    async def test_proposal_filter_uses_template_type(self, mock_db):
+        """方案口径：过滤条件为 template_type = 'proposal'（实例快照，M15）"""
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
-            MockResult(rows_all=[]),
-            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),  # 发起量聚合
+            MockResult(rows_all=[]),  # 归档量聚合
         ]
 
         await get_flow_trends(mock_db, "month", "proposal")
 
-        # 第二次 execute = 发起量聚合，编译后 SQL 应含 template_id IN
-        initiated_stmt = mock_db.execute.call_args_list[1][0][0]
-        assert "template_id IN (" in str(initiated_stmt)
+        # 第一个 execute = 发起量聚合，编译后 SQL 应含 template_type 过滤（参数化渲染）
+        initiated_stmt = mock_db.execute.call_args_list[0][0][0]
+        assert "template_type =" in str(initiated_stmt)
 
     @pytest.mark.asyncio
-    async def test_project_filter_uses_notin(self, mock_db):
-        """项目口径：过滤条件为 template_id NOT IN（排除方案模板）"""
+    async def test_project_filter_uses_template_type(self, mock_db):
+        """项目口径：过滤条件为 template_type = 'project'（实例快照，M15）"""
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            self._tpl_query([(10,), (20,)]),
-            MockResult(rows_all=[]),
-            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),  # 发起量聚合
+            MockResult(rows_all=[]),  # 归档量聚合
         ]
 
         await get_flow_trends(mock_db, "month", "project")
 
-        initiated_stmt = mock_db.execute.call_args_list[1][0][0]
-        assert "template_id NOT IN" in str(initiated_stmt)
+        initiated_stmt = mock_db.execute.call_args_list[0][0][0]
+        assert "template_type =" in str(initiated_stmt)

@@ -10,7 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from app.core.security import decode_access_token
-from app.core.token_blacklist import is_blacklisted
+from app.core.token_blacklist import is_blacklisted, get_password_version
 from app.core.database import async_session_factory
 from app.models.user import User
 from app.services.ws_manager import manager
@@ -65,6 +65,16 @@ async def websocket_endpoint(websocket: WebSocket):
     if await is_blacklisted(payload.get("jti", "")):
         await websocket.close(code=4001, reason="token 已失效，请重新登录")
         return
+
+    # 密码版本号检查（M2）：与 HTTP 中间件一致——改密/重置密码后旧 token 不能建立 WS 连接，
+    # 否则凭据轮换会被 WS 通道绕过（旧连接仍可持续接收实时通知）
+    sub = payload.get("sub")
+    iat = payload.get("iat", 0)
+    if sub and iat:
+        pwd_version = await get_password_version(int(sub))
+        if pwd_version and iat < pwd_version:
+            await websocket.close(code=4001, reason="凭据已更新，请重新登录")
+            return
 
     user_id = int(payload.get("sub", 0))
     if not user_id:

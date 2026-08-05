@@ -325,15 +325,19 @@ async def endorse(
     await db.flush()
 
     # 6. 查询节点和实例信息
-    node = await _get_node(db, e.node_id)
+    # M24：批准推进前对节点行加锁，与紧急换人（change.py 锁 node）串行，防 TOCTOU
+    node = await _get_node(db, e.node_id, lock=True)
     if node is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
+    # M23：完成分支对实例行加锁并校验未终止——防止 terminate 与批准并发时把已终止实例改写为已完成
     inst = (await db.execute(
-        select(FlowInstance).where(FlowInstance.id == e.instance_id)
+        select(FlowInstance).where(FlowInstance.id == e.instance_id).with_for_update()
     )).scalar_one_or_none()
     if inst is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联项目不存在")
+    if (inst.status or "").lower() == "terminated":
+        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
 
     # 7. 收集签名 ID（由 API 层在 commit 后统一写入 PDF）
     _pending_signature_ids = sig_ids if (node.require_endorser_signature and sig_ids) else []
@@ -508,9 +512,10 @@ async def endorse_reject(
     return {"message": "已驳回，负责人需重新处理"}
 
 
-async def _get_node(db: AsyncSession, node_id: int) -> InstanceNode | None:
-    """获取节点（内部辅助）"""
-    result = await db.execute(
-        select(InstanceNode).where(InstanceNode.id == node_id)
-    )
+async def _get_node(db: AsyncSession, node_id: int, lock: bool = False) -> InstanceNode | None:
+    """获取节点（内部辅助）；lock=True 时加行锁（M24：与紧急换人串行）"""
+    stmt = select(InstanceNode).where(InstanceNode.id == node_id)
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()

@@ -7,6 +7,8 @@
 """
 
 import io
+import os
+import re
 import zipfile
 import logging
 from sqlalchemy import select, func
@@ -14,6 +16,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
+
+
+def _safe_zip_name(name: str) -> str:
+    """清洗 ZIP 条目名，防 Zip Slip 路径穿越（M5）
+
+    只保留 basename，把路径分隔符/穿越段/Windows 保留字符替换为下划线。
+    上传的 original_name 可能含路径穿越段（../ 或 ..\\）或完整盘符路径，
+    直接作 ZIP 条目名会被解压到目录之外或破坏解压。
+    """
+    base = os.path.basename((name or "").replace("\\", "/"))
+    safe = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", base)
+    return safe or "file"
 from app.models import (
     TemplateCategory, TemplateCategoryDocument,
     DocumentTemplate, TemplateDocumentLink,
@@ -310,8 +324,8 @@ async def batch_fill_and_zip(
                 # 填充模板
                 abs_path = get_doc_template_abs_path(doc)
                 file_stream = fill_template(abs_path, doc.file_type, replacements)
-                # 写入 ZIP（文件名保持 original_name）
-                zf.writestr(doc.original_name, file_stream.read())
+                # 写入 ZIP（M5：条目名清洗防 Zip Slip，文件名保持原始名语义）
+                zf.writestr(_safe_zip_name(doc.original_name), file_stream.read())
             except Exception as e:
                 logger.warning(f"批量下载：文件模板 {doc.name} 填充失败：{e}，跳过")
                 continue

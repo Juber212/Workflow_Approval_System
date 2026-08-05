@@ -128,7 +128,9 @@ class TestEnsureProposalTemplate:
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=tpl),  # 0: SELECT ... FOR UPDATE → 已存在
+            MockResult(scalar_value=None),  # 0: GET_LOCK 命名锁
+            MockResult(scalar_one=tpl),     # 1: 锁内复查 → 已存在
+            MockResult(scalar_value=None),  # 2: RELEASE_LOCK
         ]
 
         result = await ensure_proposal_template(mock_db, org_id=1, user_id=1)

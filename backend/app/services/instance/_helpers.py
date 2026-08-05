@@ -14,8 +14,7 @@ from app.models import (
 # 供列表 deadline 排序、活跃节点查询、逾期判断复用。
 # P1-16：list.py 曾误用 ["pending","processing"]（非实例节点状态）导致 deadline 恒 NULL。
 ACTIVE_NODE_STATUSES = [
-    "arrived", "running", "pending", "processing",
-    "waiting_check", "waiting_approval", "waiting_endorsement",
+    "running", "waiting_check", "waiting_approval", "waiting_endorsement",
 ]
 
 

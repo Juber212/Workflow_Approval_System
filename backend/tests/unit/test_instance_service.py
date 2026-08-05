@@ -70,22 +70,30 @@ class TestCreateInstance:
     @pytest.mark.asyncio
     async def test_difficulty4_requires_endorser(self, mock_db):
         """难度4 + 工作节点未配批准人 → 拒绝发起（P1-10）"""
-        from app.models import FlowTemplate, TemplateNode
+        from app.models import FlowTemplate, TemplateNode, TemplateEdge
         tpl = FlowTemplate(id=1, name="难度4模板", organization_id=1, type="project")
         nodes = [
             TemplateNode(id=1, template_id=1, name="发起", is_start=True, is_end=False,
                          sort_order=1, assignee_id=None, checkers=[], approvers=[]),
             TemplateNode(id=2, template_id=1, name="设计", is_start=False, is_end=False,
                          sort_order=2, assignee_id=1, checkers=[{"user_id": 3}],
-                         approvers=[{"user_id": 4}], endorser_id=None),
+                         approvers=[{"user_id": 4}], endorser_id=None, time_limit_days=5),
             TemplateNode(id=3, template_id=1, name="终审", is_start=False, is_end=True,
                          sort_order=3, assignee_id=None, checkers=[], approvers=[]),
         ]
+        edges = [
+            TemplateEdge(id=1, template_id=1, source_node_id=1, target_node_id=2),
+            TemplateEdge(id=2, template_id=1, source_node_id=2, target_node_id=3),
+        ]
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=tpl),     # 0: SELECT template
-            MockResult(scalars_all=nodes),  # 1: SELECT template nodes
-            MockResult(scalars_all=[]),     # 2: SELECT template edges
+            MockResult(scalar_one=tpl),     # 0: SELECT template（create_instance）
+            MockResult(scalar_one=tpl),     # 1: M16 发布校验: SELECT template
+            MockResult(scalars_all=nodes),  # 2: M16 发布校验: SELECT nodes
+            MockResult(scalars_all=edges),  # 3: M16 发布校验: SELECT edges（连通）
+            MockResult(scalars_all=nodes),  # 4: create: SELECT template nodes
+            MockResult(scalars_all=edges),  # 5: create: SELECT template edges
+            MockResult(rows_all=[]),        # 6: M14 同组织同名查重 → 无重复（随后 P1-10 拒绝）
         ]
 
         from app.schemas.instance import CreateInstanceRequest
@@ -99,20 +107,28 @@ class TestCreateInstance:
     @pytest.mark.asyncio
     async def test_node_override_missing_user(self, mock_db):
         """node_overrides 引用了不存在的用户 ID → 拒绝发起（P1-22）"""
-        from app.models import FlowTemplate, TemplateNode
+        from app.models import FlowTemplate, TemplateNode, TemplateEdge
         tpl = FlowTemplate(id=1, name="模板", organization_id=1, type="project")
         nodes = [
             TemplateNode(id=1, template_id=1, name="发起", is_start=True, is_end=False, sort_order=1),
             TemplateNode(id=2, template_id=1, name="设计", is_start=False, is_end=False, sort_order=2,
-                         assignee_id=1, checkers=[{"user_id": 3}], approvers=[{"user_id": 4}]),
+                         assignee_id=1, checkers=[{"user_id": 3}], approvers=[{"user_id": 4}],
+                         time_limit_days=5),
             TemplateNode(id=3, template_id=1, name="终审", is_start=False, is_end=True, sort_order=3),
+        ]
+        edges = [
+            TemplateEdge(id=1, template_id=1, source_node_id=1, target_node_id=2),
+            TemplateEdge(id=2, template_id=1, source_node_id=2, target_node_id=3),
         ]
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=tpl),     # 0: SELECT template
-            MockResult(scalars_all=nodes),  # 1: SELECT template nodes
-            MockResult(scalars_all=[]),     # 2: SELECT template edges
-            MockResult(scalars_all=[]),     # 3: 人员 ID 存在性校验 → 999 不存在
+            MockResult(scalar_one=tpl),     # 0: SELECT template（create_instance）
+            MockResult(scalar_one=tpl),     # 1: M16 发布校验: SELECT template
+            MockResult(scalars_all=nodes),  # 2: M16 发布校验: SELECT nodes
+            MockResult(scalars_all=edges),  # 3: M16 发布校验: SELECT edges（连通）
+            MockResult(scalars_all=nodes),  # 4: create: SELECT template nodes
+            MockResult(scalars_all=edges),  # 5: create: SELECT template edges
+            MockResult(scalars_all=[]),     # 6: 人员 ID 存在性校验 → 999 不存在
         ]
 
         from app.schemas.instance import CreateInstanceRequest, NodeOverride
@@ -250,16 +266,18 @@ class TestChangePersonnel:
             if i == 1:
                 return MockResult(scalar_one=node)      # SELECT node
             if i == 2:
-                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
+                return MockResult(scalars_all=[9])      # M8 人员存在性校验（user 9 存在）
             if i == 3:
-                return None                              # update Task（换负责人）
+                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
             if i == 4:
-                return None                              # clear_related delete
+                return None                              # update Task（换负责人）
             if i == 5:
-                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
+                return None                              # clear_related delete
             if i == 6:
-                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
             if i == 7:
+                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+            if i == 8:
                 return MockResult(scalar_one=task)      # _get_active_task select
             return None
 
@@ -277,7 +295,7 @@ class TestChangePersonnel:
         assert result["removed_users"] == [2]
         # Task 更新语句条件排除终结状态（含 notin_）
         from sqlalchemy.dialects import mysql
-        update_stmt = captured[3]
+        update_stmt = captured[4]
         # literal_binds：NOT IN 列表默认参数化，这里把绑定的状态值渲染进 SQL 以便断言
         sql = str(update_stmt.compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "NOT IN" in sql
@@ -309,12 +327,14 @@ class TestChangePersonnel:
             if i == 1:
                 return MockResult(scalar_one=node)      # SELECT node
             if i == 2:
-                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
+                return MockResult(scalars_all=[9])      # M8 人员存在性校验（user 9 存在）
             if i == 3:
-                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
+                return MockResult(scalars_all=[])       # SELECT User（id_name_map）
             if i == 4:
-                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+                return MockResult(scalars_all=[])       # 通知段：pending CheckRecord → 空
             if i == 5:
+                return MockResult(scalars_all=[])       # 通知段：pending Approval → 空
+            if i == 6:
                 return MockResult(scalar_one=new_task)  # 通知段：_get_active_task（预激活后的新任务）
             return None
 
@@ -361,12 +381,14 @@ class TestChangePersonnel:
             if i == 1:
                 return MockResult(scalar_one=node)       # SELECT node
             if i == 2:
+                return MockResult(scalars_all=[3, 4, 5, 6, 7])  # M8 人员存在性校验（全部存在）
+            if i == 3:
                 return MockResult(scalars_all=[])        # SELECT User（id_name_map）
-            if i in (3, 5):
+            if i in (4, 6):
                 return None                               # UPDATE（removed 为空也执行）
-            if i in (4, 6, 9):
+            if i in (5, 7, 10):
                 return MockResult(scalar_one=new_task)   # _get_active_task（校验/审批分支、通知段）
-            if i in (7, 8):
+            if i in (8, 9):
                 return MockResult(scalars_all=[])        # 通知段：new_checks / new_apprs → 空
             return None
 

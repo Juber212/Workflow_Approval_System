@@ -1,7 +1,7 @@
 """P0-1 单元测试：模板 ZIP 下载接口归属校验
 
 覆盖两个校验 helper：
-- _is_instance_participant：发起人 / 负责人 / 校验人(dict) / 审批人(int) / 批准人 判定
+- is_instance_participant：发起人 / 负责人 / 校验人(dict) / 审批人(int) / 批准人 判定
 - _collect_instance_doc_ids：实例级配置优先，否则继承模板关联 + 分类包展开
 """
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.api.templates import _is_instance_participant
+from app.services.detail_helpers import is_instance_participant
 from app.services.document_service import collect_instance_doc_ids
 from app.models import FlowInstance
 
@@ -46,7 +46,7 @@ def _mock_node_result(nodes: list) -> MagicMock:
 
 
 # ────────────────────────────────────────────────
-# _is_instance_participant
+# is_instance_participant
 # ────────────────────────────────────────────────
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_participant_by_initiator():
     """发起人即参与者（无需查节点）"""
     db = AsyncMock()
     inst = _make_instance(initiator_id=5)
-    assert await _is_instance_participant(db, inst, 5) is True
+    assert await is_instance_participant(db, inst, 5) is True
     db.execute.assert_not_called()  # 发起人直接命中，不触发节点查询
 
 
@@ -63,7 +63,7 @@ async def test_participant_by_assignee():
     """节点负责人判定为参与者"""
     db = AsyncMock()
     db.execute.return_value = _mock_node_result([_Node(assignee_id=7)])
-    assert await _is_instance_participant(db, _make_instance(), 7) is True
+    assert await is_instance_participant(db, _make_instance(), 7) is True
 
 
 @pytest.mark.asyncio
@@ -74,10 +74,10 @@ async def test_participant_by_dict_checker_and_int_approver():
         _Node(assignee_id=None, checkers=[{"user_id": 8}], approvers=[9], endorser_id=10),
     ])
     inst = _make_instance()
-    assert await _is_instance_participant(db, inst, 8) is True   # 校验人(dict)
-    assert await _is_instance_participant(db, inst, 9) is True   # 审批人(int)
-    assert await _is_instance_participant(db, inst, 10) is True  # 批准人
-    assert await _is_instance_participant(db, inst, 99) is False  # 无关用户
+    assert await is_instance_participant(db, inst, 8) is True   # 校验人(dict)
+    assert await is_instance_participant(db, inst, 9) is True   # 审批人(int)
+    assert await is_instance_participant(db, inst, 10) is True  # 批准人
+    assert await is_instance_participant(db, inst, 99) is False  # 无关用户
 
 
 # ────────────────────────────────────────────────

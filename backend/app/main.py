@@ -68,6 +68,13 @@ async def lifespan(app: FastAPI):
             print("[错误] 严重安全错误: SECRET_KEY 是已知默认值，必须更换！")
             sys.exit(1)
 
+    # 3. DEFAULT_USER_PASSWORD 非空守卫（低危项）：管理员「重置密码」依赖它，
+    #    未配置时重置会把用户密码置为空串（bcrypt 空串）而登录接口拒绝空密码 → 用户被锁定
+    if not settings.DEFAULT_USER_PASSWORD:
+        print("[错误] 生产守卫: DEFAULT_USER_PASSWORD 未设置！")
+        print("       管理员执行「重置密码」会把用户密码置为空串导致用户无法登录。")
+        sys.exit(1)
+
     # 启动时加载系统配置到内存缓存
     await config_service.load(async_session_factory)
 

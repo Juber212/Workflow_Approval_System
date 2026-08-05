@@ -147,8 +147,6 @@ def _get_limit_key(request: Request, method: str, path: str) -> str:
         try:
             payload = decode_access_token(auth[7:])
             if payload:
-                if payload is None:
-                    raise ValueError("token decode returned None")
                 user_id = payload.get("sub", "unknown")
                 roles = payload.get("roles", [])
                 if "system_admin" in roles:

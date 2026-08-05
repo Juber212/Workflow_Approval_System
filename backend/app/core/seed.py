@@ -22,9 +22,8 @@ ORGS = [
 
 # 预置系统配置
 CONFIGS = [
-    # ── 文件上传 ──
-    {"config_key": "allowed_file_extensions", "config_value": ".doc,.docx,.xls,.xlsx,.pdf,.png,.jpg,.jpeg", "description": "允许上传的文件扩展名"},
-    {"config_key": "max_file_size_mb", "config_value": "50", "description": "上传文件大小限制(MB)"},
+    # 注：上传大小 / 允许扩展名 / 节点默认时限由环境变量 settings 控制（M28），
+    # 不再写入 SystemConfig 表——避免出现「配置页可改但对系统零效果」的假开关
     # ── PDF 签名通用 ──
     {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名默认X坐标"},
     {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名默认Y坐标"},
@@ -40,8 +39,6 @@ CONFIGS = [
     {"config_key": "pdf_signature_approver_y", "config_value": "100", "description": "审批人签名默认Y坐标"},
     {"config_key": "pdf_signature_endorser_x", "config_value": "400", "description": "批准人签名默认X坐标"},
     {"config_key": "pdf_signature_endorser_y", "config_value": "100", "description": "批准人签名默认Y坐标"},
-    # ── 通用 ──
-    {"config_key": "default_time_limit_days", "config_value": "7", "description": "节点默认完成时限（工作日）"},
 ]
 
 # 默认管理员密码从配置文件读取

@@ -25,6 +25,7 @@ from app.services.template_service import (
     get_organization_summaries, list_templates, create_template,
     get_template_detail, update_template, delete_template,
 )
+from app.services.detail_helpers import is_instance_participant
 from app.services.category_service import (
     list_categories, create_category, update_category, delete_category,
     get_category_detail, link_documents_to_category, unlink_documents_from_category,
@@ -200,7 +201,13 @@ async def _convert_doc_to_docx(input_path: str) -> str | None:
             return docx_path
 
     except asyncio.TimeoutError:
-        pass
+        # M26：超时后必须杀掉并收割子进程，否则 soffice 进程泄漏常驻（CPU/内存累积耗尽）
+        if proc:
+            proc.kill()
+            try:
+                await proc.wait()
+            except Exception:
+                pass
 
     return None
 
@@ -466,37 +473,6 @@ async def unlink_document_template(
 # ─── 批量下载：模板包 ZIP ─────────────────────────────────
 
 
-async def _is_instance_participant(db: AsyncSession, instance, user_id: int) -> bool:
-    """判断用户是否为流程实例参与者（发起人/节点负责人/校验人/审批人/批准人）
-
-    产品规则：文件模板仅任务参与者可下载，下载前须校验参与者身份。
-    """
-    from app.models import InstanceNode
-
-    if instance.initiator_id == user_id:
-        return True
-
-    def _contains_user(role_list) -> bool:
-        """兼容 checkers/approvers 数组元素为 int 或 dict 两种历史格式"""
-        for item in role_list or []:
-            if isinstance(item, dict):
-                if item.get("user_id") == user_id:
-                    return True
-            elif item == user_id:
-                return True
-        return False
-
-    nodes = (await db.execute(
-        select(InstanceNode).where(InstanceNode.instance_id == instance.id)
-    )).scalars().all()
-    for node in nodes:
-        if node.assignee_id == user_id or node.endorser_id == user_id:
-            return True
-        if _contains_user(node.checkers) or _contains_user(node.approvers):
-            return True
-    return False
-
-
 @router.get("/templates/{template_id}/download-zip")
 async def download_template_zip(
     template_id: int,
@@ -536,7 +512,7 @@ async def download_template_zip(
     )).scalar_one_or_none()
     if instance is None:
         raise AppException(ErrorCode.NOT_FOUND, "流程实例不存在")
-    if not current_user.is_admin() and not await _is_instance_participant(db, instance, current_user.id):
+    if not current_user.is_admin() and not await is_instance_participant(db, instance, current_user.id):
         raise AppException(ErrorCode.FORBIDDEN, "仅流程参与者可下载文件模板")
 
     # 校验 doc_ids 全部属于该实例可用的模板关联集（防止跨实例枚举下载）
@@ -657,10 +633,13 @@ async def admin_upload_document_template(
             f"仅支持 {', '.join(_ALLOWED_DOC_EXTENSIONS)} 格式，当前格式：{ext or '未知'}"
         )
 
-    # 读取 + 校验大小
-    contents = await file.read()
-    if len(contents) > _MAX_DOC_SIZE:
+    # M6：先流式校验大小再读取——防超大文件全量读入内存 OOM（复用 file_service.upload_file 模式）
+    file.file.seek(0, 2)  # os.SEEK_END
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > _MAX_DOC_SIZE:
         raise AppException(ErrorCode.BAD_REQUEST, "文件模板不能超过 10MB")
+    contents = await file.read()
 
     # 存储
     upload_dir = os.path.join(settings.STORAGE_ROOT, settings.STORAGE_DOCUMENT_TEMPLATES_DIR)

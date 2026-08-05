@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.services.notification_service import create_notification, clear_related
+from app.services.validation_service import extract_person_ids, validate_user_ids_exist
 from app.engine.flow_engine import activate_work_node
 from app.models import (
     FlowInstance, InstanceNode,
@@ -102,6 +103,25 @@ async def change_personnel(
     if node.status in ("finished", "terminated"):
         raise AppException(ErrorCode.NOT_RUNNING, "已完成/已终止的节点不可更换人员")
 
+    # ========== 2c. 新人员 ID 存在性校验（M8，对齐 create.py P1-22） ==========
+    # 换人接口传入的负责人/校验人/审批人/批准人必须真实存在，
+    # 否则写 CheckRecord/Approval/InstanceNode 时触发外键 500 或产生悬空引用
+    new_person_ids: set[int] = set()
+    if body.assignee_id:
+        new_person_ids.add(body.assignee_id)
+    if body.endorser_id:
+        new_person_ids.add(body.endorser_id)
+    if body.checkers is not None:
+        new_person_ids |= extract_person_ids(body.checkers)
+    if body.approvers is not None:
+        new_person_ids |= extract_person_ids(body.approvers)
+    missing = await validate_user_ids_exist(db, new_person_ids)
+    if missing:
+        raise AppException(
+            ErrorCode.VALIDATION_ERROR,
+            f"以下用户 ID 不存在，请重新选择：{'、'.join(map(str, sorted(missing)))}",
+        )
+
     now = datetime.now()
     changes: list[str] = []  # 记录变更描述
 
@@ -165,6 +185,10 @@ async def change_personnel(
         new_checkers = _normalize_list(body.checkers)
         new_ids = extract_user_ids(new_checkers)
 
+        # M9：禁止置空校验人——waiting_check 节点无校验人会导致流程永久卡死
+        if not new_ids:
+            raise AppException(ErrorCode.VALIDATION_ERROR, "校验人不能为空，请至少选择一位")
+
         removed = old_ids - new_ids
         added = new_ids - old_ids
         _removed_checkers = removed  # 记录用于通知清除
@@ -209,6 +233,10 @@ async def change_personnel(
         old_ids = extract_user_ids(node.approvers)
         new_approvers = _normalize_list(body.approvers)
         new_ids = extract_user_ids(new_approvers)
+
+        # M9：禁止置空审批人——waiting_approval 节点无审批人会导致流程永久卡死
+        if not new_ids:
+            raise AppException(ErrorCode.VALIDATION_ERROR, "审批人不能为空，请至少选择一位")
 
         removed = old_ids - new_ids
         added = new_ids - old_ids

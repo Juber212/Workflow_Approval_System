@@ -13,6 +13,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import File, InstanceNode, User
 
 
+async def is_instance_participant(db: AsyncSession, instance, user_id: int) -> bool:
+    """判断用户是否为流程实例参与者（发起人/节点负责人/校验人/审批人/批准人）
+
+    产品规则：跨所协作下参与者可跨所访问实例文件/模板包，下载前须校验参与者身份。
+    （从 templates.py 提升为公共 helper，第七轮审查 M7 供文件下载复用）
+    """
+    if instance.initiator_id == user_id:
+        return True
+
+    def _contains_user(role_list) -> bool:
+        """兼容 checkers/approvers 数组元素为 int 或 dict 两种历史格式"""
+        for item in role_list or []:
+            if isinstance(item, dict):
+                if item.get("user_id") == user_id:
+                    return True
+            elif item == user_id:
+                return True
+        return False
+
+    nodes = (await db.execute(
+        select(InstanceNode).where(InstanceNode.instance_id == instance.id)
+    )).scalars().all()
+    for node in nodes:
+        if node.assignee_id == user_id or node.endorser_id == user_id:
+            return True
+        if _contains_user(node.checkers) or _contains_user(node.approvers):
+            return True
+    return False
+
+
 async def load_instance_files(db: AsyncSession, instance_id: int) -> tuple[list[File], dict[int, str]]:
     """查询实例全部文件 + 文件所属节点名称映射（一次 IN 查询）"""
     files = (await db.execute(

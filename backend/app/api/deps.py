@@ -113,6 +113,9 @@ async def get_current_active_user(
     if db_roles:
         current_user.roles = db_roles
 
+    # 重查组织归属覆盖 JWT 快照：管理员调整用户所属组织后即时生效（与角色即时生效同策略）
+    current_user.organization_id = user.organization_id
+
     return current_user
 
 
@@ -137,12 +140,12 @@ def require_same_org(current_user: CurrentUser, org_id: int) -> None:
 
 
 def resolve_org_scope(current_user: CurrentUser, organization_id: int | None) -> int | None:
-    """解析组织筛选范围：非管理员不传 org_id 时默认限制为本组织（防止跨所数据泄露）
+    """解析组织筛选参数：organization_id 纯透传（产品规则：项目列表全员可见）
 
-    用于 templates / instances / proposals 列表端点的 organization_id 参数处理。
+    2026-08-05 第七轮审查（H2）：移除原「非管理员默认限本组织」逻辑。
+    产品确认项目/方案列表全员可见（组织卡片页列出全部组织，点卡片可看该所项目），
+    organization_id 仅作筛选条件，不做越权限制——普通用户也可传任意组织 ID 查看。
     """
-    if organization_id is None and not current_user.is_admin():
-        return current_user.organization_id
     return organization_id
 
 

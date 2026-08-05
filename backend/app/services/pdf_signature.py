@@ -18,6 +18,7 @@
 import asyncio
 import logging
 import os
+import uuid
 import zlib
 from io import BytesIO
 
@@ -40,6 +41,19 @@ from app.core.error_codes import ErrorCode
 from app.models import SystemConfig, User, File, Signature
 
 logger = logging.getLogger(__name__)
+
+
+# ─── M25：同一 PDF 并发签名写入串行化 ──────────────────────────────
+# 多审批人几乎同时审批同一文件时，各走各的 apply_signatures_after_commit，
+# 若并发写同一 PDF 的临时文件会互相覆盖导致丢签名。按文件路径持进程内锁串行化。
+_pdf_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_pdf_lock(pdf_path: str) -> asyncio.Lock:
+    """按 PDF 绝对路径获取进程内锁（asyncio 单事件循环，dict 读写原子，无需额外守卫）"""
+    if pdf_path not in _pdf_locks:
+        _pdf_locks[pdf_path] = asyncio.Lock()
+    return _pdf_locks[pdf_path]
 
 
 # ─── 签名配置默认值 ────────────────────────────────────────────
@@ -280,14 +294,16 @@ async def apply_signatures_to_files(
             continue
 
         try:
-            await asyncio.to_thread(
-                _insert_signatures,
-                pdf_path=abs_path,
-                signature_paths=sig_paths,
-                signature_positions=sig_positions,
-                max_width=cfg["pdf_signature_max_width"],
-                max_height=cfg["pdf_signature_max_height"],
-            )
+            # M25：同一 PDF 并发签名写入用进程内锁串行化，防临时文件碰撞/丢签名
+            async with _get_pdf_lock(abs_path):
+                await asyncio.to_thread(
+                    _insert_signatures,
+                    pdf_path=abs_path,
+                    signature_paths=sig_paths,
+                    signature_positions=sig_positions,
+                    max_width=cfg["pdf_signature_max_width"],
+                    max_height=cfg["pdf_signature_max_height"],
+                )
             signed_count += 1
 
             # 标记这些签名为已应用
@@ -578,7 +594,8 @@ def _insert_signatures(
                 writer.pages[target_page].merge_transformed_page(date_stamp, date_trans)
 
     # 先写入临时文件，成功后再原子替换，防止写入失败损坏原 PDF
-    tmp_path = pdf_path + ".tmp"
+    # M25：临时文件用唯一后缀，防多线程并发写同一 PDF 时临时文件互相覆盖
+    tmp_path = f"{pdf_path}.{uuid.uuid4().hex[:8]}.tmp"
     try:
         with open(tmp_path, "wb") as f:
             writer.write(f)

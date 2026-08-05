@@ -552,6 +552,8 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         # 兼容旧版：标记 Approval 的旧签名字段
         # P1-11：限定当前任务（task_id），只标当前轮次已通过审批的签名状态，
         # 避免多轮次重跑时把历史轮次的 APPROVED 记录也误标
+        # M13 修复：signature_applied 按实际签名记录判定——审批人未上传签名（规则 10 允许跳过）
+        # 时不得误标「已签名」，否则界面显示与 PDF 实际状态不符
         await db.execute(
             update(Approval)
             .where(
@@ -559,16 +561,21 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
                 Approval.task_id == a.task_id,
                 Approval.status == ApprovalStatus.APPROVED,
             )
-            .values(signature_applied=True)
+            .values(signature_applied=bool(_pending_signature_ids))
         )
         await db.flush()
 
     from app.models import FlowTemplate
 
     # 查询实例，判断是否为方案（方案工作节点审批通过后直接完成，跳过结束节点）
-    inst = (await db.execute(select(FlowInstance).where(FlowInstance.id == a.instance_id))).scalar_one_or_none()
+    # M23：完成分支对实例行加锁并校验未终止——防止 terminate 与审批并发时把已终止实例改写为已完成
+    inst = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == a.instance_id).with_for_update()
+    )).scalar_one_or_none()
     if inst is None:
         raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
+    if (inst.status or "").lower() == "terminated":
+        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
     is_proposal = False
     if not node.is_end:
         tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == inst.template_id))).scalar_one_or_none()
@@ -581,7 +588,9 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
         node.completed_at = now
         inst.status = InstanceStatus.COMPLETED
         inst.completed_at = now
-        return {"all_approved": True, "instance_completed": True, "message": "流程已完成"}
+        # M12 修复：方案工作节点审批通过直接完成（跳过结束节点）时同样带回待盖章签名 ID，
+        # 否则 API 层 post-commit 取空列表 → 审批人签名永不写入 PDF
+        return {"all_approved": True, "instance_completed": True, "message": "流程已完成", "_pending_sig_ids": _pending_signature_ids}
 
     # 难度4 + 有批准人 → 进入批准环节（审核→签字→节点完成）
     if inst.difficulty == "4" and node.endorser_id:

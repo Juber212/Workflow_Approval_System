@@ -27,6 +27,7 @@ from app.models.enums import (
 from app.schemas.common import PaginatedData
 from app.schemas.proposal import ProposalCreateRequest, ProposalListItem
 from app.api.deps import CurrentUser
+from app.services.validation_service import extract_person_ids, validate_user_ids_exist
 from app.services.instance._helpers import compute_deadline_info, _batch_get_active_deadlines, _batch_get_flow_deadlines
 
 
@@ -37,57 +38,67 @@ BUILTIN_PROPOSAL_TEMPLATE_NAME = "方案默认模板"
 async def ensure_proposal_template(db: AsyncSession, org_id: int, user_id: int) -> FlowTemplate:
     """获取或创建组织的方案默认模板（每个组织一个）
 
-    使用 SELECT ... FOR UPDATE 防止并发调用创建重复模板。
+    M10 修复：原 SELECT ... FOR UPDATE 在 READ COMMITTED 隔离级别下对「无匹配行」
+    不产生 gap lock，两个并发请求会同时看到无模板并各自创建重复模板。
+    改用 MySQL GET_LOCK 命名锁串行化「查-建」段（GET_LOCK 绑定当前连接，
+    与事务同连接，READ COMMITTED 下可靠；10 秒等待超时）。
     """
-    # 锁定查——确保两个并发请求只有一个能进入创建逻辑
-    existing = (await db.execute(
-        select(FlowTemplate).where(
-            FlowTemplate.organization_id == org_id,
-            FlowTemplate.type == "proposal",
-        ).with_for_update()
-    )).scalar_one_or_none()
-    if existing:
-        return existing
+    from sqlalchemy import text
 
-    # 创建方案默认模板
-    tpl = FlowTemplate(
-        name=BUILTIN_PROPOSAL_TEMPLATE_NAME,
-        description="系统内置方案流程模板（固定三节点：开始→工作→结束）",
-        organization_id=org_id,
-        created_by=user_id,
-        type="proposal",
-    )
-    db.add(tpl)
-    await db.flush()
+    lock_name = f"proposal_default_tpl:org{org_id}"
+    await db.execute(text("SELECT GET_LOCK(:name, 10)"), {"name": lock_name})
+    try:
+        # 锁内复查——前一请求可能已创建成功
+        existing = (await db.execute(
+            select(FlowTemplate).where(
+                FlowTemplate.organization_id == org_id,
+                FlowTemplate.type == "proposal",
+            )
+        )).scalar_one_or_none()
+        if existing:
+            return existing
 
-    # 创建三个固定节点
-    nodes_data = [
-        {"name": "开始", "is_start": True, "is_end": False, "sort_order": 1},
-        {"name": "方案工作", "is_start": False, "is_end": False, "sort_order": 2},
-        {"name": "结束", "is_start": False, "is_end": True, "sort_order": 3},
-    ]
-    for nd in nodes_data:
-        db.add(TemplateNode(template_id=tpl.id, **nd))
-    await db.flush()
+        # 创建方案默认模板
+        tpl = FlowTemplate(
+            name=BUILTIN_PROPOSAL_TEMPLATE_NAME,
+            description="系统内置方案流程模板（固定三节点：开始→工作→结束）",
+            organization_id=org_id,
+            created_by=user_id,
+            type="proposal",
+        )
+        db.add(tpl)
+        await db.flush()
 
-    # 查询模板节点以获取 ID
-    tpl_nodes = (await db.execute(
-        select(TemplateNode).where(TemplateNode.template_id == tpl.id).order_by(TemplateNode.sort_order)
-    )).scalars().all()
+        # 创建三个固定节点
+        nodes_data = [
+            {"name": "开始", "is_start": True, "is_end": False, "sort_order": 1},
+            {"name": "方案工作", "is_start": False, "is_end": False, "sort_order": 2},
+            {"name": "结束", "is_start": False, "is_end": True, "sort_order": 3},
+        ]
+        for nd in nodes_data:
+            db.add(TemplateNode(template_id=tpl.id, **nd))
+        await db.flush()
 
-    # 创建连线
-    db.add(TemplateEdge(
-        template_id=tpl.id,
-        source_node_id=tpl_nodes[0].id,
-        target_node_id=tpl_nodes[1].id,
-    ))
-    db.add(TemplateEdge(
-        template_id=tpl.id,
-        source_node_id=tpl_nodes[1].id,
-        target_node_id=tpl_nodes[2].id,
-    ))
-    await db.flush()
-    return tpl
+        # 查询模板节点以获取 ID
+        tpl_nodes = (await db.execute(
+            select(TemplateNode).where(TemplateNode.template_id == tpl.id).order_by(TemplateNode.sort_order)
+        )).scalars().all()
+
+        # 创建连线
+        db.add(TemplateEdge(
+            template_id=tpl.id,
+            source_node_id=tpl_nodes[0].id,
+            target_node_id=tpl_nodes[1].id,
+        ))
+        db.add(TemplateEdge(
+            template_id=tpl.id,
+            source_node_id=tpl_nodes[1].id,
+            target_node_id=tpl_nodes[2].id,
+        ))
+        await db.flush()
+        return tpl
+    finally:
+        await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
 
 
 async def create_proposal(
@@ -103,6 +114,19 @@ async def create_proposal(
     )).scalar_one_or_none()
     if org is None:
         raise AppException(ErrorCode.NOT_FOUND, "组织不存在")
+
+    # M11：人员 ID 存在性校验 + 审批人非空（对齐项目发起 create.py P1-22）——
+    # 无效 designer_id/approver_id 会写进节点并在流程中途触发外键 500；空审批人致 waiting_approval 卡死
+    person_ids: set[int] = {body.designer_id} if body.designer_id else set()
+    person_ids |= extract_person_ids(body.approvers)
+    missing = await validate_user_ids_exist(db, person_ids)
+    if missing:
+        raise AppException(
+            ErrorCode.VALIDATION_ERROR,
+            f"以下用户 ID 不存在，请重新选择：{'、'.join(map(str, sorted(missing)))}",
+        )
+    if not extract_person_ids(body.approvers):
+        raise AppException(ErrorCode.VALIDATION_ERROR, "请至少选择一位审批人")
 
     # 确保方案模板存在
     tpl = await ensure_proposal_template(db, body.organization_id, current_user.id)
@@ -120,6 +144,18 @@ async def create_proposal(
             ErrorCode.BAD_REQUEST,
             f"方案名称不能为空或包含特殊字符（{' '.join(sorted(_illegal_chars))}）",
         )
+
+    # M14：同组织同名方案禁止创建——归档目录按「类型/实例名」隔离，
+    # 同名会共享目录，永久删除一方案时会误删另一方案的全部文件
+    dup = (await db.execute(
+        select(FlowInstance.id).where(
+            FlowInstance.name == proposal_name,
+            FlowInstance.organization_id == body.organization_id,
+            FlowInstance.template_type == "proposal",
+        )
+    )).first()
+    if dup:
+        raise AppException(ErrorCode.BAD_REQUEST, "该组织下已存在同名方案，请更换名称")
 
     # 创建方案实例
     instance = FlowInstance(
@@ -217,9 +253,7 @@ async def create_proposal(
 
 async def get_organization_summaries(db: AsyncSession, user_org_id: int) -> dict:
     """获取各组织的方案统计（卡片展示用）—— user_org_id 用于标记当前所属组织"""
-    # 找到所有方案模板 ID
-    tpl_sub = select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
-
+    # M15：改用实例快照 template_type 口径（不依赖方案模板是否仍存在，与 list_proposals 一致）
     # 关联查询：按组织分组统计
     stmt = (
         select(
@@ -232,7 +266,7 @@ async def get_organization_summaries(db: AsyncSession, user_org_id: int) -> dict
             func.max(FlowInstance.updated_at).label("latest_update"),
         )
         .join(Organization, FlowInstance.organization_id == Organization.id)
-        .where(FlowInstance.template_id.in_(tpl_sub))
+        .where(FlowInstance.template_type == "proposal")
         .group_by(FlowInstance.organization_id, Organization.name)
         .order_by(FlowInstance.organization_id)
     )

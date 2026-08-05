@@ -31,8 +31,9 @@ class WorkerSettings:
     # 并发任务数（对应 libsoffice 进程数）
     max_jobs = 4
 
-    # 任务超时（秒）
-    job_timeout = 120
+    # 任务超时（秒）—— M27：需覆盖单次转换 60s 超时 × 2 次重试 + 间隔 2s（最坏约 122s），
+    # 否则慢转换的第二次重试会被 ARQ 强杀、重试机制形同虚设
+    job_timeout = 150
 
     # 优雅关闭等待时间
     grace_period = 30

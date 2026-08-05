@@ -29,7 +29,7 @@ from app.engine.flow_engine import (
     propagate_from_node,
 )
 from app.utils.workday import add_workdays, next_workday
-from app.services.validation_service import extract_person_ids, validate_user_ids_exist
+from app.services.validation_service import extract_person_ids, validate_user_ids_exist, validate_template_for_publish
 
 
 
@@ -54,6 +54,17 @@ async def create_instance(
     )).scalar_one_or_none()
     if tpl is None:
         raise AppException(ErrorCode.NOT_FOUND, "模板不存在")
+
+    # M16：发起前校验模板结构——防止设计器单节点 CRUD 绕过发布校验留下非法模板，
+    # 用非法模板发起会导致实例卡死（无任务无审批，只能终止兜底）。
+    # 方案模板（proposal）结构特殊（人员发起时才配置），跳过此校验。
+    if tpl.type != "proposal":
+        publish_errors = await validate_template_for_publish(db, request.template_id)
+        if publish_errors:
+            raise AppException(
+                ErrorCode.VALIDATION_ERROR,
+                f"模板结构不完整，无法发起：{'；'.join(publish_errors[:3])}",
+            )
 
     # ========== 2. 读取模板节点和连线 ==========
     tpl_nodes = (await db.execute(
@@ -103,6 +114,18 @@ async def create_instance(
             ErrorCode.BAD_REQUEST,
             f"实例名称不能为空或包含特殊字符（{' '.join(sorted(_illegal_chars))}）",
         )
+
+    # M14：同组织同类型同名实例禁止创建——归档目录按「类型/实例名」隔离，
+    # 同名会共享目录，永久删除一实例时会误删另一实例的全部文件
+    dup = (await db.execute(
+        select(FlowInstance.id).where(
+            FlowInstance.name == instance_name,
+            FlowInstance.organization_id == tpl.organization_id,
+            FlowInstance.template_type == tpl.type,
+        )
+    )).first()
+    if dup:
+        raise AppException(ErrorCode.BAD_REQUEST, "该组织下已存在同名流程，请更换名称")
 
     priority = request.priority
     if priority not in ("urgent", "high", "normal", "low"):
