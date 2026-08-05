@@ -510,10 +510,6 @@ async def download_template_zip(
 
     从逗号分隔的 doc_ids 列表中读取模板，逐个填充占位符后打包为 ZIP。
     ZIP 文件名使用模板 original_name。
-
-    也支持传入 category_id（分类下的全部模板）：
-      传 doc_ids 时用具体模板列表
-      传 category_id 时自动获取分类下全部模板
     """
     # 解析 doc_ids
     try:

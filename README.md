@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-deployable-success" alt="status">
-  <img src="https://img.shields.io/badge/tests-190%20passed-brightgreen" alt="tests">
+  <img src="https://img.shields.io/badge/tests-317%20passed-brightgreen" alt="tests">
   <img src="https://img.shields.io/badge/python-3.10+-blue" alt="python">
   <img src="https://img.shields.io/badge/vue-3.5-brightgreen" alt="vue">
 </p>
@@ -59,7 +59,7 @@
 | 任务队列 | Redis + arq | PDF 转换异步化 |
 | 认证 | JWT | python-jose |
 | 实时通信 | WebSocket + Redis Pub/Sub | 通知实时推送，30s 轮询兜底 |
-| PDF 转换 | LibreOffice | 无头模式，asyncio.Semaphore 限流 2 并发 |
+| PDF 转换 | LibreOffice | 无头模式，asyncio.Semaphore 限流 4 并发 |
 | PDF 签名 | pypdf | 签名图片插入，多角色多槽位 |
 
 ---
@@ -173,16 +173,16 @@ npm run build        # 生产构建
 ## 测试
 
 ```bash
-pytest tests/ -v          # Mock 测试 158 条，13 秒跑完
-pytest tests/mysql/ -v    # MySQL 真实测试 19 条，需要 workflow_approval_test 库
+pytest tests/ -v          # Mock 测试 290 条（225 单元 + 65 集成），毫秒级
+pytest tests/mysql/ -v    # MySQL 真实测试 27 条，需要 workflow_approval_test 库
 ```
 
 | 类型 | 数量 | 说明 |
 |------|:--:|------|
-| Mock 单元 | 158 | 内存运行，毫秒级 |
-| Mock 集成 | 10 | TestClient + mock_db |
-| MySQL 真实 | 19 | SAVEPOINT 隔离，独立建表删表 |
-| **合计** | **190** | **0 业务逻辑 bug** |
+| 单元测试 | 225 | 内存运行，毫秒级 |
+| 集成测试 | 65 | TestClient + mock_db |
+| MySQL 真实 | 27 | SAVEPOINT 隔离，独立建表删表 |
+| **合计** | **317** | **无已知未修复问题** |
 
 ---
 
@@ -215,7 +215,7 @@ pytest tests/mysql/ -v    # MySQL 真实测试 19 条，需要 workflow_approval
 │   │   ├── services/         # 业务逻辑层
 │   │   └── core/             # 配置/安全/数据库/种子/限流
 │   ├── alembic/              # 数据库迁移
-│   ├── tests/                # 190 条测试
+│   ├── tests/                # 317 条测试
 │   └── storage/archive/      # 文件存储
 ├── frontend/                 # Vue 3 前端
 │   └── src/

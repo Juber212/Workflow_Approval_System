@@ -470,7 +470,7 @@ function handleFolderModeToggle() {
   syncToNode()
 }
 
-/** 同名文件夹冲突检测（同模板内跨节点） */
+/** 文件夹名称冲突检测（仅当前节点内重复；跨节点重名暂不校验） */
 const folderNameConflict = computed<string | null>(() => {
   if (!useFileFolders.value || !props.lf) return null
   // 收集当前节点所有非空文件夹名

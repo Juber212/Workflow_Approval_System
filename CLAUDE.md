@@ -21,7 +21,7 @@
 | 数据库 | MySQL 8.0 | InnoDB，操作日志表按年分区 |
 | 文件存储 | 服务器本地目录 | `storage/archive/{实例名称}/` |
 | 认证 | JWT | python-jose |
-| PDF 转换 | LibreOffice 无头模式 + Pillow | asyncio.Semaphore 限流 2 并发 |
+| PDF 转换 | LibreOffice 无头模式 + Pillow | asyncio.Semaphore 限流 4 并发 |
 | PDF 签名 | pypdf | 签名图片插入 PDF |
 | 异步 | FastAPI BackgroundTasks | V1 不引入 Celery |
 

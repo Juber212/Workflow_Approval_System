@@ -43,13 +43,21 @@ async def put_configs(
     """批量更新系统配置 —— 写 DB → 刷新缓存"""
     require_admin(current_user)
 
-    # 校验数字型配置值（签名坐标等不能为负数）
+    # 校验数字型配置值（签名坐标等不能为负数；签名页码 -1 合法 = 最后一页）
     _NUMBER_CONFIG_IDS = _get_number_config_ids()
+    # 允许为 -1 的数字型配置 key（-1 是语义值而非非法负数，如签名页码「最后一页」）
+    _ALLOW_NEGATIVE_ONE_KEYS = {"pdf_signature_page"}
+    _ALLOW_NEGATIVE_ONE_IDS = {
+        item.id
+        for item in config_service.get_all_items()
+        if item.config_key in _ALLOW_NEGATIVE_ONE_KEYS
+    }
     for item in data.items:
         if item.id in _NUMBER_CONFIG_IDS:
             try:
                 val = int(item.config_value)
-                if val < 0:
+                # 仅「允许 -1 的 key」且值恰好为 -1 时放行，其余负数仍拒绝
+                if val < 0 and not (val == -1 and item.id in _ALLOW_NEGATIVE_ONE_IDS):
                     raise AppException(ErrorCode.BAD_REQUEST, f"配置项 #{item.id} 的值不能为负数")
             except ValueError:
                 raise AppException(ErrorCode.BAD_REQUEST, f"配置项 #{item.id} 必须是整数")
