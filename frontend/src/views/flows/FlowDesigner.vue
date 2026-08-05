@@ -29,6 +29,8 @@
         </template>
         <!-- 发起模式工具栏 -->
         <template v-else>
+          <!-- 文件模板入口（P2-8：独立弹窗，本地临时调整，不写回模板） -->
+          <el-button text @click="showLaunchDocDialog = true">📄 文件模板</el-button>
           <el-button @click="handleCancelLaunch">取消</el-button>
           <el-button type="primary" :loading="launching" @click="showLaunchDialog = true">发起项目</el-button>
         </template>
@@ -94,36 +96,6 @@
         <el-form-item label="补充说明">
           <el-input v-model="launchForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="500" />
         </el-form-item>
-
-        <!-- 文件模板选择 —— 继承模板关联，可临时调整 -->
-        <el-form-item label="模板包" v-if="launchLinkedCategories.length > 0">
-          <div class="launch-doc-list">
-            <el-checkbox-group v-model="launchCategorySelected" @change="onCategoryToggle">
-              <div v-for="c in launchLinkedCategories" :key="'lcat-' + c.id" class="launch-doc-item">
-                <el-checkbox :label="c.id" :value="c.id">
-                  <el-tag size="small" type="warning" effect="plain">📦 包</el-tag>
-                  {{ c.name }}
-                  <span class="launch-doc-orig">({{ c.document_count }} 个模板)</span>
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-            <div class="launch-doc-hint">默认全选，可取消不需要的模板包</div>
-          </div>
-        </el-form-item>
-        <el-form-item label="文件模板" v-if="launchDocTemplates.length > 0">
-          <div class="launch-doc-list">
-            <el-checkbox-group v-model="launchDocSelected">
-              <div v-for="d in launchDocTemplates" :key="d.id" class="launch-doc-item">
-                <el-checkbox :label="d.id" :value="d.id">
-                  <el-tag :type="d.file_type === 'xlsx' ? 'success' : ''" size="small" effect="plain">.{{ d.file_type }}</el-tag>
-                  {{ d.name }}
-                  <span class="launch-doc-orig">({{ d.original_name }})</span>
-                </el-checkbox>
-              </div>
-            </el-checkbox-group>
-            <div class="launch-doc-hint">继承自模板，可取消不需要的；如需新增请返回编辑模式关联</div>
-          </div>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showLaunchDialog = false">取消</el-button>
@@ -137,6 +109,13 @@
       :initial="editingPreset ? editPresetToFormData(editingPreset) : pendingPresetData"
       :editing-id="editingPreset?.id"
       @saved="onPresetSaved"
+    />
+
+    <!-- 发起模式文件模板弹窗（P2-8：本地临时调整，不写回模板） -->
+    <LaunchDocTemplateDialog
+      v-model="showLaunchDocDialog"
+      :template-id="Number(route.params.id) || 0"
+      @change="launchDocSelected = $event"
     />
 
     <!-- 文件模板管理弹窗 -->
@@ -220,7 +199,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createTemplate, getTemplateDetail, getDocTemplates, getCategoryDetail, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary, type LinkedTemplateCategory } from '@/api/template'
+import { createTemplate, getTemplateDetail, getDocTemplates, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary } from '@/api/template'
 import request from '@/api/request'
 import { saveDesign } from '@/api/designer'
 import { buildDesignPayload } from './designer/buildDesignPayload'
@@ -230,6 +209,7 @@ import NodePanel from './designer/NodePanel.vue'
 import PropertyPanel from './designer/PropertyPanel.vue'
 import PresetEditor from './designer/PresetEditor.vue'
 import NodeListView from './designer/NodeListView.vue'
+import LaunchDocTemplateDialog from './designer/LaunchDocTemplateDialog.vue'
 import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
 import { formatFileSize } from '@/utils/format'
 
@@ -239,11 +219,10 @@ const loading = ref(false)
 const saving = ref(false)
 const launching = ref(false)
 const showLaunchDialog = ref(false)
-// ─── 发起弹窗文件模板 ────────────────────────────────────
-const launchDocTemplates = ref<DocTemplateItem[]>([])
+// ─── 发起模式文件模板（P2-8：独立弹窗本地临时选择，发起时一次性提交）───
+const showLaunchDocDialog = ref(false)
+/** 最终提交的实例级文件模板 ID 列表（由 LaunchDocTemplateDialog 维护） */
 const launchDocSelected = ref<number[]>([])
-const launchLinkedCategories = ref<LinkedTemplateCategory[]>([])
-const launchCategorySelected = ref<number[]>([])  // 选中的分类 ID（默认全选）
 
 const launchFormRef = ref<FormInstance>()
 const templateName = ref('')
@@ -378,46 +357,6 @@ async function handleUnlinkCategory(cat: TemplateCategorySummary) {
   }
 }
 
-/** 发起弹窗打开时加载模板关联的文件模板 */
-async function loadLaunchDocTemplates() {
-  const templateId = currentTemplateId()
-  if (!templateId) return
-  try {
-    const data = await getDocTemplates(templateId)
-    launchDocTemplates.value = data.linked
-
-    // 后端 GET /templates/{id}/documents 的 linked_categories 必带 documents（发起弹窗勾选联动依赖）。
-    // 防御兜底（P1-40）：个别分类 documents 缺失但 document_count>0（异常路径/旧数据）时，补拉分类详情
-    const missingCats = data.linked_categories.filter(
-      c => (!c.documents || c.documents.length === 0) && c.document_count > 0,
-    )
-    const fillMap = new Map<number, DocTemplateItem[]>()
-    if (missingCats.length > 0) {
-      await Promise.all(missingCats.map(async (c) => {
-        try { fillMap.set(c.id, (await getCategoryDetail(c.id)).documents || []) }
-        catch { /* 拦截器已统一弹错（P1-35），单个分类失败不影响其余 */ }
-      }))
-    }
-    // 合并补拉结果，保证每个分类都带 documents
-    launchLinkedCategories.value = data.linked_categories.map(c => ({
-      ...c,
-      documents: fillMap.has(c.id) ? fillMap.get(c.id)! : c.documents,
-    }))
-    launchCategorySelected.value = launchLinkedCategories.value.map(c => c.id)  // 分类默认全选
-
-    // 收集分类内模板 ID 作为初始选中
-    const catDocIds: number[] = []
-    launchLinkedCategories.value.forEach(c => {
-      (c.documents || []).forEach(d => catDocIds.push(d.id))
-    })
-    launchDocSelected.value = data.linked.map(d => d.id).concat(catDocIds)
-  } catch {
-    launchDocTemplates.value = []
-    launchLinkedCategories.value = []
-    launchCategorySelected.value = []
-  }
-}
-
 // ─── 合并列表（分类 + 模板，统一渲染）───
 
 interface DocListItem {
@@ -460,44 +399,6 @@ const linkedList = computed<DocListItem[]>(() => _makeItems(linkedCategories.val
 
 /** 可关联——合并列表 */
 const availableList = computed<DocListItem[]>(() => _makeItems(availableCategories.value, availableDocTemplates.value, 'avail'))
-
-// 监听发起弹窗打开 → 加载文件模板
-watch(showLaunchDialog, (val) => {
-  if (val) loadLaunchDocTemplates()
-})
-
-/** 分类勾选切换 → 同步联动包内模板 */
-function onCategoryToggle(checkedIds: number[]) {
-  const prev = launchCategorySelected.value
-  launchCategorySelected.value = checkedIds
-
-  // 找出本次变更的分类（新增勾选 or 取消勾选）
-  const added = checkedIds.filter(id => !prev.includes(id))
-  const removed = prev.filter(id => !checkedIds.includes(id))
-
-  // 构建分类 ID → 模板 ID 映射
-  const catToDocs: Record<number, number[]> = {}
-  launchLinkedCategories.value.forEach(c => {
-    catToDocs[c.id] = (c.documents || []).map(d => d.id)
-  })
-
-  // 新增勾选 → 加入包内模板
-  const current = new Set(launchDocSelected.value)
-  added.forEach(catId => {
-    (catToDocs[catId] || []).forEach(docId => current.add(docId))
-  })
-  // 取消勾选 → 移除包内模板（但如果模板也被单独勾选了则保留）
-  removed.forEach(catId => {
-    (catToDocs[catId] || []).forEach(docId => {
-      // 检查该模板是否还属于其他已勾选分类
-      const stillInOtherCat = checkedIds.some(
-        cid => cid !== catId && (catToDocs[cid] || []).includes(docId)
-      )
-      if (!stillInOtherCat) current.delete(docId)
-    })
-  })
-  launchDocSelected.value = Array.from(current)
-}
 
 /** 是否为发起项目模式（路由参数 mode=launch） */
 const isLaunchMode = computed(() => route.query.mode === 'launch')
@@ -1001,15 +902,4 @@ async function handleLaunch() {
   .doc-upload-hint { font-size: 12px; color: var(--el-text-color-secondary); }
 }
 .doc-table { width: 100%; }
-
-/* ─── 发起弹窗文件模板选择列表 ─── */
-.launch-doc-list {
-  max-height: 160px; overflow-y: auto;
-  .launch-doc-item {
-    padding: 2px 0;
-    .el-checkbox { display: flex; align-items: center; }
-  }
-  .launch-doc-orig { font-size: 11px; color: var(--el-text-color-placeholder); margin-left: 4px; }
-  .launch-doc-hint { font-size: 11px; color: var(--el-text-color-secondary); margin-top: 4px; }
-}
 </style>
