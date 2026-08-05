@@ -7,77 +7,16 @@
 
     <template v-if="detail">
       <!-- ===== 顶部摘要条 ===== -->
-      <div class="top-summary">
-        <h2 class="top-summary__title">{{ detail.instance_name }}</h2>
-        <div class="top-summary__meta">
-          <span>当前节点：<b>{{ detail.node_name }}</b>（第{{ detail.round }}轮）</span>
-          <span class="top-summary__sep">·</span>
-          <span>截止时间：{{ formatTime(detail.deadline) }}</span>
-          <span class="top-summary__sep">·</span>
-          <span>{{ detail.require_file ? '必须上传文件' : '可选上传文件' }}</span>
-        </div>
-      </div>
+      <TopSummary :title="detail.instance_name">
+        <span>当前节点：<b>{{ detail.node_name }}</b>（第{{ detail.round }}轮）</span>
+        <span class="top-summary__sep">·</span>
+        <span>截止时间：{{ formatTime(detail.deadline) }}</span>
+        <span class="top-summary__sep">·</span>
+        <span>{{ detail.require_file ? '必须上传文件' : '可选上传文件' }}</span>
+      </TopSummary>
 
-      <!-- ===== 流程进度条 ===== -->
-      <div class="card">
-        <div class="card__header">
-          <span class="card__title">流程进度</span>
-          <router-link :to="`/flows/instances/${detail.instance_id}`" class="view-flow-link">查看完整流程 →</router-link>
-        </div>
-        <div class="card__body" style="padding:16px 20px">
-          <ProgressBar v-if="detail.nodes.length > 0" :nodes="detail.nodes" />
-          <div v-else class="empty-hint">暂无节点数据</div>
-        </div>
-      </div>
-
-      <!-- 节点信息 —— 4 栏紧凑布局 -->
-      <div class="card">
-        <div class="card__header">节点信息</div>
-        <div class="card__body">
-          <!-- 节点说明：独占一行 -->
-          <div v-if="detail.node_description" class="node-desc">{{ detail.node_description }}</div>
-          <div class="info-grid">
-            <div class="info-grid__item">
-              <div class="k">完成时限</div>
-              <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }}</div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">截止时间</div>
-              <div class="v">{{ formatTime(detail.deadline) || '—' }}</div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">发起人</div>
-              <div class="v">{{ detail.initiator_name }}</div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">优先级</div>
-              <div class="v">
-                <span class="pri-tag" :class="'pri--' + detail.priority">{{ priLabel(detail.priority) }}</span>
-              </div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">难度等级</div>
-              <div class="v">
-                <span class="diff-badge" :class="'diff--' + detail.difficulty">{{ detail.difficulty }}级</span>
-              </div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">流程状态</div>
-              <div class="v">
-                <span class="status-tag" :class="instStatusClass(detail.instance_status)">{{ instStatusLabel(detail.instance_status) }}</span>
-              </div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">节点进度</div>
-              <div class="v">{{ detail.current_node_index }} / {{ detail.total_nodes }}</div>
-            </div>
-            <div class="info-grid__item">
-              <div class="k">当前轮次</div>
-              <div class="v">#{{ detail.round }}</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 流程进度 + 节点信息（P2-2 共享组件） -->
+      <NodeInfoGrid :detail="detail" />
 
       <!-- 负责人备注 -->
       <div class="card">
@@ -96,7 +35,7 @@
           </span>
         </div>
         <div class="card__body" v-show="showHistoryFiles">
-          <div v-for="group in historyFileGroups" :key="group.nodeName" class="file-group">
+          <div v-for="group in historyFileGroups" :key="group.nodeKey" class="file-group">
             <div class="file-group__header">
               <span class="file-group__node-name">{{ group.nodeName }}</span>
               <span class="file-group__count">{{ group.files.length }} 个文件</span>
@@ -256,7 +195,7 @@
       v-if="detail"
       v-model="showSignatureDialog"
       :pdf-files="pdfFiles"
-      :auth-token="AUTH_TOKEN()"
+      :auth-token="authToken()"
       :sig-url="detail.current_signature_url"
       :default-x="detail.role_signature?.x ?? detail.signature_x"
       :default-y="detail.role_signature?.y ?? detail.signature_y"
@@ -268,26 +207,25 @@
 
 <script setup lang="ts">
 /** 任务处理页 —— 上传文件 + 提交/保存草稿，支持文件夹分组上传 */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
-import { getToken } from '@/api/request'
 import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
-import type { SignatureSlot } from '@/api/signature'
-import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, formatFileSize } from '@/utils/format'
-import { priLabel, instStatusClass, instStatusLabel, checkStatusClass, checkStatusLabel } from '@/utils/labels'
-import ProgressBar from '@/views/flows/components/ProgressBar.vue'
+import { validateUploadSize } from '@/utils/upload'
+import { checkStatusClass, checkStatusLabel } from '@/utils/labels'
+import TopSummary from '@/views/flows/components/TopSummary.vue'
+import NodeInfoGrid from '@/views/flows/components/NodeInfoGrid.vue'
 import SignaturePreviewDialog from '@/views/flows/components/SignaturePreviewDialog.vue'
 import ForbiddenPage from '@/views/error/403.vue'
+import { useDetailLoad } from '@/composables/useDetailLoad'
+import { useDetailFileGrouping } from '@/composables/useDetailFileGrouping'
+import { useSignatureDialog } from '@/composables/useSignatureDialog'
 
-const { setBreadcrumb } = useBreadcrumb()
-const route = useRoute()
 const router = useRouter()
-const AUTH_TOKEN = () => getToken() || ''
 
 /** 文件转换状态标签（上传后 pending 待转换，提交时才转 PDF） */
 function conversionLabel(f: TaskFileItem): string {
@@ -304,9 +242,16 @@ function canPreview(f: TaskFileItem): boolean {
   return !s || s === 'ready'
 }
 
-const loading = ref(false)
-const forbidden = ref(false)  // P1-34：403 无权限 → 渲染「无权查看」页
-const detail = ref<TaskDetail | null>(null)
+// 加载 + 403 + 面包屑 + 路由监听（P1-34 403 语义保留）
+const { loading, forbidden, detail } = useDetailLoad<TaskDetail>({
+  loadFn: getTaskDetail,
+  breadcrumbTail: '任务处理',
+  onLoaded: (d) => {
+    assigneeNote.value = d.assignee_note || ''
+    loadDocTemplates()
+  },
+})
+
 const assigneeNote = ref('')
 const uploading = ref(false)
 const saving = ref(false)
@@ -315,9 +260,9 @@ const preparing = ref(false)  // 预提交转化 PDF 中的状态
 const waitingConversion = ref(false)  // 等待 ARQ Worker 后台转换完成
 let conversionPollTimer: ReturnType<typeof setInterval> | null = null
 
-// 签批弹框
-const showSignatureDialog = ref(false)
-const sigSlots = ref<SignatureSlot[] | null>(null)
+// 签批弹窗（弹窗状态 + 确认回调）
+const { showSignatureDialog, sigSlots, authToken, openSignatureDialog, promptUploadSignature, makeSignatureConfirm } = useSignatureDialog()
+const onSignatureConfirm = makeSignatureConfirm(doSubmit)
 
 const canUpload = computed(() => detail.value && ['pending', 'processing'].includes(detail.value.status))
 const canSubmit = computed(() => detail.value && ['pending', 'processing'].includes(detail.value.status))
@@ -379,25 +324,17 @@ const hasFileFolders = computed(() => {
   return folders && Array.isArray(folders) && folders.length > 0
 })
 
-/** 本节点文件 */
 /** 本节点文件（后端 node_files 已过滤，直接使用） */
 const currentNodeFiles = computed(() => {
   if (!detail.value) return [] as TaskFileItem[]
   return detail.value.node_files as TaskFileItem[]
 })
 
-/** 历史节点文件（按节点分组） */
-const historyFileGroups = computed(() => {
-  if (!detail.value) return []
-  const map = new Map<string, { nodeName: string; files: TaskFileItem[] }>()
-  for (const f of detail.value.files) {
-    if (f.node_id === detail.value!.node_id) continue
-    const key = f.node_id ? String(f.node_id) : '_unknown'
-    if (!map.has(key)) map.set(key, { nodeName: f.node_name || '未知节点', files: [] })
-    map.get(key)!.files.push(f)
-  }
-  return [...map.values()]
-})
+/** 历史节点文件（按节点分组，排除当前节点） */
+const { historyFileGroups } = useDetailFileGrouping(
+  computed(() => detail.value?.files),
+  computed(() => detail.value?.node_id),
+)
 const historyFileTotal = computed(() => historyFileGroups.value.reduce((s, g) => s + g.files.length, 0))
 const showHistoryFiles = ref(false)
 
@@ -435,31 +372,6 @@ function getFolderWarning(folder: FileFolderConfig): string {
   return ''
 }
 
-/** 加载任务详情数据（onMounted + watch 共用） */
-async function loadTaskData() {
-  setBreadcrumb([
-    { label: '首页', to: '/dashboard' },
-    { label: '个人中心', to: '/profile' },
-    { label: '任务处理' },
-  ])
-  const id = Number(route.params.id)
-  if (!id) return
-  loading.value = true
-  forbidden.value = false  // P1-34：同组件切换路由参数时重置 403 状态
-  try {
-    detail.value = await getTaskDetail(id)
-    assigneeNote.value = detail.value.assignee_note || ''
-    await loadDocTemplates()
-  }
-  catch (e: any) { if (e?.status === 403) forbidden.value = true }
-  finally { loading.value = false }
-}
-
-onMounted(loadTaskData)
-
-// 同页面内切换任务（如点击通知跳转），监听路由参数变化重新加载
-watch(() => route.params.id, loadTaskData)
-
 // 离开页面时清理转换轮询定时器
 onUnmounted(() => {
   stopConversionPolling()
@@ -471,8 +383,7 @@ onUnmounted(() => {
 })
 
 function beforeUpload(file: File) {
-  if (file.size > 50 * 1024 * 1024) { ElMessage.error('文件不能超过 50MB'); return false }
-  return true
+  return validateUploadSize(file)
 }
 
 async function handleUpload({ file }: { file: File }, folderName?: string) {
@@ -555,25 +466,17 @@ async function handleSubmit() {
           ElMessage.warning('没有可签批的 PDF 文件，请先上传文件')
           return
         }
-        sigSlots.value = null
-        showSignatureDialog.value = true
+        openSignatureDialog()
       } catch {
         // 拦截器已统一弹错（P1-35）：网络异常与业务错误均不再重复提示，消除误报
       } finally {
         preparing.value = false
       }
       return
-    } else {
-      // 无签名图 → 提示前往上传
-      try {
-        await ElMessageBox.alert('该节点要求负责人签批，但您尚未上传签名图片，请先上传。', '无法签批', {
-          confirmButtonText: '前往上传',
-          type: 'warning',
-        })
-        router.push({ name: 'Profile', query: { tab: 'signature' } })
-        return
-      } catch { return }
     }
+    // 无签名图 → 提示前往上传
+    await promptUploadSignature('该节点要求负责人签批，但您尚未上传签名图片，请先上传。')
+    return
   }
 
   await doSubmit()
@@ -667,73 +570,15 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
       ElMessage.warning('没有可签批的 PDF 文件，请先上传文件')
       return
     }
-    sigSlots.value = null
-    showSignatureDialog.value = true
+    openSignatureDialog()
   } catch {
     // 拦截器已统一弹错（P1-35）：网络异常与业务错误均不再重复提示，消除误报
   }
 }
-
-/** 签批预览确认回调 */
-function onSignatureConfirm(slots: SignatureSlot[]) {
-  sigSlots.value = slots
-  showSignatureDialog.value = false
-  doSubmit()
-}
-
-// 时间/文件大小/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>
 .task-detail { /* max-width 由 AppLayout 内容区统一控制 */ }
-
-/* ===== 顶部摘要条 ===== */
-.top-summary {
-  background: #fff;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  padding: 20px 24px;
-  margin-bottom: 16px;
-
-  &__title {
-    font-size: 20px; font-weight: 600;
-    color: var(--el-text-color-primary);
-    margin: 0 0 8px;
-  }
-
-  &__meta {
-    display: flex; align-items: center; gap: 4px;
-    font-size: 13px; color: var(--el-text-color-secondary);
-    flex-wrap: wrap;
-    b { color: var(--el-text-color-primary); }
-  }
-
-  &__sep {
-    color: var(--el-text-color-placeholder);
-    margin: 0 4px;
-  }
-}
-
-/* 查看完整流程链接 */
-.view-flow-link {
-  font-size: 13px; color: var(--el-color-primary); text-decoration: none;
-  font-weight: 400;
-  &:hover { text-decoration: underline; }
-}
-
-/* 节点说明 */
-.node-desc {
-  font-size: 13px; color: var(--el-text-color-secondary);
-  padding: 8px 12px; background: var(--el-bg-color-page);
-  border-radius: 6px; margin-bottom: 12px; line-height: 1.6;
-}
-
-/* 信息网格 —— 4 栏紧凑布局 */
-.info-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px 12px; font-size: 14px;
-  .k { color: var(--el-text-color-secondary); margin-bottom: 4px; font-size: 12px; }
-  .v { color: var(--el-text-color-primary); font-weight: 500; }
-}
 
 /* 文件分组 */
 .file-group {
@@ -766,16 +611,6 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
 }
 .file-size { color: var(--el-text-color-secondary); font-size: 12px; flex: 1; }
 .upload-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 6px; }
-.empty-hint { font-size: 13px; color: var(--el-text-color-placeholder); text-align: center; padding: 12px; }
-
-/* 难度 badge */
-.diff-badge {
-  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
-  &.diff--4 { color: #fff; background: var(--el-color-danger); }
-  &.diff--3 { color: #fff; background: var(--el-color-warning); }
-  &.diff--2 { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
-  &.diff--1 { color: var(--el-color-info); background: var(--el-color-info-light-9); }
-}
 
 /* 文件夹上传卡片 */
 .folder-upload-card {
@@ -797,14 +632,6 @@ function onSignatureConfirm(slots: SignatureSlot[]) {
 .progress-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
 .opinion { color: var(--el-text-color-secondary); font-size: 12px; }
 .actions-bar { display: flex; gap: 12px; margin-top: 20px; padding: 16px 0; }
-
-.pri-tag {
-  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
-  &.pri--urgent { color: #fff; background: var(--el-color-danger); }
-  &.pri--high { color: #fff; background: var(--el-color-warning); }
-  &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
-  &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); }
-}
 
 /* ─── 文件模板（模板包 + 散模板） ─── */
 .card__title-hint { font-size: 12px; color: var(--el-text-color-placeholder); font-weight: 400; margin-left: 4px; }

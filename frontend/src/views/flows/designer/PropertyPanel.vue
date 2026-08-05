@@ -196,114 +196,15 @@
 
         <el-divider content-position="left">高级设置</el-divider>
 
-        <!-- 文件提交配置 -->
-        <div class="file-folders-section">
-          <div class="file-folders-section__header">
-            <span class="file-folders-section__title">文件提交配置</span>
-            <el-switch
-              v-model="useFileFolders"
-              active-text="文件夹"
-              inactive-text="简单"
-              size="small"
-              @change="handleFolderModeToggle"
-            />
-          </div>
-
-          <!-- 简单模式：require_file 开关（向后兼容） -->
-          <template v-if="!useFileFolders">
-            <el-form-item label="文件上传">
-              <el-switch
-                v-model="form.require_file"
-                active-text="必须上传"
-                inactive-text="可不上传"
-                @change="syncToNode"
-              />
-            </el-form-item>
-          </template>
-
-          <!-- 文件夹模式：文件夹卡片列表 -->
-          <template v-else>
-            <div class="folder-list" v-if="folders.length > 0">
-              <div
-                v-for="(folder, idx) in folders"
-                :key="idx"
-                class="folder-card"
-                :class="{ 'folder-card--expanded': expandedFolderIdx === idx }"
-              >
-                <!-- 折叠态：摘要行 -->
-                <div class="folder-card__summary" @click="toggleFolder(idx)">
-                  <span class="folder-card__icon"><el-icon :size="14"><Folder /></el-icon></span>
-                  <span class="folder-card__name">{{ folder.name || '未命名文件夹' }}</span>
-                  <span class="folder-card__rule">{{ folderRuleSummary(folder) }}</span>
-                  <el-icon class="folder-card__arrow" :class="{ rotated: expandedFolderIdx === idx }"><ArrowRight /></el-icon>
-                </div>
-
-                <!-- 展开态：编辑表单 -->
-                <div class="folder-card__body" v-show="expandedFolderIdx === idx">
-                  <el-form label-position="top" size="small">
-                    <el-form-item label="文件夹名称" :rules="[{ required: true, message: '请输入文件夹名称' }]">
-                      <el-input
-                        v-model="folder.name"
-                        placeholder="例如：资质文件"
-                        maxlength="20"
-                        show-word-limit
-                        @change="handleFolderChange"
-                      />
-                    </el-form-item>
-                    <el-form-item label="必须提交">
-                      <el-switch
-                        v-model="folder.required"
-                        active-text="必须提交"
-                        inactive-text="可选"
-                        @change="handleFolderChange"
-                      />
-                    </el-form-item>
-                    <el-form-item v-if="folder.required" label="文件数量">
-                      <el-radio-group v-model="folderCountMode[idx]" @change="handleFolderCountModeChange(idx)" size="small">
-                        <el-radio-button value="unlimited">不限制</el-radio-button>
-                        <el-radio-button value="exact">精确数量</el-radio-button>
-                      </el-radio-group>
-                      <el-input-number
-                        v-if="folderCountMode[idx] === 'exact'"
-                        v-model="folder.file_count"
-                        :min="1"
-                        :max="99"
-                        style="width:100%;margin-top:8px"
-                        @change="handleFolderChange"
-                      />
-                    </el-form-item>
-                  </el-form>
-                  <el-button text type="danger" size="small" @click="removeFolder(idx)">删除文件夹</el-button>
-                </div>
-              </div>
-            </div>
-
-            <div class="folder-empty" v-else>
-              <span class="folder-empty__hint">暂未添加文件夹，点击下方按钮添加</span>
-            </div>
-
-            <el-button
-              type="primary"
-              plain
-              size="small"
-              style="width:100%;margin-top:8px"
-              @click="addFolder"
-            >
-              + 添加文件夹
-            </el-button>
-
-            <!-- 名称冲突警告 -->
-            <el-alert
-              v-if="folderNameConflict"
-              type="warning"
-              :closable="false"
-              show-icon
-              style="margin-top:8px"
-            >
-              {{ folderNameConflict }}
-            </el-alert>
-          </template>
-        </div>
+        <!-- 文件提交配置（P2-2 共享组件：文件夹增删改 + 模式切换） -->
+        <FolderConfigEditor
+          v-model:folders="folders"
+          v-model:use-file-folders="useFileFolders"
+          v-model:require-file="form.require_file"
+          :name-conflict="folderNameConflict"
+          @change="syncToNode"
+          @mode-change="handleFolderModeToggle"
+        />
 
         <!-- 签批配置 —— 三个独立开关 -->
         <el-form-item label="签批配置">
@@ -331,11 +232,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Setting, ArrowRight, Folder } from '@element-plus/icons-vue'
+import { InfoFilled, Setting } from '@element-plus/icons-vue'
 import UserSelector from '@/components/UserSelector.vue'
 import type { UserSearchItem } from '@/api/admin'
 import type { FileFolderConfig } from '@/api/designer'
 import { calculateDeadlines } from '@/api/instance'
+import FolderConfigEditor from './FolderConfigEditor.vue'
 
 /** Props */
 const props = defineProps<{
@@ -374,14 +276,10 @@ const form = reactive({
   require_endorser_signature: true,
 })
 
-/** 文件夹配置 */
+/** 文件夹配置（v-model 给 FolderConfigEditor，展开/数量模式状态在组件内部） */
 const folders = ref<FileFolderConfig[]>([])
 /** 是否使用文件夹模式 */
 const useFileFolders = ref(false)
-/** 当前展开的文件夹索引 */
-const expandedFolderIdx = ref<number | null>(null)
-/** 每个文件夹的数量模式：unlimited | exact */
-const folderCountMode = reactive<Record<number, string>>({})
 
 /** 用户名称缓存 —— 从 UserSelector options-loaded 事件积累 */
 const userNameCache = reactive<Record<number, string>>({})
@@ -483,14 +381,15 @@ function loadFromNode() {
     form.deadline = undefined
   }
 
-  // 文件夹配置
+  // 文件夹配置（数量模式由 FolderConfigEditor 内部按 file_count 推导）
   const rawFolders = p.file_folders
   if (rawFolders && Array.isArray(rawFolders) && rawFolders.length > 0) {
     useFileFolders.value = true
-    folders.value = rawFolders.map((f: any, i: number) => {
-      folderCountMode[i] = f.file_count != null ? 'exact' : 'unlimited'
-      return { name: f.name || '', required: f.required ?? false, file_count: f.file_count ?? null }
-    })
+    folders.value = rawFolders.map((f: any) => ({
+      name: f.name || '',
+      required: f.required ?? false,
+      file_count: f.file_count ?? null,
+    }))
   } else {
     useFileFolders.value = false
     folders.value = []
@@ -565,63 +464,9 @@ function handleEndorserChange(val: number | number[] | undefined) {
 
 // ========== 文件夹管理 ==========
 
-/** 文件夹规则摘要文字 */
-function folderRuleSummary(f: FileFolderConfig): string {
-  if (!f.required) return '可选'
-  if (f.file_count == null) return '至少1个，不限'
-  return `必须提交 · ${f.file_count}个`
-}
-
-/** 展开/折叠文件夹 */
-function toggleFolder(idx: number) {
-  expandedFolderIdx.value = expandedFolderIdx.value === idx ? null : idx
-}
-
-/** 添加文件夹 */
-function addFolder() {
-  const idx = folders.value.length
-  folders.value.push({ name: '', required: false, file_count: null })
-  folderCountMode[idx] = 'unlimited'
-  expandedFolderIdx.value = idx  // 自动展开新建的文件夹
-  syncToNode()
-}
-
-/** 删除文件夹 */
-function removeFolder(idx: number) {
-  folders.value.splice(idx, 1)
-  delete folderCountMode[idx]
-  if (expandedFolderIdx.value === idx) expandedFolderIdx.value = null
-  syncToNode()
-}
-
-/** 文件夹配置变更 */
-function handleFolderChange() {
-  syncToNode()
-}
-
-/** 数量模式切换 */
-function handleFolderCountModeChange(idx: number) {
-  const folder = folders.value[idx]
-  if (!folder) return
-  if (folderCountMode[idx] === 'unlimited') {
-    folder.file_count = null
-  } else {
-    folder.file_count = folder.file_count || 1
-  }
-  syncToNode()
-}
-
-/** 文件夹模式切换 */
-function handleFolderModeToggle(val: boolean) {
-  if (val) {
-    // 切换到文件夹模式：清空旧 require_file，初始化空文件夹列表
-    form.require_file = false
-    folders.value = []
-  } else {
-    // 切换回简单模式：清空文件夹配置
-    folders.value = []
-    expandedFolderIdx.value = null
-  }
+/** 文件夹模式切换 —— 清空旧文件夹列表并同步（require_file 联动与展开收起由 FolderConfigEditor 内部处理） */
+function handleFolderModeToggle() {
+  folders.value = []
   syncToNode()
 }
 
@@ -831,92 +676,6 @@ watch(() => props.nodeData, () => {
       color: var(--el-text-color-secondary);
       margin-top: 4px;
       line-height: 1.5;
-    }
-  }
-}
-
-/* 文件提交配置区域 */
-.file-folders-section {
-  margin-bottom: 16px;
-
-  &__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-  }
-
-  &__title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--el-text-color-regular);
-  }
-
-  .folder-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .folder-card {
-    border: 1px solid var(--el-border-color-light);
-    border-radius: 6px;
-    overflow: hidden;
-    transition: border-color 0.2s;
-
-    &:hover { border-color: var(--el-color-primary-light-5); }
-
-    &__summary {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 10px;
-      cursor: pointer;
-      background: var(--el-fill-color-lighter);
-      user-select: none;
-    }
-
-    &__icon { font-size: 14px; flex-shrink: 0; }
-
-    &__name {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--el-text-color-primary);
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    &__rule {
-      font-size: 11px;
-      color: var(--el-text-color-secondary);
-      flex-shrink: 0;
-      margin-left: auto;
-      margin-right: 4px;
-    }
-
-    &__arrow {
-      font-size: 12px;
-      color: var(--el-text-color-placeholder);
-      flex-shrink: 0;
-      transition: transform 0.2s;
-      &.rotated { transform: rotate(90deg); }
-    }
-
-    &__body {
-      padding: 10px 12px;
-      border-top: 1px solid var(--el-border-color-lighter);
-    }
-  }
-
-  .folder-empty {
-    padding: 16px 0;
-    text-align: center;
-
-    &__hint {
-      font-size: 12px;
-      color: var(--el-text-color-placeholder);
     }
   }
 }

@@ -124,7 +124,8 @@
 .info-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: 16px 12px;
+  font-size: 14px;
 
   &__item {
     .k {
@@ -138,6 +139,33 @@
       color: var(--el-text-color-primary);
     }
   }
+}
+
+// ========== 优先级标签（P2-2：从各详情页 scoped 收敛为全局） ==========
+.pri-tag {
+  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
+  &.pri--urgent { color: #fff; background: var(--el-color-danger); }
+  &.pri--high { color: #fff; background: var(--el-color-warning); }
+  &.pri--normal { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
+  &.pri--low { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
+
+// ========== 难度等级标签（P2-2：从各详情页 scoped 收敛为全局，详情页配色） ==========
+.diff-badge {
+  font-size: 12px; font-weight: 500; padding: 1px 6px; border-radius: 8px;
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
+  &.diff--3 { color: #fff; background: var(--el-color-warning); }
+  &.diff--2 { color: var(--el-text-color-secondary); background: var(--el-fill-color); }
+  &.diff--1 { color: var(--el-color-info); background: var(--el-color-info-light-9); }
+}
+
+// ========== 难度等级标签（列表页配色，实例头部/实例表格用，P2-2 收敛） ==========
+.diff-badge--list {
+  font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px;
+  &.diff--1 { color: #1e8449; background: #eafaf1; }
+  &.diff--2 { color: #2471a3; background: #eaf2f8; }
+  &.diff--3 { color: #b87333; background: #fef5e7; }
+  &.diff--4 { color: #fff; background: var(--el-color-danger); }
 }
 
 // ========== 统计卡片数字 ==========

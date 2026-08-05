@@ -222,7 +222,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createTemplate, getTemplateDetail, getDocTemplates, getCategoryDetail, linkDocTemplates, unlinkDocTemplate, type TemplateDetail, type DocTemplateItem, type TemplateCategorySummary, type LinkedTemplateCategory } from '@/api/template'
 import request from '@/api/request'
-import { saveDesign, type DesignerNode, type DesignerEdge } from '@/api/designer'
+import { saveDesign } from '@/api/designer'
+import { buildDesignPayload } from './designer/buildDesignPayload'
 import { createInstance, calculateDeadlines } from '@/api/instance'
 import FlowCanvas from './designer/FlowCanvas.vue'
 import NodePanel from './designer/NodePanel.vue'
@@ -549,24 +550,6 @@ function pointsStrToList(pts: string | null | undefined): Array<{ x: number; y: 
   })
 }
 
-/** 构建节点 LF UUID → 数据库 ID 的映射（通过 properties.db_id） */
-function buildSystemIdMapping(graphData: { nodes: any[]; edges: any[] }): Record<string, number> {
-  const mapping: Record<string, number> = {}
-  for (const n of graphData.nodes) {
-    if (n.properties?.db_id != null) {
-      mapping[String(n.id)] = Number(n.properties.db_id)
-    }
-  }
-  return mapping
-}
-
-function resolveNodeId(lfId: string | number, mapping: Record<string, number>): number | string | null {
-  if (mapping[String(lfId)] !== undefined) return mapping[String(lfId)]
-  const num = Number(lfId)
-  // 能转数字 → 返回数字（DB ID）；否则返回原始字符串（新节点临时 ID，由后端 new_node_id_map 解析）
-  return Number.isNaN(num) ? String(lfId) : num
-}
-
 function handleNodeSelect(nodeData: any | null) { selectedNodeData.value = nodeData }
 function getCanvasNodes(): any[] {
   const lf = canvasRef.value?.getLf()
@@ -862,33 +845,8 @@ async function handleSave() {
   if (!lf) return
   saving.value = true
   try {
-    const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
-    const idMapping = buildSystemIdMapping(graphData)
-    const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
-      id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,
-      is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
-      assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
-      require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
-      file_folders: n.properties?.file_folders ?? null,  // 文件提交文件夹配置
-      checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      require_assignee_signature: n.properties?.require_assignee_signature ?? true,
-      require_checker_signature: n.properties?.require_checker_signature ?? true,
-      require_approver_signature: n.properties?.require_approver_signature ?? true,
-      endorser_id: n.properties?.endorser_id ?? null,
-      require_endorser_signature: n.properties?.require_endorser_signature ?? true,
-      signature_x: n.properties?.signature_x ?? 400,
-      signature_y: n.properties?.signature_y ?? 100,
-      signature_page: n.properties?.signature_page ?? -1,
-      position_x: Math.round(n.x), position_y: Math.round(n.y),
-      sort_order: n.properties?.sort_order ?? 0,
-    }))
-    const edges: DesignerEdge[] = graphData.edges
-      .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => {
-        // getGraphData() 不包含 points，需从 Model 实例直接读取
-        const edgeModel = lf.getEdgeModelById(e.id) as any
-        return { id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: edgeModel?.points || null }
-      })
+    // 序列化画布为节点/连线（P2-2 与 handleLaunch 共用）
+    const { nodes, edges } = buildDesignPayload(lf)
 
     let templateId = Number(route.params.id)
     if (isNewTemplate.value) {
@@ -923,37 +881,12 @@ async function handleLaunch() {
 
   launching.value = true
   try {
-    // 1. 先保存模板最新设计
-    const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
-    const idMapping = buildSystemIdMapping(graphData)
-    const nodes: DesignerNode[] = graphData.nodes.map((n: any) => ({
-      id: resolveNodeId(n.id, idMapping), name: n.properties?.name || n.text?.value || n.type,
-      is_start: n.properties?.is_start ?? false, is_end: n.properties?.is_end ?? false,
-      assignee_id: n.properties?.assignee_id ?? null, time_limit_days: n.properties?.time_limit_days ?? null,
-      require_file: n.properties?.require_file ?? false, approvers: n.properties?.approvers ?? null,
-      file_folders: n.properties?.file_folders ?? null,  // 文件提交文件夹配置
-      checkers: n.properties?.checkers ?? null, approval_strategy: n.properties?.approval_strategy ?? 'all_approve',
-      require_assignee_signature: n.properties?.require_assignee_signature ?? true,
-      require_checker_signature: n.properties?.require_checker_signature ?? true,
-      require_approver_signature: n.properties?.require_approver_signature ?? true,
-      endorser_id: n.properties?.endorser_id ?? null,
-      require_endorser_signature: n.properties?.require_endorser_signature ?? true,
-      signature_x: n.properties?.signature_x ?? 400,
-      signature_y: n.properties?.signature_y ?? 100,
-      signature_page: n.properties?.signature_page ?? -1,
-      position_x: Math.round(n.x), position_y: Math.round(n.y),
-      sort_order: n.properties?.sort_order ?? 0,
-    }))
-    const edges: DesignerEdge[] = graphData.edges
-      .filter((e: any) => e.sourceNodeId && e.targetNodeId)
-      .map((e: any) => {
-        // getGraphData() 不包含 points，需从 Model 实例直接读取
-        const edgeModel = lf.getEdgeModelById(e.id) as any
-        return { id: Number(e.id) || null, source_node_id: resolveNodeId(e.sourceNodeId, idMapping) ?? String(e.sourceNodeId), target_node_id: resolveNodeId(e.targetNodeId, idMapping) ?? String(e.targetNodeId), points: edgeModel?.points || null }
-      })
+    // 1. 先保存模板最新设计（P2-2 与 handleSave 共用序列化）
+    const { nodes, edges } = buildDesignPayload(lf)
     await saveDesign(templateId, { nodes, edges })
 
     // 2. 收集节点覆盖配置（截止日期 + 人员调整）
+    const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const nodeOverrides: { node_id: number; deadline?: string; assignee_id?: number; checkers?: { user_id: number }[]; approvers?: { user_id: number }[] }[] = []
     for (const n of graphData.nodes) {
       // 只处理工作节点（有 db_id 的）且存在 deadline 属性

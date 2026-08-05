@@ -200,11 +200,16 @@ export async function deleteTaskFile(taskId: number, fileId: number) {
   await request.delete(`/tasks/${taskId}/files/${fileId}`)
 }
 
+/** 文件下载 URL —— 预览/下载与签批弹窗共用（P2-2：统一 baseUrl 拼接，避免硬编码） */
+export function fileDownloadUrl(fileId: number): string {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  return `${baseUrl}/files/${fileId}/download`
+}
+
 /** 预览文件 —— 通过 fetch + Token 获取 blob 后在新标签页打开（PDF/图片）或下载（其他） */
 export async function previewFile(fileId: number): Promise<void> {
   const token = getToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  const resp = await fetch(`${baseUrl}/files/${fileId}/download`, {
+  const resp = await fetch(fileDownloadUrl(fileId), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!resp.ok) {
@@ -226,8 +231,7 @@ export async function previewFile(fileId: number): Promise<void> {
 /** 下载文件 —— 获取文件 blob 后触发浏览器保存对话框 */
 export async function downloadFile(fileId: number): Promise<void> {
   const token = getToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  const resp = await fetch(`${baseUrl}/files/${fileId}/download`, {
+  const resp = await fetch(fileDownloadUrl(fileId), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!resp.ok) {

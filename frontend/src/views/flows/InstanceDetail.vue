@@ -35,8 +35,8 @@
                         <span class="proposal-file-name" :title="f.original_name">{{ f.original_name }}</span>
                         <span v-if="f.round > 1" class="proposal-file-round">第{{ f.round }}轮</span>
                         <span class="proposal-file-meta">{{ f.uploader_name }} · {{ formatFileSize(f.file_size) }}</span>
-                        <el-button text type="primary" size="small" @click="handlePreview(f.id)">查看</el-button>
-                        <el-button text type="primary" size="small" @click="handleDownload(f.id)">下载</el-button>
+                        <el-button text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
+                        <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
                       </div>
                     </div>
                   </div>
@@ -370,15 +370,7 @@ function getNodeFolderGroups(node: DetailNodeInfo): { name: string; files: NodeF
   return groups
 }
 
-// 时间/文件大小 —— 统一从 @/utils/format 导入
-
-function handlePreview(fileId: number) {
-  previewFile(fileId)
-}
-
-function handleDownload(fileId: number) {
-  downloadFile(fileId)
-}
+// 时间/文件大小/预览/下载 —— 统一从 @/utils 与 @/api/task 导入
 </script>
 
 <style lang="scss" scoped>

@@ -5,12 +5,12 @@
     <div class="sticky-head__top">
       <div class="sticky-head__left">
         <h1 class="sticky-head__name">{{ detail.name }}</h1>
-        <span class="status-tag" :class="statusTagClass">{{ statusLabel }}</span>
+        <span class="status-tag" :class="instStatusClass(detail.status)">{{ instStatusLabel(detail.status) }}</span>
 
         <span class="priority-badge" :class="'priority--' + detail.priority">
-          {{ priorityLabel }}
+          {{ priLabel(detail.priority) }}
         </span>
-        <span class="diff-badge" :class="'diff--' + (detail.difficulty || '1')">{{ detail.difficulty || '1' }}级</span>
+        <span class="diff-badge diff-badge--list" :class="'diff--' + (detail.difficulty || '1')">{{ detail.difficulty || '1' }}级</span>
       </div>
       <div class="sticky-head__actions" v-if="showActions">
         <el-button
@@ -88,6 +88,7 @@ import { computed } from 'vue'
 import ProgressBar from './ProgressBar.vue'
 import type { InstanceDetailResponse } from '@/api/instance'
 import { formatTime } from '@/utils/format'
+import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 
 const props = defineProps<{
   detail: InstanceDetailResponse
@@ -104,39 +105,7 @@ defineEmits<{
 /** 是否为方案实例 */
 const isProposal = computed(() => props.detail.template_type === 'proposal')
 
-// ========== 状态标签 ==========
-const statusLabel = computed(() => {
-  const s = (props.detail.status || '').toLowerCase()
-  const map: Record<string, string> = {
-    created: '已创建',
-    running: '运行中',
-    completed: '已完成',
-    terminated: '已终止',
-  }
-  return map[s] || props.detail.status
-})
-
-const statusTagClass = computed(() => {
-  const s = (props.detail.status || '').toLowerCase()
-  const map: Record<string, string> = {
-    created: 'status-tag--draft',
-    running: 'status-tag--running',
-    completed: 'status-tag--completed',
-    terminated: 'status-tag--terminated',
-  }
-  return map[s] || ''
-})
-
-// ========== 优先级 ==========
-const priorityLabel = computed(() => {
-  const map: Record<string, string> = {
-    urgent: '紧急',
-    high: '高',
-    normal: '普通',
-    low: '低',
-  }
-  return map[props.detail.priority] || props.detail.priority
-})
+// 状态/优先级文案与类名统一走 @/utils/labels（P2-2 去重）
 
 // ========== 操作按钮可见性 ==========
 /** 非终止状态时显示操作区 */
@@ -230,18 +199,5 @@ const canSupplement = computed(() => {
 // 数字等宽
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-// 难度徽章（与列表页 diff-badge 一致）
-.diff-badge {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 1px 8px;
-  border-radius: 10px;
-
-  &.diff--1 { color: #1e8449; background: #eafaf1; }
-  &.diff--2 { color: #2471a3; background: #eaf2f8; }
-  &.diff--3 { color: #b87333; background: #fef5e7; }
-  &.diff--4 { color: #fff; background: var(--el-color-danger); }
 }
 </style>

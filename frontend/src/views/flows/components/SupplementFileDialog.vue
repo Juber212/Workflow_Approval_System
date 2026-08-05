@@ -91,6 +91,7 @@ import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadFile, UploadRawFile } from 'element-plus'
 import { supplementFiles } from '@/api/instance'
 import type { DetailNodeInfo } from '@/api/instance'
+import { validateUploadSize } from '@/utils/upload'
 
 // ========== Props & Emits ==========
 const props = defineProps<{
@@ -172,12 +173,7 @@ const canSubmit = computed(() =>
 
 // ========== 文件预校验 ==========
 function beforeUpload(rawFile: UploadRawFile): boolean {
-  // 文件大小校验
-  if (rawFile.size > 50 * 1024 * 1024) {
-    ElMessage.warning(`文件「${rawFile.name}」超过 50MB 限制`)
-    return false
-  }
-  return true
+  return validateUploadSize(rawFile)
 }
 
 // ========== 提交补交 ==========

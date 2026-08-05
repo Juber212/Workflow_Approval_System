@@ -16,152 +16,20 @@
       <h3 class="section-label">全部项目</h3>
     </div>
 
-    <!-- 表格工具栏：筛选按钮 + 搜索各独立容器 -->
-    <div class="table-toolbar">
-      <!-- 状态筛选按钮独立容器 -->
-      <div class="filter-tabs">
-        <button
-          v-for="f in instanceFilters" :key="f.value"
-          class="filter-tab" :class="{ 'is-active': instanceStatusFilter === f.value }"
-          @click="handleInstanceFilter(f.value)"
-        >
-          <span class="filter-label">{{ f.label }}</span>
-          <span class="filter-count">{{ statusCounts[f.value] ?? '—' }}</span>
-        </button>
-      </div>
-      <!-- 搜索+高级搜索独立容器 -->
-      <div class="toolbar-actions">
-        <el-input
-          v-model="instanceKeyword" placeholder="搜索项目名称" clearable
-          :prefix-icon="Search" size="default" style="width: 200px"
-          @input="handleInstanceSearch"
-        />
-        <el-button text size="small" @click="showAdvancedSearch = !showAdvancedSearch" style="margin-left:4px">
-          <el-icon><ArrowDown v-if="!showAdvancedSearch" /><ArrowUp v-else /></el-icon>
-          高级搜索
-        </el-button>
-      </div>
-    </div>
-    <!-- 高级搜索面板 -->
-    <div class="card__advanced-search" v-show="showAdvancedSearch">
-      <el-date-picker
-        v-model="instanceDateRange" type="daterange" range-separator="至"
-        start-placeholder="发起起始" end-placeholder="发起截止"
-          format="YYYY-MM-DD" value-format="YYYY-MM-DD" size="default"
-          style="width: 260px" @change="handleInstanceSearch"
-        />
-        <el-select v-model="instancePriority" placeholder="优先级" clearable size="default" style="width: 120px" @change="handleInstanceSearch">
-          <el-option label="紧急" value="urgent" /><el-option label="高" value="high" />
-          <el-option label="普通" value="normal" /><el-option label="低" value="low" />
-        </el-select>
-        <el-select v-model="instanceInitiatorId" placeholder="发起人" clearable filterable remote
-          :remote-method="searchInitiators" size="default" style="width: 180px" @change="handleInstanceSearch">
-          <el-option v-for="u in initiatorOptions" :key="u.id" :label="u.real_name" :value="u.id" />
-        </el-select>
-    </div>
-
-    <!-- 实例列表 -->
-    <div class="card">
-      <div class="card__body" style="padding:0">
-        <el-table :data="instances" stripe border v-loading="instanceLoading"
-          :row-class-name="combinedRowClass"
-          @row-click="handleInstanceRowClick" style="cursor:pointer"
-        >
-          <!-- ===== 弹性列（按内容自适配） ===== -->
-          <!-- 1. 项目名称 -->
-          <el-table-column prop="name" label="项目名称" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="inst-name">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-          <!-- 2. 方案 -->
-          <el-table-column label="方案" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="inst-meta">{{ row.proposal_name || '-' }}</span>
-            </template>
-          </el-table-column>
-          <!-- 3. 所属组织 -->
-          <el-table-column prop="organization_name" label="所属组织" width="90" show-overflow-tooltip />
-          <!-- 4. 进度（进度条） -->
-          <el-table-column label="进度" min-width="120">
-            <template #default="{ row }">
-              <div class="bt-progress">
-                <el-progress
-                  :percentage="row.total_nodes > 0 ? Math.round((row.current_node_index / row.total_nodes) * 100) : 0"
-                  :stroke-width="8"
-                  :show-text="false"
-                />
-                <span class="bt-progress__text">
-                  {{ row.total_nodes > 0 ? Math.round((row.current_node_index / row.total_nodes) * 100) : 0 }}%（{{ row.current_node_index }}/{{ row.total_nodes }}）
-                </span>
-              </div>
-            </template>
-          </el-table-column>
-          <!-- ===== 固定列 ===== -->
-          <!-- 5. 当前处理人 -->
-          <el-table-column label="当前处理人" width="110" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="inst-meta">{{ row.current_handlers || '-' }}</span>
-            </template>
-          </el-table-column>
-          <!-- 6. 状态 -->
-          <el-table-column label="状态" width="90" sortable="false">
-            <template #default="{ row }">
-              <span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span>
-            </template>
-          </el-table-column>
-          <!-- 7. 优先级 -->
-          <el-table-column label="优先级" width="72">
-            <template #default="{ row }">
-              <span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span>
-            </template>
-          </el-table-column>
-          <!-- 8. 难度 -->
-          <el-table-column label="难度" width="64">
-            <template #default="{ row }">
-              <span class="diff-badge" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span>
-            </template>
-          </el-table-column>
-          <!-- 9. 发起时间 -->
-          <el-table-column prop="initiated_at" label="发起时间" width="135">
-            <template #default="{ row }">
-              <span class="num">{{ formatTime(row.initiated_at) }}</span>
-            </template>
-          </el-table-column>
-          <!-- 10. 流程截止 -->
-          <el-table-column label="截止时间" width="135">
-            <template #default="{ row }">
-              <span class="num">{{ row.flow_deadline ? formatTime(row.flow_deadline) : '-' }}</span>
-            </template>
-          </el-table-column>
-          <!-- 11. 操作 -->
-          <!-- 管理员多一个"删除"按钮，列宽稍大避免换行 -->
-          <el-table-column label="操作" :width="isAdmin ? 160 : 140" fixed="right">
-            <template #default="{ row }">
-              <el-button text type="primary" size="small" @click.stop="goInstanceDetail(row.id)">查看详情</el-button>
-              <el-button v-if="isAdmin && row.status === 'terminated'" text type="danger" size="small" @click.stop="handlePermanentDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div v-if="!instanceLoading && instances.length === 0" style="padding:40px 0;text-align:center">
-          <span style="color:var(--el-text-color-secondary);font-size:14px">暂无项目</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 分页 -->
-    <div class="list-pagination">
-      <el-pagination
-        v-model:current-page="instancePage"
-        v-model:page-size="instancePageSize"
-        :page-sizes="[20, 50, 100]"
-        :total="instanceTotal"
-        layout="total, sizes, prev, pager, next"
-        @current-change="fetchInstances"
-        @size-change="fetchInstances"
-      />
-    </div>
+    <!-- 全部项目（P2-2 共享组件：筛选/搜索/分页/删除，fetch 权留在本页） -->
+    <InstanceTable
+      v-model:status-filter="instanceStatusFilter"
+      v-model:page="instancePage"
+      v-model:page-size="instancePageSize"
+      :items="instances"
+      :loading="instanceLoading"
+      :total="instanceTotal"
+      :counts="statusCounts"
+      show-org-column
+      @refresh="fetchInstances"
+      @refresh-counts="fetchStatusCounts"
+      @row-click="(row: InstanceListItem) => goInstanceDetail(row.id)"
+    />
   </div>
 </template>
 
@@ -170,29 +38,23 @@
  * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Search, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useUserStore } from '@/stores/user'
 import { getTemplateOrganizations, type OrgCardItem } from '@/api/template'
-import { getInstances, permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
-import { searchUsers, type UserSearchItem } from '@/api/admin'
+import { getInstances, type InstanceListItem } from '@/api/instance'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { formatTime } from '@/utils/format'
-import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 import OrgCardList from './components/OrgCardList.vue'
+import InstanceTable, { type InstanceQuery } from './components/InstanceTable.vue'
 
 const { setBreadcrumb } = useBreadcrumb()
 const router = useRouter()
 const route = useRoute()
-const userStore = useUserStore()
-const isAdmin = computed(() => userStore.isAdmin)
 
 // ========== 组织卡片 ==========
 const orgs = ref<OrgCardItem[]>([])
 
 // ========== 实例列表 ==========
+// 数据与分页/状态筛选由本页持有（组件内 keyword/高级搜索等状态内部管理）
 const instanceLoading = ref(false)
 const instances = ref<InstanceListItem[]>([])
 const instanceTotal = ref(0)
@@ -201,32 +63,13 @@ const instancePageSize = ref(20)
 /** 实例状态筛选 —— 与 URL query.status 双向同步，支持外部链接预选 */
 const validStatuses = ['all', 'running', 'completed', 'terminated']
 const instanceStatusFilter = ref((validStatuses.includes(route.query.status as string) ? route.query.status : 'all') as string)
-const instanceKeyword = ref('')
-/** 高级搜索 */
-const showAdvancedSearch = ref(false)
-const instanceDateRange = ref<[string, string] | null>(null)
-const instancePriority = ref('')
-const instanceInitiatorId = ref<number | null>(null)
-const initiatorOptions = ref<UserSearchItem[]>([])
 /** 各状态实例数量（从 API 获取） */
 const statusCounts = ref<Record<string, number>>({})
-
-const instanceFilters = [
-  { label: '全部', value: 'all' },
-  { label: '运行中', value: 'running' },
-  { label: '已完成', value: 'completed' },
-  { label: '已终止', value: 'terminated' },
-]
 
 // ========== 初始化 ==========
 onMounted(async () => {
   setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '项目管理' }])
   await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
-})
-
-onUnmounted(() => {
-  if (searchTimer) clearTimeout(searchTimer)
-  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
 })
 
 async function fetchOrgs() {
@@ -260,54 +103,25 @@ async function fetchStatusCounts() {
 }
 
 // ========== 实例列表 ==========
-async function fetchInstances() {
+/** 查询参数（keyword/日期/优先级/发起人）由 InstanceTable 组件经 refresh 事件上抛 */
+async function fetchInstances(query?: InstanceQuery) {
   instanceLoading.value = true
   try {
     const data = await getInstances({
       page: instancePage.value,
       page_size: instancePageSize.value,
       status: instanceStatusFilter.value === 'all' ? undefined : instanceStatusFilter.value,
-      keyword: instanceKeyword.value || undefined,
+      keyword: query?.keyword,
       sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
-      priority: instancePriority.value || undefined,
-      date_from: instanceDateRange.value?.[0],
-      date_to: instanceDateRange.value?.[1],
-      initiator_id: instanceInitiatorId.value ?? undefined,
+      priority: query?.priority,
+      date_from: query?.date_from,
+      date_to: query?.date_to,
+      initiator_id: query?.initiator_id ?? undefined,
     })
     instances.value = data.items
     instanceTotal.value = data.total
   } catch { /* 拦截器统一处理 */ }
   finally { instanceLoading.value = false }
-}
-
-/** 实例表格行高亮：运行中 urgent/high 加背景色 */
-function instanceRowClass({ row }: { row: InstanceListItem }) {
-  if (row.status !== 'running') return ''
-  if (row.priority === 'urgent') return 'row--priority-urgent'
-  if (row.priority === 'high') return 'row--priority-high'
-  return ''
-}
-
-/** 逾期/临期行标色 */
-function deadlineRowClass({ row }: any): string {
-  if (row?.status === 'completed') return 'r--green'
-  if (row?.status === 'terminated') return 'r--gray'
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
-  return ''
-}
-
-/** 合并优先级行色 + 逾期/临期行色 */
-function combinedRowClass(data: { row: InstanceListItem }) {
-  const pri = instanceRowClass(data)
-  const dl = deadlineRowClass(data)
-  return [pri, dl].filter(Boolean).join(' ')
-}
-
-function handleInstanceFilter(status: string) {
-  instanceStatusFilter.value = status
-  instancePage.value = 1
-  fetchInstances()
 }
 
 // ── URL query ↔ 状态筛选 双向同步 ──
@@ -327,42 +141,7 @@ watch(() => route.query.status, (val) => {
   }
 })
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-function handleInstanceSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    instancePage.value = 1
-    fetchInstances()
-  }, 300)
-}
-
-/** 远程搜索发起人 */
-let initiatorSearchTimer: ReturnType<typeof setTimeout> | null = null
-async function searchInitiators(query: string) {
-  if (!query) { initiatorOptions.value = []; return }
-  if (initiatorSearchTimer) clearTimeout(initiatorSearchTimer)
-  initiatorSearchTimer = setTimeout(async () => {
-    try { initiatorOptions.value = await searchUsers(query, 20) } catch { /* ignore */ }
-  }, 300)
-}
-
 function goInstanceDetail(id: number) { router.push({ name: 'InstanceDetail', params: { id } }) }
-function handleInstanceRowClick(row: InstanceListItem) { goInstanceDetail(row.id) }
-
-/** 管理员永久删除已终止实例 */
-async function handlePermanentDelete(row: InstanceListItem) {
-  try {
-    await ElMessageBox.confirm(`确认永久删除项目「${row.name}」？此操作不可撤销，所有关联数据将被清除。`, '永久删除', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' })
-  } catch { /* 用户取消关闭，无需处理 */ return }
-  try {
-    await permanentDeleteInstance(row.id)
-    ElMessage.success('项目已永久删除')
-    fetchInstances()
-    fetchStatusCounts()
-  } catch { /* 拦截器已统一弹错（P1-35），无需重复提示 */ }
-}
-
-// 时间/状态标签 —— 统一从 @/utils 导入
 </script>
 
 <style lang="scss" scoped>
@@ -371,48 +150,4 @@ async function handlePermanentDelete(row: InstanceListItem) {
 .flow-management { :deep(.caret-wrapper) { display: none; } :deep(.el-table__header) .el-icon { display: none !important; } :deep(.el-table .cell)::before, :deep(.el-table .cell)::after { display: none !important; content: none !important; } }
 .section-divider { display: flex; align-items: center; margin: 24px 0 16px; }
 .section-label { font-size: 15px; font-weight: 600; color: var(--el-text-color-primary); margin: 0; }
-
-/* 表格工具栏：筛选按钮 + 搜索操作各独立容器，同行排列（无外层卡片） */
-.table-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 12px; }
-.toolbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-
-.filter-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.filter-tab { height: 32px; padding: 0 16px; border: 1px solid var(--el-border-color); background: #fff; border-radius: 6px; font-size: 13px; color: var(--el-text-color-regular); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; transition: all 0.2s; &:hover { border-color: var(--el-color-primary); color: var(--el-color-primary); } &.is-active { background: var(--el-color-primary); border-color: var(--el-color-primary); color: #fff; } }
-.filter-label { display: inline-block; min-width: 3em; }
-.filter-count { opacity: 0.7; }
-
-.inst-name { font-weight: 500; color: var(--el-text-color-primary); }
-.inst-meta { font-size: 13px; color: var(--el-text-color-secondary); }
-
-/* 进度条（与首页卡点追踪一致） */
-.bt-progress { display: flex; align-items: center; gap: 8px; padding: 4px 8px; :deep(.el-progress) { flex: 1; min-width: 60px; } :deep(.el-progress-bar__outer) { border-radius: 4px; } }
-.bt-progress__text { font-size: 12px; color: var(--el-text-color-secondary); white-space: nowrap; flex-shrink: 0; }
-
-.pri-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.pri--urgent { background: #fde2e2; color: #c0392b; } &.pri--high { background: #fef5e7; color: #d68910; } &.pri--normal { background: #eaf2f8; color: #2471a3; } &.pri--low { background: #f2f3f5; color: #86909c; } }
-
-/* 难度等级 badge */
-.diff-badge { font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 10px; &.diff--1 { color: #1e8449; background: #eafaf1; } &.diff--2 { color: #2471a3; background: #eaf2f8; } &.diff--3 { color: #b87333; background: #fef5e7; } &.diff--4 { color: #fff; background: var(--el-color-danger); } }
-
-.list-pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
-.num { font-variant-numeric: tabular-nums; }
-
-/* 高级搜索面板（独立于表格工具栏，折叠展开） */
-.card__advanced-search {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 16px; margin-bottom: 8px;
-  background: #fff; border: 1px solid var(--el-border-color-light); border-radius: 8px;
-  flex-wrap: wrap;
-}
-</style>
-
-<style lang="scss">
-/* 优先级行高亮（仅运行中实例） */
-.row--priority-urgent td { background: #fde8e8 !important; }
-.row--priority-high td { background: #fef3e2 !important; }
-
-/* 状态行背景色 —— tr 前缀确保覆盖 el-table stripe 条纹 */
-tr.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
-tr.r--yel td { background: #fffaf0 !important; }    /* 临期=淡黄 */
-tr.r--green td { background: #eafaf1 !important; }   /* 已完成=淡绿 */
-tr.r--gray td { background: #f2f3f5 !important; }    /* 已终止=淡灰 */
 </style>
