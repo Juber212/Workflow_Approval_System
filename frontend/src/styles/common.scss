@@ -238,6 +238,13 @@
   border-bottom: 1px solid #f0f0f0;
 }
 
+// ========== 优先级左侧色条（仅运行中实例） ==========
+// 背景色让给状态/逾期（r--green/r--red 等），两套信号互不覆盖。
+// 定义在全局（而非 InstanceTable.vue）：dashboard 卡点追踪复用该类，
+// 若放组件内，直接刷新首页时该组件 chunk 未加载，色条样式会消失（P2-5 遗留 bug）。
+.row--pri-bar--urgent td:first-child { box-shadow: inset 3px 0 0 0 #c0392b; }
+.row--pri-bar--high td:first-child { box-shadow: inset 3px 0 0 0 #d68910; }
+
 // 主按钮：去阴影渐变，更扁平
 .el-button--primary {
   box-shadow: none !important;

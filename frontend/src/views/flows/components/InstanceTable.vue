@@ -347,9 +347,7 @@ defineExpose({ resetFilters })
 </style>
 
 <style lang="scss">
-/* 优先级左侧色条（仅运行中实例）—— 背景色让给状态/逾期，两套信号互不覆盖 */
-.row--pri-bar--urgent td:first-child { box-shadow: inset 3px 0 0 0 #c0392b; }
-.row--pri-bar--high td:first-child { box-shadow: inset 3px 0 0 0 #d68910; }
+/* 优先级左侧色条类已移至 styles/common.scss（全局）——dashboard 卡点追踪复用，防刷新后缺失 */
 
 /* 状态行背景色 —— tr 前缀确保覆盖 el-table stripe 条纹 */
 tr.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
