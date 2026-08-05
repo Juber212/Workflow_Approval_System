@@ -151,6 +151,7 @@ storage/archive/{实例名称}/
 - ✅ 第五轮架构增强：JWT 黑名单（Redis DB 2）+ must_change_password 前后端双重拦截 + 401 跳转状态保持 + 低危项清零（Phase 16）
 - ✅ 第六轮全栈审查（2026-08-03）P0 上线阻断全部修复：模板ZIP下载鉴权 / folder_name路径穿越 / 签名file_id越权 / fork-join驳回卡死 / must_change_password死循环+改密流程 / 前端57个TS错误清零（vue-tsc -b 0 + build 通过） / WS鉴权完整化 / 角色降级即时生效（P0-4 审批死锁经确认撤销）
 - - [ ] 中危项按需修复
+- ✅ 数据量性能防护（2026-08-05）：首页/超期页删 3 个白耗查询（任务分布/超期列表/个人计数——前端均不消费）；卡点追踪 SQL 层 limit 100 + 超期 4 类 limit 50，均返回真实总数供前端提示；四张运行时表加 `idx_status` 单列索引（Alembic `b1c2d3e4f5a6`），EXPLAIN 验证超期查询转索引 range scan。**观察项**：列表页 keyword ngram 全文索引、通知 `(user_id, created_at)` 索引（数据量极大时再评估）
 
 **状态：可部署上线**
 
