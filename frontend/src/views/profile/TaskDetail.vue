@@ -282,6 +282,8 @@ const fileFailed = reactive<Record<number, boolean>>({})
 const convertingIds = ref<Set<number>>(new Set())
 /** 进度动画定时器 */
 let progressTimer: ReturnType<typeof setInterval> | null = null
+/** 完成收尾动画定时器（进度条补满后执行真正收尾） */
+let finishTimer: ReturnType<typeof setInterval> | null = null
 
 /** 启动进度动画：每 100ms 推进转换中文件的进度 +2%，封顶 95%（真实完成由轮询补 100%） */
 function startProgressAnimation() {
@@ -326,8 +328,10 @@ function syncConversionProgress(files: FileStatusItem[]) {
   const converting = new Set<number>()
   files.forEach((f) => {
     if (f.conversion_status === 'ready') {
-      fileProgress[f.id] = 100
       delete fileFailed[f.id]
+      // 有动画进度的文件保留当前进度，由 handleConversionComplete 收尾补满（保证进度条走完再消失）
+      // 无进度（如上传即 PDF）直接完成
+      if (!fileProgress[f.id]) fileProgress[f.id] = 100
     } else if (f.conversion_status === 'converting') {
       converting.add(f.id)
       fileFailed[f.id] = false
@@ -495,10 +499,11 @@ function getFolderWarning(folder: FileFolderConfig): string {
   return ''
 }
 
-// 离开页面时清理转换轮询与进度动画定时器
+// 离开页面时清理转换轮询与进度/收尾动画定时器
 onUnmounted(() => {
   stopConversionPolling()
   stopProgressAnimation()
+  if (finishTimer) { clearInterval(finishTimer); finishTimer = null }
   // 清理未触发的 conversion-all-done 事件监听器，防止泄漏
   if (_conversionDoneHandler) {
     window.removeEventListener('conversion-all-done', _conversionDoneHandler)
@@ -665,9 +670,36 @@ function listenConversionDone() {
   window.addEventListener('conversion-all-done', handler, { once: true })
 }
 
-/** 转换完成后：检查结果 → 打开签批弹框或显示错误
+/** 收尾动画：进度条平滑补到 100% 后执行完成逻辑（转换过快时进度条仍能走完再消失） */
+function animateToFullThen(finalize: () => void) {
+  finishTimer = setInterval(() => {
+    let allFull = true
+    Object.keys(fileProgress).forEach((key) => {
+      const id = Number(key)
+      const cur = fileProgress[id] || 0
+      // 只补「正在动画推进」的文件（>0 且未完成且未失败），失败红条保持不动
+      if (cur > 0 && cur < 100 && !fileFailed[id]) {
+        fileProgress[id] = Math.min(100, cur + 25)
+        if (fileProgress[id] < 100) allFull = false
+      }
+    })
+    if (allFull) {
+      clearInterval(finishTimer!)
+      finishTimer = null
+      finalize()
+    }
+  }, 60)
+}
+
+/** 转换完成后：进度条补满 → 检查结果 → 打开签批弹框或显示错误
  * 轮询路径传入 FilesStatusResponse（has_failed），WebSocket 路径传入 conversion_all_done 消息体（failed），两者字段不同需归一化 */
 async function handleConversionComplete(status: FilesStatusResponse | { total: number; ready: number; failed: number; status?: string }) {
+  // 先让进度条平滑补满（约 0.3s），再执行真正收尾，避免进度条没走完就消失
+  animateToFullThen(() => finalizeConversion(status))
+}
+
+/** 转换真正收尾：停止等待态、检查失败、重新取 PDF 列表并打开签批弹窗 */
+async function finalizeConversion(status: FilesStatusResponse | { total: number; ready: number; failed: number; status?: string }) {
   waitingConversion.value = false
   stopProgressAnimation()  // 停止进度动画（进度条随 waitingConversion 消失）
   // 移除一次性 WebSocket 监听：无论由轮询还是事件触发完成都需清理，防残留监听重复处理
