@@ -65,6 +65,8 @@
       <div class="card dash-bn">
         <div class="card__header">
           <span class="card__title">{{ catLabel }}卡点追踪</span>
+          <!-- 运行中实例超过上限时提示真实总数（后端仅返回前 N 条，防数据量大拖慢首页） -->
+          <span v-if="curBottleneckTotal > 100" class="bn-count-hint">共 {{ curBottleneckTotal }} 条，仅显示前 100 条</span>
           <div style="display:flex;align-items:center;gap:8px">
             <el-select v-model="bottleneckOrgFilter" placeholder="全部组织" clearable size="small" style="width:120px">
               <el-option v-for="o in orgNames" :key="o" :label="o" :value="o" />
@@ -197,13 +199,12 @@ const ORG_COLORS = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA
 const data = reactive<DashboardData>({
   stats: { running_instances: 0, archived_total: 0, archived_this_month: 0, overdue_warnings: 0 },
   proposal_stats: { running_instances: 0, archived_total: 0, archived_this_month: 0, overdue_warnings: 0 },
-  task_distribution: [],
   bottleneck: [],
+  bottleneck_total: 0,        // 项目卡点追踪真实运行中实例总数（列表仅取前 N 条）
   proposal_bottleneck: [],  // 方案卡点追踪（简化列）
-  overdue_list: [],
+  proposal_bottleneck_total: 0,  // 方案卡点追踪真实运行中实例总数
   org_overview: [],
   proposal_org_overview: [],  // 各所方案概览（tab 切换用）
-  my_task_counts: { pending: 0, checking: 0, approval: 0 },
   my_pending: [],           // 当前用户待办列表（项目视图）
   proposal_my_pending: [],   // 当前用户待办列表（方案视图）
   my_pending_total: 0,       // 项目待办真实全量条数（P1-33）
@@ -257,6 +258,8 @@ function handleBarClick(orgId: number) {
 
 // ─── 卡点追踪（跟随 tab 切换数据源） ───
 const curBottleneck = computed(() => catTab.value === 'project' ? data.bottleneck : data.proposal_bottleneck)
+/** 卡点追踪真实运行中实例总数（当前 tab，超过上限时前端提示） */
+const curBottleneckTotal = computed(() => catTab.value === 'project' ? data.bottleneck_total : data.proposal_bottleneck_total)
 const orgNames = computed(() => [...new Set(curBottleneck.value.map(b => b.organization_name).filter(Boolean))].sort())
 const filteredBottleneck = computed(() =>
   bottleneckOrgFilter.value ? curBottleneck.value.filter(b => b.organization_name === bottleneckOrgFilter.value) : curBottleneck.value
@@ -360,6 +363,9 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
 
 /* ─── 逾期文本 ─── */
 .text-muted { color: var(--el-text-color-placeholder); }
+
+/* ─── 卡点追踪超上限提示（浅灰小字，超限才显示） ─── */
+.bn-count-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-right: 4px; }
 
 /* ─── 双栏弹性 ─── */
 .dash-row { display: grid; grid-template-columns: minmax(300px, 420px) 1fr; gap: 20px; margin-bottom: 20px; }

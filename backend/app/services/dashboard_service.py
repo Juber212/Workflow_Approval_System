@@ -15,15 +15,12 @@ from app.models import (
     Approval,
 )
 from app.models.enums import TaskStatus, CheckStatus, ApprovalStatus
-from app.services.instance._helpers import compute_deadline_info, is_deadline_overdue
+from app.services.instance._helpers import compute_deadline_info
 from app.schemas.dashboard import (
     DashboardData,
     DashboardStats,
-    TaskDistItem,
     BottleneckItem,
-    OverdueItem,
     OrgOverview,
-    MyTaskCounts,
     MyPendingItem,
 )
 
@@ -130,38 +127,29 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
         total=prop_total,    # 方案总数
     )
 
-    # ─── 2. 任务状态分布 ───
-    task_dist = await _get_task_distribution(db, now)
+    # ─── 2. 流程卡点追踪（项目 + 方案分开；列表取前 N 条 + 真实总数，防运行中实例量级拖慢首页） ───
+    bottleneck, bottleneck_total = await _get_bottleneck_tracking(db, now, exclude_proposal_tpl_ids=proposal_tpl_ids)
+    proposal_bottleneck, proposal_bottleneck_total = await _get_bottleneck_tracking(db, now, proposal_only_tpl_ids=proposal_tpl_ids)
 
-    # ─── 3. 流程卡点追踪（项目 + 方案分开） ───
-    bottleneck = await _get_bottleneck_tracking(db, now, exclude_proposal_tpl_ids=proposal_tpl_ids)
-    proposal_bottleneck = await _get_bottleneck_tracking(db, now, proposal_only_tpl_ids=proposal_tpl_ids)
-
-    # ─── 4. 超期预警列表 ───
-    overdue_list = await _get_overdue_list(db, now)
-
-    # ─── 5. 各所流程概览（项目 + 方案分开，前端 tab 切换） ───
+    # ─── 3. 各所流程概览（项目 + 方案分开，前端 tab 切换） ───
     org_overview = await _get_org_overview(db, exclude_proposal_tpl_ids=proposal_tpl_ids)
     proposal_org_overview = await _get_org_overview(db, proposal_only_tpl_ids=proposal_tpl_ids)
 
-    # ─── 6. 我的待办（个人统计 + 列表） ───
+    # ─── 4. 我的待办（个人列表，P1-33 已 Top 8 + 真实计数） ───
     if user_id:
         pending_items = await _get_my_pending_items(db, user_id)
-        my_task_counts = await _get_my_task_counts(db, user_id)
     else:
         pending_items = {"project": [], "project_total": 0, "proposal": [], "proposal_total": 0}
-        my_task_counts = MyTaskCounts()
 
     return DashboardData(
         stats=DashboardStats(**stats),
         proposal_stats=proposal_stats,
-        task_distribution=task_dist,
         bottleneck=bottleneck,
+        bottleneck_total=bottleneck_total,
         proposal_bottleneck=proposal_bottleneck,
-        overdue_list=overdue_list,
+        proposal_bottleneck_total=proposal_bottleneck_total,
         org_overview=org_overview,
         proposal_org_overview=proposal_org_overview,
-        my_task_counts=my_task_counts,
         my_pending=pending_items["project"],
         my_pending_total=pending_items["project_total"],
         proposal_my_pending=pending_items["proposal"],
@@ -169,53 +157,21 @@ async def get_dashboard_stats(db: AsyncSession, user_id: int | None = None) -> d
     )
 
 
-async def _get_task_distribution(db: AsyncSession, now: datetime) -> list[TaskDistItem]:
-    """任务状态分布 —— 全局统计（PRD §4.4）"""
-    thirty_days_ago = now - timedelta(days=30)
-
-    statuses = ["pending", "processing", "waiting_check", "waiting_approval", "completed"]
-    labels = {
-        "pending": "待处理", "processing": "处理中",
-        "waiting_check": "待校验", "waiting_approval": "待审批",
-        "completed": "近30天已完成",
-    }
-    colors = {
-        "pending": "#E6A23C", "processing": "#409EFF",
-        "waiting_check": "#00B5AD", "waiting_approval": "#9B59B6",
-        "completed": "#67C23A",
-    }
-
-    result: list[TaskDistItem] = []
-    for status in statuses:
-        conditions = [Task.status == status]
-        if status == "completed":
-            conditions.append(Task.completed_at >= thirty_days_ago)
-
-        count = (await db.execute(
-            select(func.count()).select_from(Task).where(*conditions)
-        )).scalar() or 0
-
-        result.append(TaskDistItem(
-            status=status,
-            label=labels.get(status, status),
-            color=colors.get(status, "#909399"),
-            count=count,
-        ))
-
-    return result
-
-
 async def _get_bottleneck_tracking(
     db: AsyncSession,
     now: datetime,
     exclude_proposal_tpl_ids: set = frozenset(),
     proposal_only_tpl_ids: set = frozenset(),
-) -> list[BottleneckItem]:
+) -> tuple[list[BottleneckItem], int]:
     """流程卡点追踪 —— 运行中实例的节点进度链（PRD §4.5）
 
     Args:
         exclude_proposal_tpl_ids: 排除这些模板 ID（用于项目）
         proposal_only_tpl_ids: 仅统计这些模板 ID（用于方案）
+
+    Returns:
+        (items, total)：items 仅取前 _BOTTLENECK_LIMIT 条（按优先级 + 发起时间排序），
+        total 为该视图真实运行中实例总数（供前端展示「共 N 条」）。
     """
     # 构建过滤条件
     conditions = [FlowInstance.status == "running"]
@@ -224,7 +180,12 @@ async def _get_bottleneck_tracking(
     elif proposal_only_tpl_ids:
         conditions.append(FlowInstance.template_id.in_(proposal_only_tpl_ids))
 
-    # 查询运行中实例
+    # 真实运行中实例总数（独立 count 走 idx_status 索引，避免全量拉取实例再 len）
+    total = (await db.execute(
+        select(func.count()).select_from(FlowInstance).where(*conditions)
+    )).scalar() or 0
+
+    # 查询运行中实例（SQL 层 limit：看板一屏展示，防运行中实例量级拖慢首页）
     instances_result = await db.execute(
         select(FlowInstance).where(*conditions).order_by(
             case(
@@ -234,12 +195,12 @@ async def _get_bottleneck_tracking(
                 else_=3,
             ),
             FlowInstance.initiated_at.asc(),
-        )
+        ).limit(_BOTTLENECK_LIMIT)
     )
     instances = instances_result.scalars().all()
 
     if not instances:
-        return []
+        return [], total
 
     inst_ids = [i.id for i in instances]
 
@@ -388,76 +349,7 @@ async def _get_bottleneck_tracking(
             all_finished=all_finished,
         ))
 
-    return items
-
-
-async def _get_overdue_list(db: AsyncSession, now: datetime) -> list[OverdueItem]:
-    """超期预警列表 —— 已逾期 + 即将逾期任务（PRD §4.6）"""
-    near_future = now + timedelta(days=2)
-
-    # JOIN tasks + instance_nodes 获取 deadline
-    tasks_result = await db.execute(
-        select(Task, InstanceNode).join(
-            InstanceNode, Task.node_id == InstanceNode.id
-        ).where(
-            Task.status.notin_(["completed", "terminated"]),
-            InstanceNode.deadline.isnot(None),
-            InstanceNode.deadline < near_future,
-        )
-    )
-    rows = tasks_result.all()
-
-    if not rows:
-        return []
-
-    inst_ids = list(set(t.instance_id for t, _ in rows))
-    insts = {}
-    if inst_ids:
-        insts_result = await db.execute(select(FlowInstance).where(FlowInstance.id.in_(inst_ids)))
-        insts = {i.id: i for i in insts_result.scalars().all()}
-
-    assignee_ids = list(set(t.assignee_id for t, _ in rows))
-    users_map = {}
-    if assignee_ids:
-        users_result = await db.execute(select(User).where(User.id.in_(assignee_ids)))
-        users_map = {u.id: u for u in users_result.scalars().all()}
-
-    items = []
-    for task, node in rows:
-        inst = insts.get(task.instance_id)
-        assignee = users_map.get(task.assignee_id)
-        dl = node.deadline
-
-        if dl:
-            # 自然日口径：忽略时分秒，截止日当天 delta=0 显示「还剩 0 天」（见 P1-17）
-            delta = (dl.date() - now.date()).days
-            if delta < 0:
-                days_label = f"已逾期 {-delta}天"
-            else:
-                days_label = f"还剩 {delta}天"
-        else:
-            days_label = "—"
-
-        items.append(OverdueItem(
-            task_id=task.id,
-            instance_id=task.instance_id,
-            instance_name=inst.name if inst else "",
-            node_name=node.name,
-            assignee_name=assignee.real_name if assignee else "",
-            deadline=dl.isoformat() if dl else None,
-            days_label=days_label,
-            organization_name="",
-            is_overdue=is_deadline_overdue(dl),
-        ))
-
-    # 排序：逾期从多到少，然后剩余从少到多（自然日口径，忽略时分秒，见 P1-17）
-    items.sort(key=lambda x: (
-        not x.is_overdue,
-        -(abs((datetime.fromisoformat(x.deadline).date() - now.date()).days) if x.deadline else 0) if x.is_overdue else 999,
-        abs((datetime.fromisoformat(x.deadline).date() - now.date()).days) if x.deadline and not x.is_overdue else 999,
-    ))
-
-    return items
+    return items, total
 
 
 async def _get_org_overview(
@@ -529,48 +421,14 @@ async def _get_org_overview(
     return result
 
 
-async def _get_my_task_counts(db: AsyncSession, user_id: int) -> MyTaskCounts:
-    """
-    当前用户的个人待办统计（PRD §4.8）
-
-    分别统计三张表：
-    - 待处理：tasks 表，assignee_id = 本人，status = 'pending'
-    - 待校验：check_records 表，checker_id = 本人，status = 'pending'
-    - 待审批：approvals 表，approver_id = 本人，status = 'pending'
-    """
-    # 待处理任务数（pending=刚分配未开始, processing=处理中，都算待处理）
-    pending = (await db.execute(
-        select(func.count()).select_from(Task).where(
-            Task.assignee_id == user_id,
-            Task.status.in_([TaskStatus.PENDING, TaskStatus.PROCESSING]),
-        )
-    )).scalar() or 0
-
-    # 待校验数
-    checking = (await db.execute(
-        select(func.count()).select_from(CheckRecord).where(
-            CheckRecord.checker_id == user_id,
-            CheckRecord.status == CheckStatus.PENDING,
-        )
-    )).scalar() or 0
-
-    # 待审批数
-    approval = (await db.execute(
-        select(func.count()).select_from(Approval).where(
-            Approval.approver_id == user_id,
-            Approval.status == ApprovalStatus.PENDING,
-        )
-    )).scalar() or 0
-
-    return MyTaskCounts(pending=pending, checking=checking, approval=approval)
-
-
 # ─── 优先级排序键映射 ───
 _PRIORITY_ORDER = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
 # ─── 类型标签映射 ───
 _TYPE_LABEL: dict[str, str] = {"task": "待办", "check": "校验", "approval": "审批"}
 # ─── 列表最大条数 ───
 _MAX_PENDING_ITEMS = 8
+# ─── 卡点追踪最大条数（看板一屏展示，防运行中实例量级拖慢首页） ───
+_BOTTLENECK_LIMIT = 100
 
 
 async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:

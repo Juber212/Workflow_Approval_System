@@ -11,13 +11,6 @@ export interface DashboardStats {
   total?: number  // 方案统计用：方案总数
 }
 
-export interface TaskDistItem {
-  status: string
-  label: string
-  color: string
-  count: number
-}
-
 export interface BottleneckItem {
   instance_id: number
   instance_name: string
@@ -42,13 +35,6 @@ export interface OrgOverview {
   terminated_count: number  // 已终止
 }
 
-/** 当前用户个人待办统计 */
-export interface MyTaskCounts {
-  pending: number    // 待处理
-  checking: number   // 待校验
-  approval: number   // 待审批
-}
-
 /** 我的待办列表项 —— 合并 Task/CheckRecord/Approval 三表 */
 export interface MyPendingItem {
   type: 'task' | 'check' | 'approval'
@@ -66,13 +52,12 @@ export interface MyPendingItem {
 export interface DashboardData {
   stats: DashboardStats
   proposal_stats: DashboardStats
-  task_distribution: TaskDistItem[]
   bottleneck: BottleneckItem[]
+  bottleneck_total: number  // 项目卡点追踪真实运行中实例总数（列表仅取前 N 条）
   proposal_bottleneck: BottleneckItem[]  // 方案卡点追踪（简化列）
-  overdue_list: any[]  // 保留兼容，前端不再渲染
+  proposal_bottleneck_total: number  // 方案卡点追踪真实运行中实例总数
   org_overview: OrgOverview[]        // 各所项目概览
   proposal_org_overview: OrgOverview[]  // 各所方案概览（前端 tab 切换用）
-  my_task_counts: MyTaskCounts  // 当前用户个人待办计数（侧边栏角标用）
   my_pending: MyPendingItem[]           // 当前用户待办列表（项目视图）
   proposal_my_pending: MyPendingItem[]   // 当前用户待办列表（方案视图）
   my_pending_total: number  // 项目待办真实全量条数（P1-33：列表仅展示前 8 条，此为完整计数）

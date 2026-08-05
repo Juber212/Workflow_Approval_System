@@ -286,6 +286,10 @@ async def send_refresh_signal(user_id: int) -> None:
         logger.warning(f"WebSocket 推送 refresh_count 失败: user_id={user_id}", exc_info=True)
 
 
+# ─── 超期列表每类最大条数（超期项会累积，SQL 层 limit + 真实总数兜底，防全量返回拖慢页面） ───
+_OVERDUE_LIMIT = 50
+
+
 async def get_overdue_items(db: AsyncSession) -> dict:
     """查询全部超期预警项，按类型分组（任务/校验/审批/批准）
 
@@ -308,8 +312,8 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         "endorsements": [],
     }
 
-    # ── 1. 超期待办任务 ──
-    overdue_tasks = (await db.execute(
+    # ── 1. 超期待办任务（列表 SQL 层取前 _OVERDUE_LIMIT 条 + 真实总数，防超期项累积拖慢页面） ──
+    task_base = (
         select(Task, InstanceNode, FlowInstance, User)
         .join(InstanceNode, Task.node_id == InstanceNode.id)
         .join(FlowInstance, Task.instance_id == FlowInstance.id)
@@ -319,11 +323,16 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
         )
-        .order_by(InstanceNode.deadline.asc())
+    )
+    tasks_total = (await db.execute(
+        select(func.count()).select_from(task_base.subquery())
+    )).scalar() or 0
+    overdue_tasks = (await db.execute(
+        task_base.order_by(InstanceNode.deadline.asc()).limit(_OVERDUE_LIMIT)
     )).all()
 
     # ── 2. 超期校验 ──
-    overdue_checks = (await db.execute(
+    check_base = (
         select(CheckRecord, InstanceNode, FlowInstance, User)
         .join(InstanceNode, and_(CheckRecord.node_id == InstanceNode.id))
         .join(FlowInstance, CheckRecord.instance_id == FlowInstance.id)
@@ -333,11 +342,16 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
         )
-        .order_by(InstanceNode.deadline.asc())
+    )
+    checks_total = (await db.execute(
+        select(func.count()).select_from(check_base.subquery())
+    )).scalar() or 0
+    overdue_checks = (await db.execute(
+        check_base.order_by(InstanceNode.deadline.asc()).limit(_OVERDUE_LIMIT)
     )).all()
 
     # ── 3. 超期审批 ──
-    overdue_approvals = (await db.execute(
+    approval_base = (
         select(Approval, InstanceNode, FlowInstance, User)
         .join(InstanceNode, and_(Approval.node_id == InstanceNode.id))
         .join(FlowInstance, Approval.instance_id == FlowInstance.id)
@@ -347,11 +361,16 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
         )
-        .order_by(InstanceNode.deadline.asc())
+    )
+    approvals_total = (await db.execute(
+        select(func.count()).select_from(approval_base.subquery())
+    )).scalar() or 0
+    overdue_approvals = (await db.execute(
+        approval_base.order_by(InstanceNode.deadline.asc()).limit(_OVERDUE_LIMIT)
     )).all()
 
     # ── 4. 超期批准 ──
-    overdue_endorsements = (await db.execute(
+    endorsement_base = (
         select(Endorsement, InstanceNode, FlowInstance, User)
         .join(InstanceNode, and_(Endorsement.node_id == InstanceNode.id))
         .join(FlowInstance, Endorsement.instance_id == FlowInstance.id)
@@ -361,7 +380,12 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
         )
-        .order_by(InstanceNode.deadline.asc())
+    )
+    endorsements_total = (await db.execute(
+        select(func.count()).select_from(endorsement_base.subquery())
+    )).scalar() or 0
+    overdue_endorsements = (await db.execute(
+        endorsement_base.order_by(InstanceNode.deadline.asc()).limit(_OVERDUE_LIMIT)
     )).all()
 
     # ── 批量获取组织名称（FlowInstance 只有 organization_id，需查 Organization 表）──
@@ -438,5 +462,11 @@ async def get_overdue_items(db: AsyncSession) -> dict:
             "priority": inst.priority,
             "organization_name": org_name_map.get(inst.organization_id, "") if inst.organization_id else "",
         })
+
+    # 补充真实全量计数（列表仅返回前 _OVERDUE_LIMIT 条，前端展示「共 N 条」提示，避免误以为数据丢失）
+    result["tasks_total"] = tasks_total
+    result["checks_total"] = checks_total
+    result["approvals_total"] = approvals_total
+    result["endorsements_total"] = endorsements_total
 
     return result

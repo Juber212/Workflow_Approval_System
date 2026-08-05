@@ -12,14 +12,6 @@ class DashboardStats(BaseModel):
     total: int = 0  # 总数（方案卡片用）
 
 
-class TaskDistItem(BaseModel):
-    """任务状态分布项"""
-    status: str
-    label: str
-    color: str
-    count: int
-
-
 class BottleneckItem(BaseModel):
     """流程卡点追踪项"""
     instance_id: int
@@ -36,19 +28,6 @@ class BottleneckItem(BaseModel):
     all_finished: bool = False
 
 
-class OverdueItem(BaseModel):
-    """超期预警项"""
-    task_id: int
-    instance_id: int
-    instance_name: str = ""
-    node_name: str = ""
-    assignee_name: str = ""
-    deadline: str | None = None
-    days_label: str = ""
-    organization_name: str = ""
-    is_overdue: bool = False
-
-
 class OrgOverview(BaseModel):
     """各所流程概览（供柱状图 + 饼图）"""
     org_id: int
@@ -57,13 +36,6 @@ class OrgOverview(BaseModel):
     running_count: int = 0       # 运行中项目数
     completed_count: int = 0     # 已完成项目数
     terminated_count: int = 0    # 已终止项目数
-
-
-class MyTaskCounts(BaseModel):
-    """当前用户的个人待办统计"""
-    pending: int = 0       # 待处理（任务 assignee_id=本人，status=pending）
-    checking: int = 0      # 待校验（check_records checker_id=本人，status=pending）
-    approval: int = 0      # 待审批（approvals approver_id=本人，status=pending）
 
 
 class MyPendingItem(BaseModel):
@@ -84,13 +56,12 @@ class DashboardData(BaseModel):
     """Dashboard 完整响应数据"""
     stats: DashboardStats = DashboardStats()
     proposal_stats: DashboardStats = DashboardStats()  # 方案统计（同结构，含义不同）
-    task_distribution: list[TaskDistItem] = []
     bottleneck: list[BottleneckItem] = []
+    bottleneck_total: int = 0  # 项目卡点追踪真实运行中实例总数（列表仅取前 N 条）
     proposal_bottleneck: list[BottleneckItem] = []  # 方案卡点追踪（简化列）
-    overdue_list: list[OverdueItem] = []
+    proposal_bottleneck_total: int = 0  # 方案卡点追踪真实运行中实例总数
     org_overview: list[OrgOverview] = []        # 各所项目概览
     proposal_org_overview: list[OrgOverview] = []  # 各所方案概览（前端 tab 切换用）
-    my_task_counts: MyTaskCounts = MyTaskCounts()  # 当前用户个人待办计数（侧边栏角标用）
     my_pending: list[MyPendingItem] = []           # 当前用户待办列表（项目视图）
     proposal_my_pending: list[MyPendingItem] = []   # 当前用户待办列表（方案视图）
     my_pending_total: int = 0            # 项目待办真实全量条数（P1-33：列表仅展示前 8 条，此为完整计数）

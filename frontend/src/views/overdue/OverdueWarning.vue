@@ -7,23 +7,24 @@
     </div>
 
     <div class="overdue-summary" v-if="summary">
+      <!-- 计数用真实全量条数（列表仅返回前 50 条，防止超期项累积拖慢页面） -->
       <span class="overdue-summary__item overdue-summary__item--task">
-        ⚠ 超期待办：{{ summary.tasks.length }} 项
+        ⚠ 超期待办：{{ summary.tasks_total }} 项
       </span>
       <span class="overdue-summary__item overdue-summary__item--check">
-        超期校验：{{ summary.checks.length }} 项
+        超期校验：{{ summary.checks_total }} 项
       </span>
       <span class="overdue-summary__item overdue-summary__item--approval">
-        超期审批：{{ summary.approvals.length }} 项
+        超期审批：{{ summary.approvals_total }} 项
       </span>
       <span class="overdue-summary__item overdue-summary__item--endorsement">
-        超期批准：{{ summary.endorsements.length }} 项
+        超期批准：{{ summary.endorsements_total }} 项
       </span>
     </div>
 
     <!-- 超期待办 -->
     <section class="overdue-section" v-if="summary?.tasks.length">
-      <h3 class="overdue-section__title">超期待办任务</h3>
+      <h3 class="overdue-section__title">超期待办任务<span v-if="summary.tasks_total > 50" class="overdue-section__limit">仅显示前 50 条</span></h3>
       <el-table border :data="summary.tasks" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
@@ -50,7 +51,7 @@
 
     <!-- 超期校验 -->
     <section class="overdue-section" v-if="summary?.checks.length">
-      <h3 class="overdue-section__title">超期校验</h3>
+      <h3 class="overdue-section__title">超期校验<span v-if="summary.checks_total > 50" class="overdue-section__limit">仅显示前 50 条</span></h3>
       <el-table border :data="summary.checks" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
@@ -77,7 +78,7 @@
 
     <!-- 超期审批 -->
     <section class="overdue-section" v-if="summary?.approvals.length">
-      <h3 class="overdue-section__title">超期审批</h3>
+      <h3 class="overdue-section__title">超期审批<span v-if="summary.approvals_total > 50" class="overdue-section__limit">仅显示前 50 条</span></h3>
       <el-table border :data="summary.approvals" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
@@ -104,7 +105,7 @@
 
     <!-- 超期批准 -->
     <section class="overdue-section" v-if="summary?.endorsements.length">
-      <h3 class="overdue-section__title">超期批准</h3>
+      <h3 class="overdue-section__title">超期批准<span v-if="summary.endorsements_total > 50" class="overdue-section__limit">仅显示前 50 条</span></h3>
       <el-table border :data="summary.endorsements" stripe style="width:100%">
         <el-table-column prop="instance_name" label="项目/方案" min-width="160" />
         <el-table-column prop="node_name" label="当前节点" min-width="120" />
@@ -163,19 +164,23 @@ interface OverdueItem {
 
 interface OverdueSummary {
   tasks: OverdueItem[]
+  tasks_total: number   // 超期待办真实全量条数（列表仅返回前 50 条）
   checks: OverdueItem[]
+  checks_total: number
   approvals: OverdueItem[]
+  approvals_total: number
   endorsements: OverdueItem[]
+  endorsements_total: number
 }
 
 const summary = ref<OverdueSummary | null>(null)
 const loading = ref(true)
 
-/** 是否全部为空 */
+/** 是否全部为空（用真实全量条数判断） */
 const isEmpty = computed(() => {
   if (!summary.value) return true
   const s = summary.value
-  return s.tasks.length === 0 && s.checks.length === 0 && s.approvals.length === 0 && s.endorsements.length === 0
+  return s.tasks_total === 0 && s.checks_total === 0 && s.approvals_total === 0 && s.endorsements_total === 0
 })
 
 /**
@@ -259,6 +264,14 @@ onMounted(async () => {
     margin-bottom: 10px;
     padding-left: 8px;
     border-left: 3px solid var(--el-color-danger);
+  }
+
+  /* 超期项超过上限时的提示（浅灰小字，超限才显示） */
+  &__limit {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--el-text-color-placeholder);
+    margin-left: 8px;
   }
 }
 

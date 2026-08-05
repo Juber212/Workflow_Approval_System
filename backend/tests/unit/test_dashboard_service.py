@@ -85,15 +85,17 @@ class TestBottleneckTracking:
 
     @pytest.mark.asyncio
     async def test_no_running_instances(self, mock_db):
-        """无运行中实例 → 空列表"""
+        """无运行中实例 → 空列表 + total=0"""
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalars_all=[]),  # SELECT running instances
+            MockResult(scalar_value=0),   # COUNT running instances（真实总数）
+            MockResult(scalars_all=[]),   # SELECT running instances（前 N 条）
         ]
 
         now = datetime.now()
-        result = await _get_bottleneck_tracking(mock_db, now)
-        assert result == []
+        items, total = await _get_bottleneck_tracking(mock_db, now)
+        assert items == []
+        assert total == 0
 
     @pytest.mark.asyncio
     async def test_running_instance_with_nodes(self, mock_db):
@@ -116,25 +118,28 @@ class TestBottleneckTracking:
         mock_db.execute = AsyncMock()
         # 需要按顺序提供返回值
         mock_db.execute.side_effect = [
-            # 0: SELECT running instances
+            # 0: COUNT running instances（真实总数）
+            MockResult(scalar_value=1),
+            # 1: SELECT running instances（前 N 条）
             MockResult(scalars_all=[inst]),
-            # 1: SELECT nodes
+            # 2: SELECT nodes
             MockResult(scalars_all=[node]),
-            # 2: SELECT org names
+            # 3: SELECT org names
             MockResult(scalars_all=[Organization(id=1, name="测试所")]),
-            # 3: SELECT all personnel names（使用 .all()）
+            # 4: SELECT all personnel names（使用 .all()）
             MockResult(rows_all=[(2, "张三")]),
         ]
 
         now = datetime.now()
-        result = await _get_bottleneck_tracking(mock_db, now)
+        items, total = await _get_bottleneck_tracking(mock_db, now)
 
-        assert len(result) == 1
-        assert result[0].instance_id == 1
-        assert result[0].instance_name == "测试项目"
-        assert result[0].organization_name == "测试所"
-        assert result[0].current_handlers == "张三"
-        assert result[0].difficulty == "1"
+        assert total == 1
+        assert len(items) == 1
+        assert items[0].instance_id == 1
+        assert items[0].instance_name == "测试项目"
+        assert items[0].organization_name == "测试所"
+        assert items[0].current_handlers == "张三"
+        assert items[0].difficulty == "1"
 
     @pytest.mark.asyncio
     async def test_filters_proposals(self, mock_db):
@@ -156,6 +161,7 @@ class TestBottleneckTracking:
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
+            MockResult(scalar_value=1),   # COUNT running instances
             MockResult(scalars_all=[inst]),
             MockResult(scalars_all=[node]),
             MockResult(scalars_all=[Organization(id=1, name="测试所")]),
@@ -164,11 +170,12 @@ class TestBottleneckTracking:
 
         now = datetime.now()
         # 用 exclude_proposal_tpl_ids 排除方案
-        result = await _get_bottleneck_tracking(
+        items, total = await _get_bottleneck_tracking(
             mock_db, now, exclude_proposal_tpl_ids={10, 20, 30}
         )
 
-        assert len(result) == 1  # template_id=5 不在排除列表中
+        assert total == 1
+        assert len(items) == 1  # template_id=5 不在排除列表中
 
 
 # ============================================================
