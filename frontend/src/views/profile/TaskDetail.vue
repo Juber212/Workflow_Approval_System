@@ -755,16 +755,16 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
 
   &__bar {
     width: 64px;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--el-fill-color);
+    height: 8px;
+    border-radius: 4px;
+    background: var(--el-border-color);  // 深灰底，与文件行浅灰背景区分（不融为一条）
     overflow: hidden;
   }
 
   &__fill {
     display: block;
     height: 100%;
-    border-radius: 3px;
+    border-radius: 4px;
     background: var(--el-color-primary);
     transition: width 0.2s linear;
   }
