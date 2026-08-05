@@ -14,6 +14,8 @@ class Endorsement(Base):
         Index("node_id", "node_id"),
         Index("task_id", "task_id"),
         Index("endorser_id", "endorser_id"),
+        # status 单列索引：全局超期查询（status='pending'）走索引，防数据量大全表扫
+        Index("idx_status", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

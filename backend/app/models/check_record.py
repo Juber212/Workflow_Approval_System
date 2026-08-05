@@ -17,6 +17,8 @@ class CheckRecord(Base):
         Index("idx_task", "task_id"),
         Index("idx_checker", "checker_id"),
         Index("idx_checker_status", "checker_id", "status"),
+        # status 单列索引：全局超期/统计查询（status='pending'）走索引，防数据量大全表扫
+        Index("idx_status", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

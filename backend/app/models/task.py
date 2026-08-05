@@ -16,6 +16,8 @@ class Task(Base):
         Index("idx_node", "node_id"),
         Index("idx_assignee", "assignee_id"),
         Index("idx_assignee_status", "assignee_id", "status"),
+        # status 单列索引：全局超期/统计查询（Task.status NOT IN）走索引，防数据量大全表扫
+        Index("idx_status", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
