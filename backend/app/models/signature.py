@@ -20,7 +20,7 @@ class Signature(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     file_id: Mapped[int] = mapped_column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False, comment="签在哪个文件")
     signer_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="签名人")
-    role_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="签名角色 assignee|checker|approver")
+    role_type: Mapped[str] = mapped_column(String(20), nullable=False, comment="签名角色 assignee|checker|approver|endorser")
     source_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="业务记录ID task_id/check_id/approval_id")
     node_id: Mapped[int] = mapped_column(Integer, ForeignKey("instance_nodes.id"), nullable=False, comment="所属节点")
     signature_x: Mapped[float] = mapped_column(Float, default=400, comment="签名X坐标（距左边）")

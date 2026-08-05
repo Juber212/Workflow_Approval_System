@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
+from app.models.enums import ApprovalStrategy
 
 
 class TemplateNode(Base):
@@ -25,10 +26,10 @@ class TemplateNode(Base):
     assignee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), comment="负责人")
     time_limit_days: Mapped[int | None] = mapped_column(Integer, comment="完成时限（工作日）")
     require_file: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否必须上传文件")
-    file_folders: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="文件提交文件夹配置 [{name, required, file_count}]")
-    approvers: Mapped[dict | None] = mapped_column(JSON, comment="审批人列表")
-    checkers: Mapped[dict | None] = mapped_column(JSON, comment="校验人列表")
-    approval_strategy: Mapped[str] = mapped_column(String(30), default="all_approve", comment="审批策略")
+    file_folders: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True, comment="文件提交文件夹配置 [{name, required, file_count}]")
+    approvers: Mapped[list[dict] | None] = mapped_column(JSON, comment="审批人列表")
+    checkers: Mapped[list[dict] | None] = mapped_column(JSON, comment="校验人列表")
+    approval_strategy: Mapped[str] = mapped_column(String(30), default=ApprovalStrategy.ALL_APPROVE.value, comment="审批策略")
     require_assignee_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="负责人提交时是否签名")
     require_checker_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="校验人通过时是否签名")
     require_approver_signature: Mapped[bool] = mapped_column(Boolean, default=True, comment="审批人通过时是否签名")

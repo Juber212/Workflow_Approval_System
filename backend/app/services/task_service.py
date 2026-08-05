@@ -295,6 +295,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
                 "checker_name": user_name(checker_users, c.checker_id),
                 "status": c.status,
                 "opinion": c.opinion,
+                "round": c.round or 1,
                 "decided_at": c.decided_at.isoformat() if c.decided_at else None,
             }
             for c in checks
@@ -307,6 +308,7 @@ async def get_task_detail(db: AsyncSession, task_id: int, current_user_id: int) 
                 "status": a.status,
                 "opinion": a.opinion,
                 "signature_applied": a.signature_applied,
+                "round": a.round or 1,
                 "decided_at": a.decided_at.isoformat() if a.decided_at else None,
             }
             for a in approvals

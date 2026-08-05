@@ -199,19 +199,22 @@ async def get_endorsement_detail(
             (i + 1 for i, n in enumerate(all_nodes) if n.id == e.node_id), 0
         ),
         "total_nodes": len(all_nodes),
-        "nodes": [{"id": n.id, "name": n.name, "status": n.status, "is_start": n.is_start, "is_end": n.is_end}
-                   for n in all_nodes],
+        "nodes": [{"id": n.id, "name": n.name, "status": n.status,
+                   "is_start": n.is_start, "is_end": n.is_end, "sort_order": n.sort_order}
+                  for n in all_nodes],
         "files": serialize_files(files, file_node_names),
         # 仅本节点文件（签批预览用，后端过滤，不可信前端）
         "node_files": serialize_files(files, file_node_names, node_id=node.id),
         "checks": [{"id": c.id, "checker_id": c.checker_id,
                      "checker_name": user_name(name_users_map, c.checker_id),
                      "status": c.status, "opinion": c.opinion,
+                     "round": c.round or 1,
                      "decided_at": c.decided_at} for c in checks],
         "approvals": [{"id": a.id, "approver_id": a.approver_id,
                        "approver_name": user_name(name_users_map, a.approver_id),
                        "status": a.status, "opinion": a.opinion,
                        "signature_applied": a.signature_applied,
+                       "round": a.round or 1,
                        "decided_at": a.decided_at} for a in approvals],
         "decided_at": e.decided_at,
         "created_at": e.created_at,

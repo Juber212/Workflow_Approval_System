@@ -2,6 +2,8 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from app.schemas.instance import CheckRecordBrief, DetailFileBrief, InstanceNodeBrief
+
 
 class CheckListItem(BaseModel):
     """校验列表项"""
@@ -48,15 +50,15 @@ class CheckDetail(BaseModel):
     # 进度条
     total_nodes: int = 0
     current_node_index: int = 0
-    nodes: list[dict] = []
+    nodes: list[InstanceNodeBrief] = []
     # 实例全部文件（展示用）
-    files: list[dict] = []
+    files: list[DetailFileBrief] = []
     # 仅本节点文件（签批预览用，后端过滤）
-    node_files: list[dict] = []
+    node_files: list[DetailFileBrief] = []
     # 负责人备注
     assignee_note: str | None = None
     # 并行校验进度
-    check_progress: list[dict] = []
+    check_progress: list[CheckRecordBrief] = []
     # 节点签批配置
     require_assignee_signature: bool = True
     require_checker_signature: bool = True

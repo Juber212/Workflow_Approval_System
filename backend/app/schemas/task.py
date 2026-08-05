@@ -2,6 +2,14 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from app.schemas.instance import (
+    ApprovalBrief,
+    CheckRecordBrief,
+    DetailFileBrief,
+    EndorsementBrief,
+    InstanceNodeBrief,
+)
+
 
 class TaskListItem(BaseModel):
     """待办列表项"""
@@ -47,12 +55,12 @@ class TaskDetail(BaseModel):
     round: int = 1
     total_nodes: int = 0
     current_node_index: int = 0
-    nodes: list[dict] = []
-    files: list[dict] = []
-    node_files: list[dict] = []  # 仅本节点文件（签批预览用，后端过滤）
-    checks: list[dict] = []
-    approvals: list[dict] = []
-    endorsements: list[dict] = []  # 批准记录（仅难度4时存在）
+    nodes: list[InstanceNodeBrief] = []
+    files: list[DetailFileBrief] = []
+    node_files: list[DetailFileBrief] = []  # 仅本节点文件（签批预览用，后端过滤）
+    checks: list[CheckRecordBrief] = []
+    approvals: list[ApprovalBrief] = []
+    endorsements: list[EndorsementBrief] = []  # 批准记录（仅难度4时存在）
     rejected_type: str | None = None
     rejected_reason: str | None = None
     # 节点签批配置

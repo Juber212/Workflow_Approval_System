@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
+from app.models.enums import ApprovalStatus
 
 
 class Approval(Base):
@@ -23,7 +24,7 @@ class Approval(Base):
     node_id: Mapped[int] = mapped_column(Integer, ForeignKey("instance_nodes.id"), nullable=False, comment="所属节点")
     task_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tasks.id"), comment="关联Task（结束节点为NULL）")
     approver_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="审批人")
-    status: Mapped[str] = mapped_column(String(20), default="pending", comment="审批状态")
+    status: Mapped[str] = mapped_column(String(20), default=ApprovalStatus.PENDING.value, comment="审批状态")
     opinion: Mapped[str | None] = mapped_column(String(500), comment="审批意见")
     round: Mapped[int] = mapped_column(Integer, default=1, comment="节点轮次（第几轮审批）")
     reject_target_node_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("instance_nodes.id"), comment="仅结束节点终审总驳回目标")

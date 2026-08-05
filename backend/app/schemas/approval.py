@@ -2,6 +2,15 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from app.schemas.instance import (
+    ApprovalBrief,
+    CheckRecordBrief,
+    DetailFileBrief,
+    InstanceNodeBrief,
+    RejectTargetNodeBrief,
+    SignatureBrief,
+)
+
 
 class ApprovalListItem(BaseModel):
     """审批列表项"""
@@ -48,17 +57,17 @@ class ApprovalDetail(BaseModel):
     # 进度条
     total_nodes: int = 0
     current_node_index: int = 0
-    nodes: list[dict] = []
+    nodes: list[InstanceNodeBrief] = []
     # 实例全部文件（展示用）
-    files: list[dict] = []
+    files: list[DetailFileBrief] = []
     # 仅本节点文件（签批预览用，后端过滤）
-    node_files: list[dict] = []
+    node_files: list[DetailFileBrief] = []
     # 校验进度
-    check_progress: list[dict] = []
+    check_progress: list[CheckRecordBrief] = []
     # 审批进度
-    approval_progress: list[dict] = []
+    approval_progress: list[ApprovalBrief] = []
     # 驳回目标候选（仅结束节点）
-    reject_target_nodes: list[dict] = []
+    reject_target_nodes: list[RejectTargetNodeBrief] = []
     signature_applied: bool = False
     # 节点签批配置（三个独立开关 + 默认位置）
     require_assignee_signature: bool = True
@@ -72,7 +81,7 @@ class ApprovalDetail(BaseModel):
     # 角色维度签名默认配置（从 SystemConfig 读取）
     role_signature: dict | None = None
     # 本审批记录的签名明细
-    signatures: list[dict] = []
+    signatures: list[SignatureBrief] = []
     decided_at: datetime | None = None
     created_at: datetime | None = None
 

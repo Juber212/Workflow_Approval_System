@@ -178,6 +178,56 @@ class LogItemBrief(BaseModel):
     created_at: datetime | None = None
 
 
+# ==================== 四详情接口（任务/校验/审批/批准）共用 Brief ====================
+
+class DetailFileBrief(BaseModel):
+    """详情接口文件简要信息 —— 覆盖 task/check/approval/endorse 各接口 serialize_files 的字段全集"""
+    id: int
+    original_name: str
+    mime_type: str | None = None
+    file_size: int | None = None
+    round: int = 1
+    node_id: int | None = None
+    node_name: str = ""
+    uploader_name: str = ""  # 仅 task/check/approval 详情返回（with_upload_meta）
+    upload_type: str = "normal"
+    created_at: str | None = None  # isoformat 字符串（serialize_files 序列化）
+    folder_name: str | None = None  # 仅 task 详情返回（with_folder，前端文件夹模式依赖）
+    conversion_status: str = "ready"  # 仅 task 详情返回（with_conversion）
+
+
+class EndorsementBrief(BaseModel):
+    """批准记录简要信息"""
+    id: int
+    endorser_id: int
+    endorser_name: str = ""
+    status: str
+    opinion: str | None = None
+    signature_applied: bool = False
+    round: int = 1
+    decided_at: datetime | None = None
+
+
+class SignatureBrief(BaseModel):
+    """签名记录简要信息（详情接口签名明细输出）"""
+    id: int
+    file_id: int
+    signature_x: float | None = None
+    signature_y: float | None = None
+    signature_page: int = -1
+    signature_width: float | None = None
+    signature_height: float | None = None
+    applied: bool = False
+
+
+class RejectTargetNodeBrief(BaseModel):
+    """驳回目标节点候选（审批详情，终审/中间节点驳回可选）"""
+    id: int
+    name: str
+    sort_order: int = 0
+    status: str = ""
+
+
 class InstanceDetailResponse(BaseModel):
     """实例详情完整响应"""
     id: int

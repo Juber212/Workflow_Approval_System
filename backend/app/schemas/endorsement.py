@@ -2,6 +2,8 @@
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from app.schemas.instance import ApprovalBrief, CheckRecordBrief, DetailFileBrief, InstanceNodeBrief
+
 
 class EndorsementListItem(BaseModel):
     """批准列表项"""
@@ -53,11 +55,11 @@ class EndorsementDetail(BaseModel):
     role_signature: dict | None = None  # 角色维度签名默认配置（从 SystemConfig 读取）
     current_node_index: int = 0
     total_nodes: int = 0
-    nodes: list[dict] = []      # 节点简要列表（进度链）
-    files: list[dict] = []      # 当前轮次文件
-    node_files: list[dict] = []  # 仅本节点文件（签批预览用，后端过滤）
-    checks: list[dict] = []     # 校验记录
-    approvals: list[dict] = []  # 审批记录
+    nodes: list[InstanceNodeBrief] = []  # 节点简要列表（进度链）
+    files: list[DetailFileBrief] = []    # 当前轮次文件
+    node_files: list[DetailFileBrief] = []  # 仅本节点文件（签批预览用，后端过滤）
+    checks: list[CheckRecordBrief] = []  # 校验记录
+    approvals: list[ApprovalBrief] = []  # 审批记录
     decided_at: datetime | None = None
     created_at: datetime | None = None
 

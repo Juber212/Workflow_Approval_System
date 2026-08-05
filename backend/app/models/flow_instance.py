@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
+from app.models.enums import TemplateType, Priority, InstanceStatus
 
 
 class FlowInstance(Base):
@@ -26,17 +27,17 @@ class FlowInstance(Base):
     description: Mapped[str | None] = mapped_column(String(500), comment="补充说明")
     template_id: Mapped[int] = mapped_column(Integer, nullable=False, comment="使用的模板ID（冗余，无外键）")
     template_name: Mapped[str] = mapped_column(String(100), nullable=False, comment="模板名称快照（创建时冗余存储）")
-    template_type: Mapped[str] = mapped_column(String(20), default="project", comment="模板类型快照: project / proposal（用于存储分目录等）")
+    template_type: Mapped[str] = mapped_column(String(20), default=TemplateType.PROJECT.value, comment="模板类型快照: project / proposal（用于存储分目录等）")
     organization_id: Mapped[int] = mapped_column(Integer, ForeignKey("organizations.id"), nullable=False, comment="所属组织")
     initiator_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="发起人")
-    priority: Mapped[str] = mapped_column(String(20), default="normal", comment="优先级")
+    priority: Mapped[str] = mapped_column(String(20), default=Priority.NORMAL.value, comment="优先级")
     difficulty: Mapped[str] = mapped_column(String(20), default="1", comment="难度等级: 1/2/3/4")
     contract_no: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="合同号")
     product_model: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="产品型号")
     sales_manager: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="销售经理")
     proposal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("flow_instances.id"), nullable=True, comment="关联的方案ID（仅项目类型可用）")
-    doc_template_ids: Mapped[list | None] = mapped_column(JSON, nullable=True, comment="实例级文件模板 ID 列表（发起时可调整，为空则继承模板关联）")
-    status: Mapped[str] = mapped_column(String(20), default="created", comment="主状态")
+    doc_template_ids: Mapped[list[int] | None] = mapped_column(JSON, nullable=True, comment="实例级文件模板 ID 列表（发起时可调整，为空则继承模板关联）")
+    status: Mapped[str] = mapped_column(String(20), default=InstanceStatus.CREATED.value, comment="主状态")
     termination_reason: Mapped[str | None] = mapped_column(String(500), comment="终止原因")
     initiated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, comment="发起时间")
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, comment="完成时间")

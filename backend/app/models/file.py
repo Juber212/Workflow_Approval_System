@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 
 from app.core.database import Base
+from app.models.enums import UploadType, ConversionStatus
 
 
 class File(Base):
@@ -23,7 +24,7 @@ class File(Base):
     task_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tasks.id"), comment="关联任务（补交可为NULL）")
     round: Mapped[int] = mapped_column(Integer, default=1, comment="文件所属轮次")
     uploader_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, comment="上传人")
-    upload_type: Mapped[str] = mapped_column(String(20), default="normal", comment="上传类型")
+    upload_type: Mapped[str] = mapped_column(String(20), default=UploadType.NORMAL.value, comment="上传类型")
     folder_name: Mapped[str | None] = mapped_column(String(100), nullable=True, comment="所属文件夹名称")
     original_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="原始文件名")
     stored_name: Mapped[str] = mapped_column(String(255), nullable=False, comment="存储文件名（UUID）")
@@ -31,7 +32,7 @@ class File(Base):
     file_size: Mapped[int | None] = mapped_column(BigInteger, comment="最终PDF大小（字节）")
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="application/pdf", comment="最终文件MIME类型")
     conversion_status: Mapped[str] = mapped_column(
-        String(20), default="ready",
+        String(20), default=ConversionStatus.READY.value,
         comment="PDF转换状态: pending/converting/ready/failed。PDF文件默认ready"
     )
     conversion_error: Mapped[str | None] = mapped_column(String(500), nullable=True, comment="转换失败原因")

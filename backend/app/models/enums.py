@@ -84,3 +84,23 @@ class Difficulty(str, enum.Enum):
     TWO = "2"
     THREE = "3"
     FOUR = "4"
+
+
+class TemplateType(str, enum.Enum):
+    """模板类型（模板/实例快照共用）"""
+    PROJECT = "project"
+    PROPOSAL = "proposal"
+
+
+class ApprovalStrategy(str, enum.Enum):
+    """审批策略"""
+    ALL_APPROVE = "all_approve"
+    SINGLE_APPROVE = "single_approve"
+
+
+class ConversionStatus(str, enum.Enum):
+    """文件 PDF 转换状态"""
+    PENDING = "pending"
+    CONVERTING = "converting"
+    READY = "ready"
+    FAILED = "failed"
