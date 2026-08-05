@@ -274,12 +274,11 @@ const orgPieItems = computed(() => {
 })
 
 // ─── table helpers ───
+/** 卡点追踪行色：逾期/临期=整行背景，urgent/high=左侧色条（复用 InstanceTable 全局色条类，两信号叠加不冲突） */
 function tableRowClass({ row }: any) {
-  if (row.overdue_status === '已逾期') return 'r--red'
-  if (row.overdue_status === '即将逾期') return 'r--yel'
-  if (row.priority === 'urgent') return 'r--pri-urgent'
-  if (row.priority === 'high') return 'r--pri-high'
-  return ''
+  const dl = row.overdue_status === '已逾期' ? 'r--red' : row.overdue_status === '即将逾期' ? 'r--yel' : ''
+  const pri = row.priority === 'urgent' ? 'row--pri-bar--urgent' : row.priority === 'high' ? 'row--pri-bar--high' : ''
+  return [pri, dl].filter(Boolean).join(' ')
 }
 function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将逾期' ? 'od--y' : 'od--g' }
 </script>
@@ -394,6 +393,4 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
 <style lang="scss">
 .r--red td { background: #fef0f0 !important; }
 .r--yel td { background: #fffaf0 !important; }
-.r--pri-urgent td { background: #fde8e8 !important; }
-.r--pri-high td { background: #fef3e2 !important; }
 </style>
