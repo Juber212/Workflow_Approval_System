@@ -566,6 +566,8 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
       name: f.original_name,
       url: f.url,
     }))
+    // 转换完成后后台刷新文件列表：徽标由「待转换」消失、出现预览按钮（与上传/删除后刷新一致）
+    getTaskDetail(detail.value!.id).then(d => { detail.value = d }).catch(() => {})
     if (pdfFiles.value.length === 0) {
       ElMessage.warning('没有可签批的 PDF 文件，请先上传文件')
       return
