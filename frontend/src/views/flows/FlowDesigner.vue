@@ -540,9 +540,6 @@ watch(showLaunchDialog, (val) => {
   }
 })
 
-/** 系统节点的数据库 ID（保存时用于替换 LogicFlow UUID） */
-const systemNodeDbIds = ref<{ start?: number; end?: number }>({})
-
 /** 将 points 字符串（"x1,y1 x2,y2"）转为 LogicFlow pickEdgeConfig 需要的 pointsList 数组 */
 function pointsStrToList(pts: string | null | undefined): Array<{ x: number; y: number }> | undefined {
   if (!pts) return undefined
@@ -626,9 +623,6 @@ onMounted(async () => {
   try {
     const detail: TemplateDetail = await getTemplateDetail(id)
     templateName.value = detail.name
-    const startNode = detail.nodes.find(n => n.is_start)
-    const endNode = detail.nodes.find(n => n.is_end)
-    systemNodeDbIds.value = { start: startNode?.id, end: endNode?.id }
 
     const lf = canvasRef.value?.getLf()
     if (lf && detail.nodes.length > 0) {

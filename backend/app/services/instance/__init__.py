@@ -1,6 +1,6 @@
 """项目服务 —— 按功能拆分到子模块
 
-外部调用方无需改动 import 路径：from app.services.instance_service import xyz
+统一从包入口导入：from app.services.instance import xyz（P2-1 已删除 instance_service.py shim）
 """
 
 from app.services.instance._helpers import (

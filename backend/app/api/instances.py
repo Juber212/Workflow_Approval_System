@@ -19,7 +19,7 @@ from app.schemas.instance import (
     ChangePriorityRequest,
     SupplementFileResponse,
 )
-from app.services.instance_service import (
+from app.services.instance import (
     create_instance,
     list_instances,
     get_instance_detail,

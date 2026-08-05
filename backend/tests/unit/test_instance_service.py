@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.core.exceptions import AppException
 from app.core.error_codes import ErrorCode
 from app.models.enums import InstanceStatus, InstanceNodeStatus
-from app.services.instance_service import create_instance, terminate_instance, change_personnel
+from app.services.instance import create_instance, terminate_instance, change_personnel
 from app.services.instance.list import list_instances
 
 from tests.factories import make_instance, make_node, make_task
