@@ -273,11 +273,11 @@ onUnmounted(() => {
 })
 
 // ========== 行样式 ==========
-/** 实例表格行高亮：运行中 urgent/high 加背景色 */
+/** 实例表格优先级左侧色条：运行中 urgent/high 加强调条（背景色让给状态/逾期，避免叠加冲突） */
 function instanceRowClass({ row }: { row: InstanceListItem }) {
   if (row.status !== 'running') return ''
-  if (row.priority === 'urgent') return 'row--priority-urgent'
-  if (row.priority === 'high') return 'row--priority-high'
+  if (row.priority === 'urgent') return 'row--pri-bar--urgent'
+  if (row.priority === 'high') return 'row--pri-bar--high'
   return ''
 }
 
@@ -347,9 +347,9 @@ defineExpose({ resetFilters })
 </style>
 
 <style lang="scss">
-/* 优先级行高亮（仅运行中实例） */
-.row--priority-urgent td { background: #fde8e8 !important; }
-.row--priority-high td { background: #fef3e2 !important; }
+/* 优先级左侧色条（仅运行中实例）—— 背景色让给状态/逾期，两套信号互不覆盖 */
+.row--pri-bar--urgent td:first-child { box-shadow: inset 3px 0 0 0 #c0392b; }
+.row--pri-bar--high td:first-child { box-shadow: inset 3px 0 0 0 #d68910; }
 
 /* 状态行背景色 —— tr 前缀确保覆盖 el-table stripe 条纹 */
 tr.r--red td { background: #fef0f0 !important; }    /* 逾期=淡红 */
