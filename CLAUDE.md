@@ -152,6 +152,7 @@ storage/archive/{实例名称}/
 - ✅ 第六轮全栈审查（2026-08-03）P0 上线阻断全部修复：模板ZIP下载鉴权 / folder_name路径穿越 / 签名file_id越权 / fork-join驳回卡死 / must_change_password死循环+改密流程 / 前端57个TS错误清零（vue-tsc -b 0 + build 通过） / WS鉴权完整化 / 角色降级即时生效（P0-4 审批死锁经确认撤销）
 - - [ ] 中危项按需修复
 - ✅ 数据量性能防护（2026-08-05）：首页/超期页删 3 个白耗查询（任务分布/超期列表/个人计数——前端均不消费）；卡点追踪 SQL 层 limit 100 + 超期 4 类 limit 50，均返回真实总数供前端提示；四张运行时表加 `idx_status` 单列索引（Alembic `b1c2d3e4f5a6`），EXPLAIN 验证超期查询转索引 range scan。**观察项**：列表页 keyword ngram 全文索引、通知 `(user_id, created_at)` 索引（数据量极大时再评估）
+- ✅ 首页发起/归档趋势图（2026-08-05）：统计卡片下方新增全宽卡片，发起量 vs 归档量双折线（手绘 SVG，无第三方图表库，与 PieChart/BarChart 风格一致），月度（默认近 12 个月 + 年份下拉回看历史）/ 年度（全部年份）粒度切换，跟随项目/方案 Tab；新接口 `/dashboard/trends`（独立聚合不塞大接口，月/年 GROUP BY + 补零连续，口径与统计卡片一致）；flow_instances 加 `idx_initiated_at` / `idx_completed_at`（Alembic `c2d3e4f5a6b7`）。**观察项**：年度全历史聚合百万级再评估
 
 **状态：可部署上线**
 

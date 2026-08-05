@@ -20,6 +20,9 @@ class FlowInstance(Base):
         Index("idx_status", "status"),
         Index("idx_template_type", "template_type"),
         Index("fk_flow_instances_proposal_id", "proposal_id"),
+        # 时间列单列索引：首页发起/归档趋势图按时间范围聚合（月度走 range scan，防数据量大全表扫）
+        Index("idx_initiated_at", "initiated_at"),
+        Index("idx_completed_at", "completed_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

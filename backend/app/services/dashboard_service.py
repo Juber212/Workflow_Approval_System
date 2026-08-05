@@ -22,6 +22,8 @@ from app.schemas.dashboard import (
     BottleneckItem,
     OrgOverview,
     MyPendingItem,
+    TrendPoint,
+    TrendData,
 )
 
 
@@ -538,3 +540,122 @@ async def _get_my_pending_items(db: AsyncSession, user_id: int) -> dict:
         "proposal": proposals,
         "proposal_total": proposal_total,
     }
+
+
+# ─── 发起/归档趋势图相关 ───
+_GRAN_MONTH = "%Y-%m"   # 月度分组格式（MySQL DATE_FORMAT）
+_GRAN_YEAR = "%Y"       # 年度分组格式
+_DEFAULT_MONTH_SPAN = 12  # 月度默认展示近 12 个月
+
+
+def _shift_months(dt: datetime, n: int) -> datetime:
+    """时间往前/后平移 n 个月，返回该月 1 日（跨年安全）"""
+    total = dt.year * 12 + (dt.month - 1) - n
+    return datetime(total // 12, total % 12 + 1, 1)
+
+
+def _iter_months(start: datetime, end: datetime):
+    """迭代 start 到 end（含）之间的每个 (year, month)，含首尾"""
+    y, m = start.year, start.month
+    while (y, m) <= (end.year, end.month):
+        yield y, m
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+
+
+async def get_flow_trends(
+    db: AsyncSession,
+    granularity: str,
+    category: str,
+    year: int | None = None,
+) -> TrendData:
+    """发起/归档趋势 —— 按 月/年 粒度统计发起量与归档量（首页趋势卡片）
+
+    Args:
+        granularity: "month" | "year"
+        category: "project" | "proposal"（口径与 get_dashboard_stats 完全一致）
+        year: 仅 month 粒度使用；省略 = 近 12 个月，指定 = 该年 12 个月
+
+    实现要点：
+    - 发起量按 initiated_at 分组、归档量按 completed_at 分组，各一次聚合查询
+    - 项目/方案过滤沿用 proposal_tpl_ids 集合口径（与统计卡片数字对得上）
+    - Python 层生成连续时间段并补零，保证折线图不中断
+    """
+    now = datetime.now()
+
+    # ── 1. 项目/方案口径（与 get_dashboard_stats 一致） ──
+    proposal_tpl_ids = set(row[0] for row in (await db.execute(
+        select(FlowTemplate.id).where(FlowTemplate.type == "proposal")
+    )).all())
+    if category == "proposal":
+        inst_filter = FlowInstance.template_id.in_(proposal_tpl_ids) if proposal_tpl_ids else False
+    else:
+        inst_filter = FlowInstance.template_id.notin_(proposal_tpl_ids) if proposal_tpl_ids else True
+
+    # ── 2. 时间范围（仅 month 粒度需要下限；year 全历史） ──
+    gran = _GRAN_YEAR if granularity == "year" else _GRAN_MONTH
+    if granularity == "year":
+        start = end = None  # 全历史
+    elif year:
+        start = datetime(year, 1, 1)      # 指定年份：该年 1 月 1 日起
+        end = datetime(year + 1, 1, 1)    # 次年 1 月 1 日截止（不含）
+    else:
+        # 近 12 个月：当前月首日往前推 11 个月
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start = _shift_months(month_start, _DEFAULT_MONTH_SPAN - 1)
+        end = None  # 无上限（同当前月）
+
+    def _range(column) -> list:
+        """按粒度构造时间范围条件（归档量需先排除 completed_at 为空）"""
+        conds = []
+        if column is FlowInstance.completed_at:
+            conds.append(column.isnot(None))
+        if start is not None:
+            conds.append(column >= start)
+        if end is not None:
+            conds.append(column < end)
+        return conds
+
+    # ── 3. 发起量 / 归档量两次聚合（各一次 GROUP BY，避免逐时间段查询） ──
+    initiated_expr = func.date_format(FlowInstance.initiated_at, gran)
+    completed_expr = func.date_format(FlowInstance.completed_at, gran)
+    initiated_rows = dict((await db.execute(
+        select(initiated_expr.label("m"), func.count(FlowInstance.id))
+        .where(inst_filter, *_range(FlowInstance.initiated_at))
+        .group_by(initiated_expr)
+    )).all())
+    completed_rows = dict((await db.execute(
+        select(completed_expr.label("m"), func.count(FlowInstance.id))
+        .where(inst_filter, *_range(FlowInstance.completed_at))
+        .group_by(completed_expr)
+    )).all())
+
+    # ── 4. 生成连续时间段 + 补零合并（保证折线不中断） ──
+    all_keys = set(initiated_rows) | set(completed_rows)
+    if granularity == "year":
+        if not all_keys:
+            return TrendData(granularity=granularity, periods=[])
+        # 年度：最早数据年份 → 当前年（当年暂无数据也补 0）
+        year_min = int(min(all_keys))
+        year_max = max(int(max(all_keys)), now.year)
+        periods_iter = ((y, 0) for y in range(year_min, year_max + 1))
+    else:
+        # 月度：连续月份序列（近 12 个月 或 指定年份 12 个月）
+        m_start = start if not year else datetime(year, 1, 1)
+        m_end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0) if not year else datetime(year, 12, 1)
+        periods_iter = _iter_months(m_start, m_end)
+
+    periods: list[TrendPoint] = []
+    for y, m in periods_iter:
+        key = str(y) if granularity == "year" else f"{y:04d}-{m:02d}"
+        label = f"{y}年" if granularity == "year" else f"{y}年{m}月"
+        periods.append(TrendPoint(
+            period=key,
+            label=label,
+            initiated=initiated_rows.get(key, 0),
+            completed=completed_rows.get(key, 0),
+        ))
+
+    return TrendData(granularity=granularity, periods=periods)

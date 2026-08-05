@@ -52,6 +52,20 @@ class MyPendingItem(BaseModel):
     days_remaining: int | None = None  # 剩余天数（负数=已逾期）
 
 
+class TrendPoint(BaseModel):
+    """趋势图数据点（按月/年粒度）"""
+    period: str  # 月度 "YYYY-MM" / 年度 "YYYY"
+    label: str   # 中文化标签（"2026年8月" / "2026年"）
+    initiated: int = 0  # 该时间段发起量
+    completed: int = 0  # 该时间段归档量
+
+
+class TrendData(BaseModel):
+    """发起/归档趋势完整响应"""
+    granularity: str = "month"
+    periods: list[TrendPoint] = []
+
+
 class DashboardData(BaseModel):
     """Dashboard 完整响应数据"""
     stats: DashboardStats = DashboardStats()

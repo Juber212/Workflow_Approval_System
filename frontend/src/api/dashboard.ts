@@ -64,9 +64,33 @@ export interface DashboardData {
   proposal_my_pending_total: number  // 方案待办真实全量条数
 }
 
+/** 趋势图数据点（按月/年粒度） */
+export interface TrendPoint {
+  period: string    // 月度 "YYYY-MM" / 年度 "YYYY"
+  label: string     // 中文化标签（"2026年8月" / "2026年"）
+  initiated: number // 发起量
+  completed: number // 归档量
+}
+
+/** 发起/归档趋势响应 */
+export interface TrendData {
+  granularity: 'month' | 'year'
+  periods: TrendPoint[]
+}
+
 // ==================== API ====================
 
 export async function getDashboard(): Promise<DashboardData> {
   const res = await request.get('/dashboard')
+  return res.data
+}
+
+/** 发起/归档趋势（月/年粒度 + 项目/方案） */
+export async function getDashboardTrends(params: {
+  granularity: 'month' | 'year'
+  category: 'project' | 'proposal'
+  year?: number  // 仅月度：省略=近12个月，指定=该年12个月
+}): Promise<TrendData> {
+  const res = await request.get('/dashboard/trends', { params })
   return res.data
 }

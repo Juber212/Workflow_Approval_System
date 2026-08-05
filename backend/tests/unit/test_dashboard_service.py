@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 from app.models import Organization, FlowInstance, InstanceNode, User
 from app.models.enums import InstanceStatus, InstanceNodeStatus
-from app.services.dashboard_service import _get_org_overview, _get_bottleneck_tracking, _get_my_pending_items
+from app.services.dashboard_service import (
+    _get_org_overview,
+    _get_bottleneck_tracking,
+    _get_my_pending_items,
+    get_flow_trends,
+)
 from tests.conftest import MockResult
 
 
@@ -233,3 +238,145 @@ class TestMyPendingItems:
         assert result["proposal_total"] == 0
         assert len(result["project"]) == 3
         assert len(result["proposal"]) == 0
+
+
+# ============================================================
+# 发起/归档趋势 —— 月/年粒度 + 补零 + 项目/方案口径
+# ============================================================
+
+class TestFlowTrends:
+    """get_flow_trends 聚合、补零与口径逻辑"""
+
+    @staticmethod
+    def _tpl_query(rows):
+        """构造「查方案模板 ID 集合」的 MockResult（select FlowTemplate.id where type=proposal）"""
+        return MockResult(rows_all=rows)
+
+    @pytest.mark.asyncio
+    async def test_month_default_last_12(self, mock_db):
+        """近 12 个月：连续 12 点，无数据补零，末点为当前月"""
+        now = datetime.now()
+        cur_key = f"{now.year:04d}-{now.month:02d}"
+        # 当前月往前 1 个月（构造有数据的相邻月）
+        pm_total = now.year * 12 + (now.month - 1) - 1
+        pm_y, pm_m = pm_total // 12, pm_total % 12 + 1
+        prev_key = f"{pm_y:04d}-{pm_m:02d}"
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            MockResult(rows_all=[(cur_key, 5), (prev_key, 3)]),  # 发起量
+            MockResult(rows_all=[(cur_key, 2)]),                 # 归档量
+        ]
+
+        result = await get_flow_trends(mock_db, "month", "project")
+
+        assert result.granularity == "month"
+        assert len(result.periods) == 12
+        # 末点 = 当前月：发起 5 归档 2
+        assert result.periods[-1].period == cur_key
+        assert result.periods[-1].initiated == 5
+        assert result.periods[-1].completed == 2
+        # 前一个点：发起 3 归档 0（归档补零）
+        assert result.periods[-2].initiated == 3
+        assert result.periods[-2].completed == 0
+        # 首点无数据全为 0；且 12 点连续（每点比前一点后移 1 个月）
+        assert result.periods[0].initiated == 0
+        assert result.periods[0].completed == 0
+        for prev_p, cur_p in zip(result.periods, result.periods[1:]):
+            py, pm = int(prev_p.period[:4]), int(prev_p.period[5:])
+            expect_next = (py + 1, 1) if pm == 12 else (py, pm + 1)
+            assert (int(cur_p.period[:4]), int(cur_p.period[5:])) == expect_next
+
+    @pytest.mark.asyncio
+    async def test_month_specific_year(self, mock_db):
+        """指定年份：返回该年 12 个月，范围外数据（其他年份 key）不混入"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            # 发起量聚合（2024-12 属范围外，不应出现在 2025 结果中）
+            MockResult(rows_all=[("2025-03", 4), ("2024-12", 9)]),
+            MockResult(rows_all=[]),
+        ]
+
+        result = await get_flow_trends(mock_db, "month", "project", year=2025)
+
+        assert len(result.periods) == 12
+        assert result.periods[0].period == "2025-01"
+        assert result.periods[-1].period == "2025-12"
+        assert result.periods[2].period == "2025-03"
+        assert result.periods[2].initiated == 4
+        assert result.periods[2].completed == 0  # 该月无归档 → 补零
+        # 2024-12 不进入 2025 结果
+        assert all(p.period.startswith("2025") for p in result.periods)
+
+    @pytest.mark.asyncio
+    async def test_year_aggregate(self, mock_db):
+        """年度：最早数据年份 → 当前年，各年补零"""
+        now_year = datetime.now().year
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            MockResult(rows_all=[("2025", 10), ("2024", 8)]),  # 发起量
+            MockResult(rows_all=[("2025", 6)]),                # 归档量
+        ]
+
+        result = await get_flow_trends(mock_db, "year", "project")
+
+        assert result.granularity == "year"
+        # 2024 → 当前年
+        assert len(result.periods) == now_year - 2024 + 1
+        assert result.periods[0].period == "2024"
+        assert result.periods[0].initiated == 8
+        assert result.periods[0].completed == 0
+        assert result.periods[1].period == "2025"
+        assert result.periods[1].initiated == 10
+        assert result.periods[1].completed == 6
+        # 当前年暂无数据 → 补 0
+        assert result.periods[-1].period == str(now_year)
+        assert result.periods[-1].initiated == 0
+
+    @pytest.mark.asyncio
+    async def test_year_no_data(self, mock_db):
+        """年度无任何数据 → 空 periods（不报错）"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),
+        ]
+
+        result = await get_flow_trends(mock_db, "year", "project")
+
+        assert result.periods == []
+
+    @pytest.mark.asyncio
+    async def test_proposal_filter_uses_in(self, mock_db):
+        """方案口径：过滤条件为 template_id IN（方案模板集合），与统计卡片口径一致"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),
+        ]
+
+        await get_flow_trends(mock_db, "month", "proposal")
+
+        # 第二次 execute = 发起量聚合，编译后 SQL 应含 template_id IN
+        initiated_stmt = mock_db.execute.call_args_list[1][0][0]
+        assert "template_id IN (" in str(initiated_stmt)
+
+    @pytest.mark.asyncio
+    async def test_project_filter_uses_notin(self, mock_db):
+        """项目口径：过滤条件为 template_id NOT IN（排除方案模板）"""
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            self._tpl_query([(10,), (20,)]),
+            MockResult(rows_all=[]),
+            MockResult(rows_all=[]),
+        ]
+
+        await get_flow_trends(mock_db, "month", "project")
+
+        initiated_stmt = mock_db.execute.call_args_list[1][0][0]
+        assert "template_id NOT IN" in str(initiated_stmt)

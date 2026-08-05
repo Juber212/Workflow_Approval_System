@@ -53,6 +53,27 @@
       </div>
     </div>
 
+    <!-- ====== 发起/归档趋势（月度/年度双折线，跟随项目/方案 Tab） ====== -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card__header">
+        <span class="card__title">{{ catLabel }}发起/归档趋势</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <!-- 粒度切换：月度 / 年度 -->
+          <div class="tg-seg">
+            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'month' }" @click="trendGranularity = 'month'">月度</span>
+            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'year' }" @click="trendGranularity = 'year'">年度</span>
+          </div>
+          <!-- 月度年份下拉：默认近 12 个月，可选历史年份回看 -->
+          <el-select v-if="trendGranularity === 'month'" v-model="trendYear" size="small" style="width:130px">
+            <el-option v-for="opt in trendYearOptions" :key="String(opt.value)" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </div>
+      </div>
+      <div class="card__body" style="padding:16px 20px">
+        <TrendChart :points="curTrendPoints" />
+      </div>
+    </div>
+
     <!-- ====== 饼图 + 卡点追踪 ====== -->
     <div class="dash-row">
       <div class="card dash-pie">
@@ -178,13 +199,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getDashboard, type DashboardData } from '@/api/dashboard'
+import { getDashboard, getDashboardTrends, type DashboardData, type TrendData } from '@/api/dashboard'
 import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
+import TrendChart from './components/TrendChart.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { priLabel } from '@/utils/labels'
 import { formatTime, deadlineRowClass } from '@/utils/format'
@@ -193,6 +215,20 @@ const router = useRouter()
 const loading = ref(false)
 const catTab = ref<'project' | 'proposal'>('project')
 const bottleneckOrgFilter = ref('')
+
+// ─── 发起/归档趋势状态 ───
+const trendData = reactive<TrendData>({ granularity: 'month', periods: [] })
+const trendGranularity = ref<'month' | 'year'>('month')
+const trendYear = ref<number | ''>('')  // '' = 近 12 个月；指定数字 = 回看该年 12 个月
+
+/** 年份下拉选项：近 12 个月 + 近 8 年（供月度回看历史） */
+const trendYearOptions = computed(() => {
+  const y = new Date().getFullYear()
+  return [
+    { label: '近 12 个月', value: '' as const },
+    ...Array.from({ length: 8 }, (_, i) => y - i).map(ny => ({ label: `${ny} 年`, value: ny })),
+  ]
+})
 
 const ORG_COLORS = ['#5470C6', '#91CC75', '#FAC858', '#EE6666', '#73C0DE', '#3BA272', '#FC8452', '#9A60B4', '#EA7CCC', '#6E7074']
 
@@ -215,10 +251,33 @@ onMounted(() => fetchData())
 
 async function fetchData() {
   loading.value = true
-  try { const d = await getDashboard(); Object.assign(data, d) }
+  try {
+    const d = await getDashboard()
+    Object.assign(data, d)
+    await fetchTrends()
+  }
   catch { ElMessage.error('加载首页数据失败，请检查网络后刷新页面') }
   finally { loading.value = false }
 }
+
+/** 拉取当前分类/粒度/年份下的趋势数据（失败静默，不阻塞首页其他模块） */
+async function fetchTrends() {
+  try {
+    const d = await getDashboardTrends({
+      granularity: trendGranularity.value,
+      category: catTab.value,
+      year: trendYear.value === '' ? undefined : trendYear.value,
+    })
+    trendData.granularity = d.granularity
+    trendData.periods = d.periods
+  } catch { /* 趋势图失败静默，不影响首页其余模块 */ }
+}
+
+// 分类 / 粒度 / 年份任一变化 → 重新拉趋势（只拉趋势，不动其他模块）
+watch([catTab, trendGranularity, trendYear], () => { fetchTrends() })
+
+/** 当前 tab 的趋势数据点（跟随项目/方案切换） */
+const curTrendPoints = computed(() => trendData.periods)
 
 // ─── 统计卡片 ───
 const catLabel = computed(() => catTab.value === 'project' ? '项目' : '方案')
@@ -300,6 +359,21 @@ function odClass(s: string) { return s === '已逾期' ? 'od--r' : s === '即将
   &--active {
     color: var(--el-color-primary); background: #fff; border-color: var(--el-border-color-light);
     font-weight: 600;
+  }
+}
+
+/* ─── 趋势图粒度切换（月度/年度，卡片头部） ─── */
+.tg-seg {
+  display: flex; border: 1px solid var(--el-border-color-light); border-radius: 6px; overflow: hidden;
+
+  &__item {
+    padding: 3px 14px; font-size: 13px; cursor: pointer; user-select: none;
+    color: var(--el-text-color-secondary); background: var(--el-fill-color-light);
+    transition: all .2s;
+
+    + .tg-seg__item { border-left: 1px solid var(--el-border-color-light); }
+    &:hover { color: var(--el-color-primary); }
+    &.is-active { background: #fff; color: var(--el-color-primary); font-weight: 600; }
   }
 }
 
