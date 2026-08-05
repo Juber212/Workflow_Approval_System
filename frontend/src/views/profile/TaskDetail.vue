@@ -285,13 +285,13 @@ let progressTimer: ReturnType<typeof setInterval> | null = null
 /** 完成收尾动画定时器（进度条补满后执行真正收尾） */
 let finishTimer: ReturnType<typeof setInterval> | null = null
 
-/** 启动进度动画：每 100ms 推进转换中文件的进度 +2%，封顶 95%（真实完成由轮询补 100%） */
+/** 启动进度动画：每 100ms 推进转换中文件的进度 +3%，封顶 95%（真实完成由收尾动画补 100%） */
 function startProgressAnimation() {
   if (progressTimer) return
   progressTimer = setInterval(() => {
     if (convertingIds.value.size === 0) { stopProgressAnimation(); return }
     convertingIds.value.forEach((id) => {
-      fileProgress[id] = Math.min(95, (fileProgress[id] || 0) + 2)
+      fileProgress[id] = Math.min(95, (fileProgress[id] || 0) + 3)
     })
   }, 100)
 }
@@ -670,7 +670,8 @@ function listenConversionDone() {
   window.addEventListener('conversion-all-done', handler, { once: true })
 }
 
-/** 收尾动画：进度条平滑补到 100% 后执行完成逻辑（转换过快时进度条仍能走完再消失） */
+/** 收尾动画：进度条以可见速度（每 80ms +5%）平滑走到 100% 后执行完成逻辑。
+ * 保证转换过快时进度条也有完整「走满」的过程感，不会没走完就消失 */
 function animateToFullThen(finalize: () => void) {
   finishTimer = setInterval(() => {
     let allFull = true
@@ -679,7 +680,7 @@ function animateToFullThen(finalize: () => void) {
       const cur = fileProgress[id] || 0
       // 只补「正在动画推进」的文件（>0 且未完成且未失败），失败红条保持不动
       if (cur > 0 && cur < 100 && !fileFailed[id]) {
-        fileProgress[id] = Math.min(100, cur + 25)
+        fileProgress[id] = Math.min(100, cur + 5)
         if (fileProgress[id] < 100) allFull = false
       }
     })
@@ -688,7 +689,7 @@ function animateToFullThen(finalize: () => void) {
       finishTimer = null
       finalize()
     }
-  }, 60)
+  }, 80)
 }
 
 /** 转换完成后：进度条补满 → 检查结果 → 打开签批弹框或显示错误
