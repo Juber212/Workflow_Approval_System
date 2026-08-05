@@ -221,7 +221,7 @@ import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
-import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse, type FileStatusItem } from '@/api/task'
+import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse, type FileStatusItem, type PrepareSignFile } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
 import { formatTime, formatFileSize } from '@/utils/format'
@@ -343,6 +343,20 @@ function showFileProgress(f: TaskFileItem): boolean {
 function isFileReady(f: TaskFileItem): boolean {
   if (f.conversion_status === 'ready') return true
   return (fileProgress[f.id] || 0) >= 100 && !fileFailed[f.id]
+}
+
+/** 用 prepareSign 返回的真实状态更新本地文件列表（不替换整个详情，避免与上传/删除刷新竞态） */
+function applyConvertedStatus(files: PrepareSignFile[]) {
+  if (!detail.value) return
+  ;[detail.value.files, detail.value.node_files].forEach((list) => {
+    list.forEach((f) => {
+      const rf = files.find(x => x.id === f.id)
+      if (rf) {
+        f.conversion_status = rf.conversion_status
+        if (rf.mime_type) f.mime_type = rf.mime_type
+      }
+    })
+  })
 }
 
 // 签批弹窗（弹窗状态 + 确认回调）
@@ -661,8 +675,9 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
       name: f.original_name,
       url: f.url,
     }))
-    // 转换完成后后台刷新文件列表：徽标由「待转换」消失、出现预览按钮（与上传/删除后刷新一致）
-    getTaskDetail(detail.value!.id).then(d => { detail.value = d }).catch(() => {})
+    // 转换完成后本地同步文件状态（conversion_status → ready）：徽标消失、出现预览按钮。
+    // 不整页刷新，避免与「上传/删除后刷新」竞态导致 detail 被旧快照覆盖（文件夹计数回退报错）
+    applyConvertedStatus(result.files)
     if (pdfFiles.value.length === 0) {
       ElMessage.warning('没有可签批的 PDF 文件，请先上传文件')
       return
