@@ -362,7 +362,7 @@ import { getEndorsements, type EndorsementListItem } from '@/api/endorsement'
 import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
 import { fetchSummaryCounts, type SummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { formatTime } from '@/utils/format'
+import { formatTime, deadlineRowClass } from '@/utils/format'
 import { priLabel, roleLabel, instStatusClass, instStatusLabel, taskStatusClass, taskStatusLabel, checkStatusClass, checkStatusLabel, approvalStatusClass, approvalStatusLabel, endorsementStatusClass, endorsementStatusLabel } from '@/utils/labels'
 
 const { setBreadcrumb } = useBreadcrumb()
@@ -371,13 +371,6 @@ const userStore = useUserStore()
 const notifyStore = useNotificationStore()
 
 const isManager = computed(() => userStore.isManager)
-
-/** 逾期/临期行标色（与 index 卡点追踪一致） */
-function deadlineRowClass({ row }: any): string {
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
-  return ''
-}
 
 /** 顶层视图类型：项目 / 方案 */
 const viewType = ref<'project' | 'proposal'>('project')

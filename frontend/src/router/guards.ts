@@ -5,7 +5,11 @@ import { useUserStore } from '@/stores/user'
 /** 解析 JWT payload 中的 exp 字段（不解码签名，仅解析 payload） */
 function getTokenExp(token: string): number {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
+    // JWT payload 是 base64url 编码（-/_ 且无 padding），atob 需要标准 base64（+/=），需先转换（P2-5）
+    const b64url = token.split('.')[1]
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    const payload = JSON.parse(atob(padded))
     return payload.exp || 0
   } catch {
     return 0

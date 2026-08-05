@@ -1,5 +1,5 @@
 /** 项目模板 API —— 简化版：无版本、无状态 */
-import request, { getToken } from './request'
+import request, { getToken, apiBase } from './request'
 import type { PaginatedResponse } from './index'
 
 // ==================== 类型 ====================
@@ -210,8 +210,7 @@ export async function unlinkDocTemplate(
 /** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
 export async function downloadDocTemplate(taskId: number, docId: number): Promise<void> {
   const token = getToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  const resp = await fetch(`${baseUrl}/tasks/${taskId}/document-templates/${docId}/download`, {
+  const resp = await fetch(`${apiBase()}/tasks/${taskId}/document-templates/${docId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!resp.ok) {
@@ -240,12 +239,11 @@ export async function downloadTemplatesZip(
   nodeId?: number,
 ): Promise<void> {
   const token = getToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   const params = new URLSearchParams()
   params.set('doc_ids', docIds.join(','))
   params.set('instance_id', String(instanceId))
   if (nodeId) params.set('node_id', String(nodeId))
-  const resp = await fetch(`${baseUrl}/templates/${templateId}/download-zip?${params}`, {
+  const resp = await fetch(`${apiBase()}/templates/${templateId}/download-zip?${params}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!resp.ok) {

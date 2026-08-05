@@ -5,6 +5,11 @@ import { ElMessage } from 'element-plus'
 /** API 基础 URL（不含 /api/v1 后缀） */
 export const API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1$/, '') || ''
 
+/** 统一 API base URL（含 /api/v1 后缀）—— 手动拼接 URL（下载/签名等）共用，避免各处硬编码（P2-5 抽取） */
+export function apiBase(): string {
+  return import.meta.env.VITE_API_BASE_URL || '/api/v1'
+}
+
 /** 统一获取认证 Token（所有 token 访问的唯一入口） */
 export function getToken(): string | null {
   return localStorage.getItem('token')
@@ -32,7 +37,7 @@ export type ApiClient = Omit<AxiosInstance, 'get' | 'post' | 'put' | 'delete' | 
 }
 
 /** Axios 实例 —— 统一 baseURL、超时、拦截器 */
-const BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const BASE = apiBase()
 const request: ApiClient = axios.create({
   baseURL: BASE,
   timeout: 30000,

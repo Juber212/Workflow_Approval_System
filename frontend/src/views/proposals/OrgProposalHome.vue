@@ -124,7 +124,7 @@ import { getProposals, createProposal, type ProposalListItem } from '@/api/propo
 import { getOrgOptions } from '@/api/admin'
 import UserSelector from '@/components/UserSelector.vue'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { formatTime } from '@/utils/format'
+import { formatTime, deadlineRowClass } from '@/utils/format'
 import { instStatusClass, instStatusLabel } from '@/utils/labels'
 
 const route = useRoute()
@@ -137,15 +137,6 @@ const orgName = ref('')
 const orgInfo = ref<{ proposal_count: number; running_count: number } | null>(null)
 
 const isManager = computed(() => userStore.userInfo?.roles.includes('manager') ?? false)
-
-/** 逾期/临期行标色 */
-function deadlineRowClass({ row }: any): string {
-  if (row?.status === 'completed') return 'r--green'
-  if (row?.status === 'terminated') return 'r--gray'
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
-  return ''
-}
 
 const loading = ref(false)
 const proposals = ref<ProposalListItem[]>([])

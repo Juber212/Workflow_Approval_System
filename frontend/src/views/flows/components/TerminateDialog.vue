@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 /** 终止确认弹窗 —— 二次确认 + 终止原因必填 + 危险操作警告（项目/方案共用） */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { terminateInstance } from '@/api/instance'
 
@@ -89,6 +89,11 @@ const visible = computed({
 // ========== 表单状态 ==========
 const reason = ref('')
 const submitting = ref(false)
+
+// 每次打开弹窗清空上次的终止原因（P2-5：防止再次打开残留旧原因）
+watch(() => props.modelValue, (val) => {
+  if (val) reason.value = ''
+})
 
 const canConfirm = computed(() => reason.value.trim().length > 0 && !submitting.value)
 

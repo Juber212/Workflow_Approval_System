@@ -19,8 +19,10 @@ export function formatFileSize(bytes: number | null | undefined): string {
   return `${size.toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-/** 截止时间逾期/临期 —— el-table 行 CSS 类名（用于 :row-class-name） */
+/** 截止时间逾期/临期 + 完成/终止状态 —— el-table 行 CSS 类名（用于 :row-class-name） */
 export function deadlineRowClass({ row }: { row: any }): string {
+  if (row?.status === 'completed') return 'r--green'
+  if (row?.status === 'terminated') return 'r--gray'
   if (row?.is_overdue) return 'r--red'
   if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
   return ''

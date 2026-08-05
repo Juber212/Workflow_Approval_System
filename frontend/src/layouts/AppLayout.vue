@@ -39,7 +39,7 @@
           <el-descriptions-item label="所属组织">{{ userStore.userInfo.organization_name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="角色">
             <el-tag v-for="r in userStore.userInfo.roles" :key="r" size="small" style="margin-right:4px">
-              {{ roleTagLabel(r) }}
+              {{ roleLabel(r) }}
             </el-tag>
           </el-descriptions-item>
           <!-- 邮箱：只读 / 编辑 -->
@@ -105,10 +105,11 @@ import { ElMessage } from 'element-plus'
 import { getToken } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
+import { roleLabel } from '@/utils/labels'
 import NotificationBell from '@/components/NotificationBell.vue'
 import SidebarNav from '@/layouts/components/SidebarNav.vue'
 import ChangePasswordDialog from '@/layouts/components/ChangePasswordDialog.vue'
-import { getMeApi, uploadSignatureApi, toUserInfo, updateProfileApi } from '@/api/auth'
+import { getMeApi, uploadSignatureApi, toUserInfo, updateProfileApi, signatureImageUrl } from '@/api/auth'
 import { fetchSummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 
@@ -126,12 +127,6 @@ const showBreadcrumb = computed(() => {
   if (isDesigner.value) return false
   return true
 })
-
-// ==================== 角色标签 ====================
-function roleTagLabel(role: string): string {
-  const m: Record<string, string> = { system_admin: '系统管理员', manager: '所长', user: '普通用户' }
-  return m[role] || role
-}
 
 // ==================== 通知计数 ====================
 const isAdmin = computed(() => userStore.userInfo?.roles.includes('system_admin') ?? false)
@@ -227,7 +222,7 @@ async function loadSignatureBlob() {
   if (!uid || !userInfoDetail.value?.has_signature) return
   try {
     const token = getToken()
-    const resp = await fetch(`/api/v1/auth/users/${uid}/signature-image?t=${Date.now()}`, {
+    const resp = await fetch(`${signatureImageUrl(uid)}?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!resp.ok) return

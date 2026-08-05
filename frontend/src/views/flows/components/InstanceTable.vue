@@ -157,7 +157,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { permanentDeleteInstance, type InstanceListItem } from '@/api/instance'
 import { searchUsers, type UserSearchItem } from '@/api/admin'
-import { formatTime } from '@/utils/format'
+import { formatTime, deadlineRowClass } from '@/utils/format'
 import { priLabel, instStatusClass, instStatusLabel } from '@/utils/labels'
 
 const props = defineProps<{
@@ -278,15 +278,6 @@ function instanceRowClass({ row }: { row: InstanceListItem }) {
   if (row.status !== 'running') return ''
   if (row.priority === 'urgent') return 'row--priority-urgent'
   if (row.priority === 'high') return 'row--priority-high'
-  return ''
-}
-
-/** 逾期/临期行标色 */
-function deadlineRowClass({ row }: any): string {
-  if (row?.status === 'completed') return 'r--green'
-  if (row?.status === 'terminated') return 'r--gray'
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
   return ''
 }
 

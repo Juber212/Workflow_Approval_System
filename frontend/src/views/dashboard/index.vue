@@ -185,7 +185,7 @@ import PieChart from './components/PieChart.vue'
 import BarChart from './components/BarChart.vue'
 import NotificationBell from '@/components/NotificationBell.vue'
 import { priLabel } from '@/utils/labels'
-import { formatTime } from '@/utils/format'
+import { formatTime, deadlineRowClass } from '@/utils/format'
 
 const router = useRouter()
 const loading = ref(false)
@@ -235,14 +235,6 @@ const pendingCount = computed(() =>
 )
 /** 当前列表内的紧急/高优先级条数（列表快照，供快速识别） */
 const urgentCount = computed(() => curPending.value.filter(p => p.priority === 'urgent' || p.priority === 'high').length)
-
-/** 格式化截止时间 */
-/** 逾期/临期行标色 */
-function deadlineRowClass({ row }: any): string {
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
-  return ''
-}
 
 /** 点击待办行 → 跳转对应处理页 */
 function handleMyTaskClick(row: { type: string; id: number }) {

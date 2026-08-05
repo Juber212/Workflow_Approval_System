@@ -1,5 +1,5 @@
 /** 认证 API —— 登录 / 获取当前用户 / 退出 */
-import request from './request'
+import request, { apiBase } from './request'
 import type { UserInfo } from '@/types/user'
 
 /** 登录请求参数 */
@@ -24,6 +24,11 @@ interface LoginData {
 export async function loginApi(params: LoginParams): Promise<LoginData> {
   const res = await request.post('/auth/login', params)
   return res.data
+}
+
+/** 用户签名图片 URL —— 统一 baseUrl 拼接（对齐 fileDownloadUrl），调用方可追加时间戳破缓存 */
+export function signatureImageUrl(uid: number): string {
+  return `${apiBase()}/auth/users/${uid}/signature-image`
 }
 
 /** 获取当前用户信息 */

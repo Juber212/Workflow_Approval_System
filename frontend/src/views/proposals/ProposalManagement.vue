@@ -122,7 +122,7 @@ import { getOrgOptions, searchUsers, type UserSearchItem } from '@/api/admin'
 import { permanentDeleteInstance } from '@/api/instance'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
-import { formatTime } from '@/utils/format'
+import { formatTime, deadlineRowClass } from '@/utils/format'
 import { instStatusClass, instStatusLabel } from '@/utils/labels'
 import ProposalOrgCardList from './ProposalOrgCardList.vue'
 
@@ -131,15 +131,6 @@ const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const isAdmin = computed(() => userStore.isAdmin)
-
-/** 逾期/临期行标色 */
-function deadlineRowClass({ row }: any): string {
-  if (row?.status === 'completed') return 'r--green'
-  if (row?.status === 'terminated') return 'r--gray'
-  if (row?.is_overdue) return 'r--red'
-  if (row?.days_remaining != null && row.days_remaining <= 1) return 'r--yel'
-  return ''
-}
 
 // ========== 组织卡片 ==========
 const propOrgs = ref<ProposalOrgCardItem[]>([])

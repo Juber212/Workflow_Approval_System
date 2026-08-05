@@ -54,7 +54,7 @@
       <span class="sidebar-user__avatar">{{ avatarInitial }}</span>
       <div class="sidebar-user__info">
         <span class="sidebar-user__name">{{ userStore.userInfo?.real_name || '未登录' }}</span>
-        <span class="sidebar-user__role">{{ roleLabel }}</span>
+        <span class="sidebar-user__role">{{ currentRoleLabel }}</span>
       </div>
     </div>
 
@@ -86,6 +86,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { Monitor, Document, Setting, User, Files } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useNotificationStore } from '@/stores/notification'
+import { roleLabel } from '@/utils/labels'
 
 const emit = defineEmits<{
   'open-user-info': []
@@ -109,11 +110,10 @@ function handleCollapse() {
 // ==================== 菜单项 ====================
 const isAdmin = computed(() => userStore.userInfo?.roles.includes('system_admin') ?? false)
 
-const roleLabel = computed(() => {
+const currentRoleLabel = computed(() => {
   const roles = userStore.userInfo?.roles || []
-  if (roles.includes('system_admin')) return '系统管理员'
-  if (roles.includes('manager')) return '所长'
-  return '用户'
+  const pick = ['system_admin', 'manager', 'user'].find(r => roles.includes(r))
+  return pick ? roleLabel(pick) : ''
 })
 
 const MENU_ICONS: Record<string, Component> = {

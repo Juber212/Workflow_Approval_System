@@ -8,7 +8,7 @@ export function priLabel(p: string): string {
 
 /** 角色中文映射 */
 export function roleLabel(r: string): string {
-  const m: Record<string, string> = { system_admin: '管理员', manager: '所长', user: '用户' }
+  const m: Record<string, string> = { system_admin: '系统管理员', manager: '所长', user: '普通用户' }
   return m[r] || r
 }
 

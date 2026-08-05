@@ -135,15 +135,19 @@ export function useNotificationSocket() {
     }).catch(() => {})
   }
 
+  /** 构建 WebSocket URL（http→ws 协议替换；token 不走 URL，改为首条消息认证） */
+  function buildWsUrl(): string {
+    const base = API_BASE.replace(/^http/, 'ws') || ''
+    return `${base}/api/v1/ws`
+  }
+
   function connect() {
     // P1-30：组件已卸载则不再建连（防孤儿连接：卸载后的重连 timer 触发到此直接退出）
     if (disposed) return
     const token = getToken()
     if (!token) return
 
-    // 构建 WebSocket URL（token 不再经 URL 传递，改为首条消息认证）
-    const base = API_BASE.replace(/^http/, 'ws') || ''
-    const wsUrl = `${base}/api/v1/ws`
+    const wsUrl = buildWsUrl()
 
     try {
       ws = new WebSocket(wsUrl)

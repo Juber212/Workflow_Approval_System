@@ -349,19 +349,16 @@ function revokeSigBlob() {
 async function loadSigBlob(url: string | null | undefined) {
   revokeSigBlob()
   if (!url) {
-    console.log('[SignaturePreview] sigUrl 为空，跳过加载')
     return
   }
   try {
     const token = getToken()
-    console.log('[SignaturePreview] 加载签名图:', url, 'token:', token ? '已获取' : '无')
     const res = await axios.get(url, {
       responseType: 'blob',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       params: { t: Date.now() },  // 时间戳破缓存，确保更换签名后获取最新图片
     })
     sigBlobUrl.value = URL.createObjectURL(res.data)
-    console.log('[SignaturePreview] 签名图加载成功, blob:', sigBlobUrl.value)
   } catch (e: any) {
     console.warn('[SignaturePreview] 签名图片加载失败:', url, e?.message || e)
     sigBlobUrl.value = null

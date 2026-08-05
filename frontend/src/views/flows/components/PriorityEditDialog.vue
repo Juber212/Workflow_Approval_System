@@ -43,7 +43,7 @@
 
 <script setup lang="ts">
 /** 优先级修改弹窗 —— 下拉选择 + 确认 */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { changePriority } from '@/api/instance'
 
@@ -66,6 +66,11 @@ const visible = computed({
 
 const newPriority = ref(props.currentPriority)
 const submitting = ref(false)
+
+// currentPriority 变化（切换不同实例）时同步下拉值，避免复用旧实例的选中项（P2-5）
+watch(() => props.currentPriority, (val) => {
+  newPriority.value = val
+})
 
 const priorityOptions = [
   { label: '🔴 紧急', value: 'urgent' },

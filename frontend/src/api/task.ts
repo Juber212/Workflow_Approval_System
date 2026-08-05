@@ -1,5 +1,5 @@
 /** 任务 API —— 待办列表、详情、提交、草稿、文件上传 */
-import request, { getToken } from './request'
+import request, { getToken, apiBase } from './request'
 import type { PaginatedResponse } from './index'
 import type { SignatureSlot } from './signature'
 import type { DocTemplateItem } from './template'
@@ -202,8 +202,7 @@ export async function deleteTaskFile(taskId: number, fileId: number) {
 
 /** 文件下载 URL —— 预览/下载与签批弹窗共用（P2-2：统一 baseUrl 拼接，避免硬编码） */
 export function fileDownloadUrl(fileId: number): string {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-  return `${baseUrl}/files/${fileId}/download`
+  return `${apiBase()}/files/${fileId}/download`
 }
 
 /** 预览文件 —— 通过 fetch + Token 获取 blob 后在新标签页打开（PDF/图片）或下载（其他） */
@@ -277,9 +276,8 @@ export async function getTaskDocTemplates(taskId: number): Promise<TaskDocTempla
 /** 下载模板包 ZIP（填充占位符后打包） */
 export async function downloadTaskTemplateZip(taskId: number, categoryId: number): Promise<void> {
   const token = getToken()
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1'
   const resp = await fetch(
-    `${baseUrl}/tasks/${taskId}/document-templates/download-zip?category_id=${categoryId}`,
+    `${apiBase()}/tasks/${taskId}/document-templates/download-zip?category_id=${categoryId}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   )
   if (!resp.ok) throw new Error('下载失败')
