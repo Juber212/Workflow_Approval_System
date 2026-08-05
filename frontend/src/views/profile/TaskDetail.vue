@@ -109,7 +109,12 @@
             <div class="file-list" v-if="getFolderFiles(folder.name).length > 0">
               <div v-for="f in getFolderFiles(folder.name)" :key="f.id" class="file-row">
                 <span>{{ f.original_name }}</span>
-                <span v-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
+                <!-- 转换期间：每文件迷你进度条；平时：状态文字标签 -->
+                <span v-if="showFileProgress(f)" class="conv-progress" :class="{ 'is-failed': fileFailed[f.id] }">
+                  <span class="conv-progress__bar"><span class="conv-progress__fill" :style="{ width: (fileProgress[f.id] || 0) + '%' }"></span></span>
+                  <span class="conv-progress__label">{{ progressLabel(f) }}</span>
+                </span>
+                <span v-else-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
                 <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
                 <el-button v-if="canPreview(f)" text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
                 <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
@@ -141,7 +146,12 @@
           <div class="file-list" v-if="currentNodeFiles.length > 0">
             <div v-for="f in currentNodeFiles" :key="f.id" class="file-row">
               <span>{{ f.original_name }}</span>
-              <span v-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
+              <!-- 转换期间：每文件迷你进度条；平时：状态文字标签 -->
+              <span v-if="showFileProgress(f)" class="conv-progress" :class="{ 'is-failed': fileFailed[f.id] }">
+                <span class="conv-progress__bar"><span class="conv-progress__fill" :style="{ width: (fileProgress[f.id] || 0) + '%' }"></span></span>
+                <span class="conv-progress__label">{{ progressLabel(f) }}</span>
+              </span>
+              <span v-else-if="conversionLabel(f)" class="conv-tag" :class="'conv-tag--' + f.conversion_status">{{ conversionLabel(f) }}</span>
               <span class="file-size">{{ formatFileSize(f.file_size) }}</span>
               <el-button v-if="canPreview(f)" text type="primary" size="small" @click="previewFile(f.id)">查看</el-button>
               <el-button text type="primary" size="small" @click="downloadFile(f.id)">下载</el-button>
@@ -207,11 +217,11 @@
 
 <script setup lang="ts">
 /** 任务处理页 —— 上传文件 + 提交/保存草稿，支持文件夹分组上传 */
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
-import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse } from '@/api/task'
+import { getTaskDetail, saveTaskDraft, submitTask, uploadTaskFile, deleteTaskFile, previewFile, downloadFile, prepareSign, getFilesStatus, getTaskDocTemplates, downloadTaskTemplateZip, type TaskDetail, type TaskFileItem, type TaskTemplateCategory, type TaskDocTemplatesResponse, type FilesStatusResponse, type FileStatusItem } from '@/api/task'
 import { downloadDocTemplate, type DocTemplateItem } from '@/api/template'
 import type { FileFolderConfig } from '@/api/designer'
 import { formatTime, formatFileSize } from '@/utils/format'
@@ -259,6 +269,73 @@ const submitting = ref(false)
 const preparing = ref(false)  // 预提交转化 PDF 中的状态
 const waitingConversion = ref(false)  // 等待 ARQ Worker 后台转换完成
 let conversionPollTimer: ReturnType<typeof setInterval> | null = null
+
+// ─── 每文件转换进度条（伪动画 + 轮询真实状态校正） ────────────────
+/** 每文件进度 0-100（fileId → 进度） */
+const fileProgress = reactive<Record<number, number>>({})
+/** 转换失败文件标记 */
+const fileFailed = reactive<Record<number, boolean>>({})
+/** 当前正在转换的文件 ID 集合（驱动动画推进） */
+const convertingIds = ref<Set<number>>(new Set())
+/** 进度动画定时器 */
+let progressTimer: ReturnType<typeof setInterval> | null = null
+
+/** 启动进度动画：每 200ms 推进转换中文件的进度，封顶 95%（真实完成由轮询补 100%） */
+function startProgressAnimation() {
+  if (progressTimer) return
+  progressTimer = setInterval(() => {
+    if (convertingIds.value.size === 0) { stopProgressAnimation(); return }
+    convertingIds.value.forEach((id) => {
+      fileProgress[id] = Math.min(95, (fileProgress[id] || 0) + 1)
+    })
+  }, 200)
+}
+
+/** 停止进度动画 */
+function stopProgressAnimation() {
+  if (progressTimer) { clearInterval(progressTimer); progressTimer = null }
+}
+
+/** 重置所有文件进度状态（进入转换等待 / 转换结束） */
+function resetConversionProgress() {
+  Object.keys(fileProgress).forEach(k => delete fileProgress[Number(k)])
+  Object.keys(fileFailed).forEach(k => delete fileFailed[Number(k)])
+  convertingIds.value = new Set()
+  stopProgressAnimation()
+}
+
+/** 轮询状态同步到每文件进度条：ready 补 100%，converting 启动动画，failed 置红，pending 归零 */
+function syncConversionProgress(files: FileStatusItem[]) {
+  const converting = new Set<number>()
+  files.forEach((f) => {
+    if (f.conversion_status === 'ready') {
+      fileProgress[f.id] = 100
+      delete fileFailed[f.id]
+    } else if (f.conversion_status === 'converting') {
+      converting.add(f.id)
+      fileFailed[f.id] = false
+    } else if (f.conversion_status === 'failed') {
+      fileProgress[f.id] = 100
+      fileFailed[f.id] = true
+    } else {
+      fileProgress[f.id] = 0  // pending：等待转换
+    }
+  })
+  convertingIds.value = converting
+  if (converting.size > 0) startProgressAnimation()
+  else stopProgressAnimation()
+}
+
+/** 进度条旁文案：失败 → 转换失败；有推进 → 转换中；否则等待中 */
+function progressLabel(f: TaskFileItem): string {
+  if (fileFailed[f.id]) return '转换失败'
+  return (fileProgress[f.id] || 0) > 0 ? '转换中' : '等待中'
+}
+
+/** 是否显示该文件的迷你进度条（转换期间：失败 或 未完成） */
+function showFileProgress(f: TaskFileItem): boolean {
+  return waitingConversion.value && (!!fileFailed[f.id] || (fileProgress[f.id] || 0) < 100)
+}
 
 // 签批弹窗（弹窗状态 + 确认回调）
 const { showSignatureDialog, sigSlots, authToken, openSignatureDialog, promptUploadSignature, makeSignatureConfirm } = useSignatureDialog()
@@ -372,9 +449,10 @@ function getFolderWarning(folder: FileFolderConfig): string {
   return ''
 }
 
-// 离开页面时清理转换轮询定时器
+// 离开页面时清理转换轮询与进度动画定时器
 onUnmounted(() => {
   stopConversionPolling()
+  stopProgressAnimation()
   // 清理未触发的 conversion-all-done 事件监听器，防止泄漏
   if (_conversionDoneHandler) {
     window.removeEventListener('conversion-all-done', _conversionDoneHandler)
@@ -449,6 +527,7 @@ async function handleSubmit() {
         if (result.conversion_pending) {
           // 文件需要后台转换，进入等待模式
           waitingConversion.value = true
+          resetConversionProgress()  // 重置每文件进度，等待轮询同步
           // 启动轮询兜底（每 2 秒检查一次，直到全部完成或失败）
           startConversionPolling(detail.value!.id)
           // 也监听 WebSocket 通知（由 notification.ts 的 useNotificationSocket 触发自定义事件）
@@ -501,6 +580,8 @@ function startConversionPolling(taskId: number) {
   conversionPollTimer = setInterval(async () => {
     try {
       const status = await getFilesStatus(taskId)
+      // 同步每文件进度条状态（ready 补 100%、converting 动画、failed 置红）
+      syncConversionProgress(status.files)
       if (status.all_ready || status.has_failed) {
         stopConversionPolling()
         handleConversionComplete(status)
@@ -541,6 +622,7 @@ function listenConversionDone() {
  * 轮询路径传入 FilesStatusResponse（has_failed），WebSocket 路径传入 conversion_all_done 消息体（failed），两者字段不同需归一化 */
 async function handleConversionComplete(status: FilesStatusResponse | { total: number; ready: number; failed: number; status?: string }) {
   waitingConversion.value = false
+  stopProgressAnimation()  // 停止进度动画（进度条随 waitingConversion 消失）
 
   // 归一化失败数量：轮询结果统计 files 中的 failed 状态，WebSocket 消息直接取 failed 数字
   const failedCount = 'has_failed' in status
@@ -610,6 +692,40 @@ async function handleConversionComplete(status: FilesStatusResponse | { total: n
   &--pending { color: var(--el-color-warning); background: var(--el-color-warning-light-9); }
   &--converting { color: var(--el-color-primary); background: var(--el-color-primary-light-9); }
   &--failed { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+}
+// 文件转换迷你进度条（转换期间显示，伪动画 + 轮询校正）
+.conv-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+
+  &__bar {
+    width: 64px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--el-fill-color);
+    overflow: hidden;
+  }
+
+  &__fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--el-color-primary);
+    transition: width 0.2s linear;
+  }
+
+  &__label {
+    font-size: 11px;
+    color: var(--el-text-color-secondary);
+    white-space: nowrap;
+  }
+
+  &.is-failed {
+    .conv-progress__fill { background: var(--el-color-danger); }
+    .conv-progress__label { color: var(--el-color-danger); }
+  }
 }
 .file-size { color: var(--el-text-color-secondary); font-size: 12px; flex: 1; }
 .upload-hint { font-size: 12px; color: var(--el-text-color-placeholder); margin-top: 6px; }
