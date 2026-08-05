@@ -1,5 +1,5 @@
 <template>
-  <!-- 首页 —— 统计卡片 + 我的待办 + 饼图/卡点追踪 + 各所柱状图 -->
+  <!-- 首页 —— 统计卡片 + 我的待办 + 饼图/进行进度 + 各所对比 + 发起与归档趋势 -->
   <div class="page-container" v-loading="loading">
     <div class="page-header">
       <div class="page-header__info">
@@ -53,28 +53,7 @@
       </div>
     </div>
 
-    <!-- ====== 发起/归档趋势（月度/年度双折线，跟随项目/方案 Tab） ====== -->
-    <div class="card" style="margin-bottom:20px">
-      <div class="card__header">
-        <span class="card__title">{{ catLabel }}发起/归档趋势</span>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
-          <!-- 粒度切换：月度 / 年度 -->
-          <div class="tg-seg">
-            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'month' }" @click="trendGranularity = 'month'">月度</span>
-            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'year' }" @click="trendGranularity = 'year'">年度</span>
-          </div>
-          <!-- 月度年份下拉：默认近 12 个月，可选历史年份回看 -->
-          <el-select v-if="trendGranularity === 'month'" v-model="trendYear" size="small" style="width:130px">
-            <el-option v-for="opt in trendYearOptions" :key="String(opt.value)" :label="opt.label" :value="opt.value" />
-          </el-select>
-        </div>
-      </div>
-      <div class="card__body" style="padding:16px 20px">
-        <TrendChart :points="curTrendPoints" />
-      </div>
-    </div>
-
-    <!-- ====== 饼图 + 卡点追踪 ====== -->
+    <!-- ====== 饼图 + 进行进度 ====== -->
     <div class="dash-row">
       <div class="card dash-pie">
         <div class="card__header"><span class="card__title">各所运行中{{ catLabel }}分布</span></div>
@@ -85,7 +64,7 @@
 
       <div class="card dash-bn">
         <div class="card__header">
-          <span class="card__title">{{ catLabel }}卡点追踪</span>
+          <span class="card__title">{{ catLabel }}进行进度</span>
           <!-- 运行中实例超过上限时提示真实总数（后端仅返回前 N 条，防数据量大拖慢首页） -->
           <span v-if="curBottleneckTotal > 100" class="bn-count-hint">共 {{ curBottleneckTotal }} 条，仅显示前 100 条</span>
           <div style="display:flex;align-items:center;gap:8px">
@@ -188,11 +167,32 @@
       </div>
     </div>
 
-    <!-- ====== 各所项目概览（柱状图） ====== -->
+    <!-- ====== 各所项目对比（柱状图） ====== -->
     <div class="card">
-      <div class="card__header"><span class="card__title">各所{{ catLabel }}概览</span></div>
+      <div class="card__header"><span class="card__title">各所{{ catLabel }}对比</span></div>
       <div class="card__body" style="padding:16px 20px">
         <BarChart :items="curOrgOverview" @org-click="handleBarClick" />
+      </div>
+    </div>
+
+    <!-- ====== 发起与归档趋势（月度/年度双折线，跟随项目/方案 Tab） ====== -->
+    <div class="card">
+      <div class="card__header">
+        <span class="card__title">{{ catLabel }}发起与归档趋势</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <!-- 粒度切换：月度 / 年度 -->
+          <div class="tg-seg">
+            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'month' }" @click="trendGranularity = 'month'">月度</span>
+            <span class="tg-seg__item" :class="{ 'is-active': trendGranularity === 'year' }" @click="trendGranularity = 'year'">年度</span>
+          </div>
+          <!-- 月度年份下拉：默认近 12 个月，可选历史年份回看 -->
+          <el-select v-if="trendGranularity === 'month'" v-model="trendYear" size="small" style="width:130px">
+            <el-option v-for="opt in trendYearOptions" :key="String(opt.value)" :label="opt.label" :value="opt.value" />
+          </el-select>
+        </div>
+      </div>
+      <div class="card__body" style="padding:16px 20px">
+        <TrendChart :points="curTrendPoints" />
       </div>
     </div>
   </div>
