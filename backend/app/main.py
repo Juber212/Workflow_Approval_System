@@ -85,11 +85,16 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+# P1-50：生产环境（ENV=prod）关闭 Swagger/ReDoc/OpenAPI 文档，
+# 避免向外部暴露接口结构（openapi.json 是文档数据源，须一并关闭）
+_docs_enabled = settings.ENV != "prod"
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
     lifespan=lifespan,
 )
 
