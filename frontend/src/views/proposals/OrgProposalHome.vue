@@ -202,10 +202,13 @@ async function loadOrgName() {
 }
 
 // M31：请求序号——跨组织快速切换时丢弃过期响应，防旧组织数据覆盖新组织
-let listSeq = 0
+// 列表与计数用独立计数器：二者常经 Promise.all 并行调用，共享计数器会互相使对方
+// 判定为「过期」，导致 fetchList 的 loading 永不关闭（页面一直转圈）——回归修复
+let listSeq = 0     // 列表请求序号
+let countsSeq = 0   // 计数请求序号
 
 async function fetchStatusCounts() {
-  const seq = ++listSeq
+  const seq = ++countsSeq
   try {
     const results = await Promise.all([
       getProposals({ page_size: 1, organization_id: orgId.value }),
@@ -213,7 +216,7 @@ async function fetchStatusCounts() {
       getProposals({ page_size: 1, organization_id: orgId.value, status: 'completed' }),
       getProposals({ page_size: 1, organization_id: orgId.value, status: 'terminated' }),
     ])
-    if (seq !== listSeq) return  // 过期响应丢弃
+    if (seq !== countsSeq) return  // 过期响应丢弃
     statusCounts.value = {
       all: results[0].total,
       running: results[1].total,
