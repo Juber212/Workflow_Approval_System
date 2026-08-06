@@ -231,9 +231,14 @@ function resetPage() {
 }
 
 // M19：外部初始日期范围（首页「本月归档」跳转带本月起止日期）→ 初始化日期筛选并刷新
+// 值变化时重置页码，避免深页码 + 新日期区间空结果；值清空时同步清空残留筛选（浏览器后退）
 watch(() => props.initDateRange, (val) => {
   if (val) {
     dateRange.value = val
+    resetPage()
+    emit('refresh', buildQuery())
+  } else if (dateRange.value) {
+    dateRange.value = null
     emit('refresh', buildQuery())
   }
 }, { immediate: true })

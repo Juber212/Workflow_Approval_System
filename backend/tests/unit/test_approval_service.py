@@ -41,11 +41,11 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock 其他 pending approvals
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalar_one=node),            # 3: SELECT node（审批策略判断）
-            MockResult(scalars_all=[]),             # 4: check remaining pending → 无，全部通过
-            MagicMock(),                            # 5: UPDATE task → completed（结果不读）
+            MockResult(scalar_one=inst),            # 3: SELECT FlowInstance（ABBA 修复：先锁实例再锁节点）
+            MockResult(scalar_one=node),            # 4: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),             # 5: check remaining pending → 无，全部通过
+            MagicMock(),                            # 6: UPDATE task → completed（结果不读）
             # require_approver_signature=False 跳过签名查询
-            MockResult(scalar_one=inst),            # 6: SELECT FlowInstance
             MockResult(scalar_one=None),            # 7: SELECT FlowTemplate（project 类型非 proposal）
         ]
 
@@ -61,14 +61,16 @@ class TestApprove:
         approval = make_approval(id=1, task_id=10, node_id=5, approver_id=4, status=ApprovalStatus.PENDING)
         pending_approval2 = make_approval(id=2, task_id=10, node_id=5, approver_id=6, status=ApprovalStatus.PENDING)
         node = make_node(id=5, is_end=False, approvers=[{"user_id":4},{"user_id":6}])
+        inst = make_instance(id=1, difficulty="1")
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
             MockResult(scalar_one=approval),           # 0: SELECT approval FOR UPDATE
             MagicMock(),                                # 1: lock other pending
             MagicMock(),                                # 2: clear_related delete
-            MockResult(scalar_one=node),               # 3: SELECT node（审批策略判断）
-            MockResult(scalars_all=[pending_approval2]), # 4: 还有 pending
+            MockResult(scalar_one=inst),               # 3: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),               # 4: SELECT node（审批策略判断）
+            MockResult(scalars_all=[pending_approval2]), # 5: 还有 pending
         ]
 
         result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
@@ -91,10 +93,10 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock other pending
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalar_one=node),            # 3: SELECT node（审批策略判断）
-            MockResult(scalars_all=[]),             # 4: check remaining → 空
-            MagicMock(),                            # 5: UPDATE task → completed
-            MockResult(scalar_one=inst),            # 6: SELECT FlowInstance
+            MockResult(scalar_one=inst),            # 3: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),            # 4: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),             # 5: check remaining → 空
+            MagicMock(),                            # 6: UPDATE task → completed
             MockResult(scalar_one=None),            # 7: SELECT FlowTemplate（非 proposal）
             MagicMock(),                            # 8: UPDATE task → waiting_endorsement（难度4）
         ]
@@ -119,11 +121,11 @@ class TestApprove:
             MockResult(scalar_one=approval),       # 0: SELECT approval FOR UPDATE
             MagicMock(),                            # 1: lock other pending
             MagicMock(),                            # 2: clear_related delete
-            MockResult(scalar_one=node),            # 3: SELECT node（is_end=True）
-            MockResult(scalars_all=[]),             # 4: check remaining → 空
+            MockResult(scalar_one=inst),            # 3: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),            # 4: SELECT node（is_end=True）
+            MockResult(scalars_all=[]),             # 5: check remaining → 空
             # task_id=None, 跳过 UPDATE task
             # is_end=True, 跳过签名查询
-            MockResult(scalar_one=inst),            # 5: SELECT FlowInstance
         ]
 
         result = await approve(mock_db, approval_id=1, current_user_id=1, opinion="终审通过")
@@ -185,13 +187,13 @@ class TestApprove:
             if i == 2:
                 return MagicMock()                        # clear_related delete
             if i == 3:
-                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
+                return MockResult(scalar_one=inst)        # SELECT FlowInstance（ABBA 修复：先锁实例）
             if i == 4:
-                return MockResult(scalars_all=[])         # remaining pending → 当前 task 无 pending
+                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
             if i == 5:
-                return MagicMock()                        # UPDATE task → completed
+                return MockResult(scalars_all=[])         # remaining pending → 当前 task 无 pending
             if i == 6:
-                return MockResult(scalar_one=inst)        # SELECT FlowInstance
+                return MagicMock()                        # UPDATE task → completed
             if i == 7:
                 return MockResult(scalar_one=None)        # SELECT FlowTemplate（非 proposal）
             return None
@@ -201,9 +203,9 @@ class TestApprove:
         result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
 
         assert result["all_approved"] is True
-        # 聚合查询（captured[4]）必须限定 task_id == 10（当前任务），与 single_approve 对齐
+        # 聚合查询（captured[5]）必须限定 task_id == 10（当前任务），与 single_approve 对齐
         from sqlalchemy.dialects import mysql
-        sql = str(captured[4].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        sql = str(captured[5].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "task_id = 10" in sql
 
     @pytest.mark.asyncio
@@ -229,17 +231,17 @@ class TestApprove:
             if i == 2:
                 return MagicMock()                            # clear_related delete
             if i == 3:
-                return MockResult(scalar_one=node)            # SELECT node
+                return MockResult(scalar_one=inst)            # SELECT FlowInstance（ABBA 修复：先锁实例）
             if i == 4:
-                return MockResult(scalars_all=[])             # remaining pending → 空
+                return MockResult(scalar_one=node)            # SELECT node
             if i == 5:
-                return MagicMock()                            # UPDATE task → completed
+                return MockResult(scalars_all=[])             # remaining pending → 空
             if i == 6:
-                return MockResult(scalars_all=[pending_sig])  # SELECT Signature pending
+                return MagicMock()                            # UPDATE task → completed
             if i == 7:
-                return MagicMock()                            # UPDATE Approval signature_applied
+                return MockResult(scalars_all=[pending_sig])  # SELECT Signature pending
             if i == 8:
-                return MockResult(scalar_one=inst)            # SELECT FlowInstance
+                return MagicMock()                            # UPDATE Approval signature_applied
             if i == 9:
                 return MockResult(scalar_one=None)            # SELECT FlowTemplate（非 proposal）
             return None
@@ -249,9 +251,9 @@ class TestApprove:
         result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
 
         assert result["all_approved"] is True
-        # 签名状态更新语句（captured[7]）必须限定 task_id == 10，只标当前任务轮次
+        # 签名状态更新语句（captured[8]）必须限定 task_id == 10，只标当前任务轮次
         from sqlalchemy.dialects import mysql
-        sql = str(captured[7].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        sql = str(captured[8].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "task_id = 10" in sql
         assert "signature_applied" in sql
 
@@ -276,13 +278,13 @@ class TestApprove:
             if i == 2:
                 return MagicMock()                        # clear_related delete
             if i == 3:
-                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
+                return MockResult(scalar_one=inst)        # SELECT FlowInstance（ABBA 修复：先锁实例）
             if i == 4:
-                return MockResult(scalars_all=[])         # 无剩余 pending，全部通过
+                return MockResult(scalar_one=node)        # SELECT node（审批策略判断）
             if i == 5:
-                return MagicMock()                        # UPDATE task completed
+                return MockResult(scalars_all=[])         # 无剩余 pending，全部通过
             if i == 6:
-                return MockResult(scalar_one=inst)        # SELECT FlowInstance
+                return MagicMock()                        # UPDATE task completed
             if i == 7:
                 return MockResult(scalar_one=None)        # SELECT FlowTemplate（project 非 proposal）
             return MagicMock()
@@ -292,9 +294,9 @@ class TestApprove:
         result = await approve(mock_db, approval_id=1, current_user_id=4, opinion="同意")
         assert result["all_approved"] is True
 
-        # captured[3] 是 SELECT InstanceNode —— 必须 FOR UPDATE（与 change_personnel 的 node 锁串行化）
+        # captured[4] 是 SELECT InstanceNode —— 必须 FOR UPDATE（与 change_personnel 的 node 锁串行化）
         from sqlalchemy.dialects import mysql
-        node_sql = str(captured[3].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
+        node_sql = str(captured[4].compile(dialect=mysql.dialect(), compile_kwargs={"literal_binds": True}))
         assert "instance_nodes" in node_sql
         assert "FOR UPDATE" in node_sql.upper()
 

@@ -31,19 +31,19 @@ class TestPassCheck:
                          require_checker_signature=False)
         task = make_task(id=10, node_id=5)
 
-        # 第一次 execute：SELECT check FOR UPDATE → 返回 check
-        # 第二次 execute：SELECT 其他 pending checks → 返回空列表（全部通过）
-        # 第三次 execute：SELECT 全部 pending checks → 返回空列表（确认无 pending）
-        # 第四次 execute：SELECT node
-        # 第五次 execute：SELECT task
-        # require_checker_signature=False 时跳过签名查询，共 5 次 execute
+        inst = make_instance(id=1, difficulty="1")
+        # ABBA 修复后 execute 序：无锁读 check → 锁实例 → 锁节点 → 锁 check 重新校验 → 锁其他 pending
+        # → has_pending → task → clear_related
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=check),          # 0: get check with FOR UPDATE
-            MagicMock(),                            # 1: lock other pending checks (结果不读取)
-            MockResult(scalars_all=[]),             # 2: check all pending → 无 pending，全部通过
-            MockResult(scalar_one=node),            # 3: get node
-            MockResult(scalar_one=task),            # 4: get task
+            MockResult(scalar_one=check),          # 0: get check（无锁，拿 node_id/instance_id）
+            MockResult(scalar_one=inst),            # 1: lock FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),            # 2: lock InstanceNode
+            MockResult(scalar_one=check),            # 3: lock check FOR UPDATE（重新校验状态）
+            MagicMock(),                            # 4: lock other pending checks (结果不读取)
+            MockResult(scalars_all=[]),             # 5: check all pending → 无 pending，全部通过
+            MockResult(scalar_one=task),            # 6: get task
+            MagicMock(),                            # 7: clear_related delete
         ]
 
         result = await pass_check(mock_db, check_id=1, current_user_id=3, opinion="通过")
@@ -65,12 +65,16 @@ class TestPassCheck:
         check = make_check(id=1, task_id=10, node_id=5, checker_id=3, status=CheckStatus.PENDING)
         pending_check2 = make_check(id=2, task_id=10, node_id=5, checker_id=6, status=CheckStatus.PENDING)
         node = make_node(id=5)
+        inst = make_instance(id=1, difficulty="1")
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=check),              # 0: get check FOR UPDATE
-            MagicMock(),                                # 1: lock other pending
-            MockResult(scalars_all=[pending_check2]),   # 2: still has pending → 不触发推进
+            MockResult(scalar_one=check),              # 0: get check（无锁）
+            MockResult(scalar_one=inst),                # 1: lock FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),                # 2: lock InstanceNode
+            MockResult(scalar_one=check),               # 3: lock check FOR UPDATE（重新校验）
+            MagicMock(),                                # 4: lock other pending
+            MockResult(scalars_all=[pending_check2]),   # 5: still has pending → 不触发推进
         ]
 
         result = await pass_check(mock_db, check_id=1, current_user_id=3, opinion="通过")
@@ -82,10 +86,15 @@ class TestPassCheck:
     async def test_wrong_checker_rejected(self, mock_db):
         """非校验人操作 → 403"""
         check = make_check(id=1, checker_id=3, status=CheckStatus.PENDING)
+        inst = make_instance(id=1, difficulty="1")
+        node = make_node(id=5)
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=check),  # get check FOR UPDATE
+            MockResult(scalar_one=check),   # 0: get check（无锁）
+            MockResult(scalar_one=inst),     # 1: lock FlowInstance
+            MockResult(scalar_one=node),     # 2: lock InstanceNode
+            MockResult(scalar_one=check),   # 3: lock check FOR UPDATE → 校验 checker_id 失败 403
         ]
 
         with pytest.raises(AppException) as exc:
@@ -96,10 +105,15 @@ class TestPassCheck:
     async def test_already_processed_rejected(self, mock_db):
         """已处理的校验记录不可再次操作 → 403"""
         check = make_check(id=1, checker_id=3, status=CheckStatus.PASSED)
+        inst = make_instance(id=1, difficulty="1")
+        node = make_node(id=5)
 
         mock_db.execute = AsyncMock()
         mock_db.execute.side_effect = [
-            MockResult(scalar_one=check),
+            MockResult(scalar_one=check),   # 0: get check（无锁）
+            MockResult(scalar_one=inst),     # 1: lock FlowInstance
+            MockResult(scalar_one=node),     # 2: lock InstanceNode
+            MockResult(scalar_one=check),   # 3: lock check FOR UPDATE → 状态非 PENDING 拒绝 403
         ]
 
         with pytest.raises(AppException) as exc:

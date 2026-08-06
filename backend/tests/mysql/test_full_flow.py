@@ -23,6 +23,8 @@ from app.models.enums import (
     InstanceStatus, InstanceNodeStatus, TaskStatus, CheckStatus, ApprovalStatus,
 )
 from app.api.deps import CurrentUser
+from app.core.error_codes import ErrorCode
+from app.core.exceptions import AppException
 from app.schemas.instance import CreateInstanceRequest
 from app.schemas.task import TaskSubmit
 
@@ -293,20 +295,28 @@ class TestInstanceTerminate:
 
 @pytest.mark.asyncio
 class TestDuplicateInstanceName:
-    """同名实例可重复发起（name 非唯一约束）"""
+    """同名实例防重（M14）：同组织同类型同名禁止创建
 
-    async def test_same_name_instances_both_created(self, mysql_session, mocker):
-        """同名发起两次 → 两个实例并存"""
+    归档目录按「类型/实例名」隔离，同名会共享目录，永久删除一实例时会误删
+    另一实例的全部文件 —— 故发起时同名查重，跨组织因目录隔离不冲突。
+    """
+
+    async def test_same_name_second_launch_rejected(self, mysql_session, mocker):
+        """同组织同名二次发起 → 拒绝，仅首个实例保留"""
         _setup_service_mocks(mocker)
         db = mysql_session
         await _seed_basic_data(db)
         await _seed_template(db)
 
         resp1 = await _create_instance(db, name="同名项目")
-        resp2 = await _create_instance(db, name="同名项目")
+        assert resp1.id == 1
 
-        assert resp1.id != resp2.id
+        # M14：同组织同类型同名 → BAD_REQUEST
+        with pytest.raises(AppException) as exc:
+            await _create_instance(db, name="同名项目")
+        assert exc.value.code == ErrorCode.BAD_REQUEST
+
         insts = (await db.execute(
             select(FlowInstance).where(FlowInstance.name == "同名项目")
         )).scalars().all()
-        assert len(insts) == 2
+        assert len(insts) == 1

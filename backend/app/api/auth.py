@@ -170,6 +170,10 @@ async def change_password(
     # P1-5：记录密码版本号，吊销该用户所有旧 token（含改密前各设备的会话）
     from app.core.token_blacklist import set_password_version
     await set_password_version(user.id)
+    # M2 补充：踢掉该用户已建立的 WS 连接——密码版本校验只在握手时检查，
+    # 改密前建立的旧连接仍持续收实时推送，与 HTTP 黑名单拦截不一致（改密后旧连接立即断开）
+    from app.services.ws_manager import manager
+    await manager.disconnect_user(user.id)
 
     # 改密成功后立即重新签发 token 返回：当前会话无缝续期，其他设备旧 token 已全部失效
     new_token = create_access_token(
@@ -282,16 +286,16 @@ async def upload_signature(
     file_path = os.path.join(upload_dir, safe_name)
 
     # 压缩签名图片：限制最大 400×120px，保持比例，保留透明通道
+    # M3：解码前预检像素尺寸——open 只读头部不解码，防「解压炸弹」（高分辨率小体积图全量解码 OOM）
+    #     预检放 try 外：异常不落入「压缩失败→原样保存」兜底，否则超尺寸图会被原样落盘、防护失效
+    from PIL import Image
+    from io import BytesIO
+    img = Image.open(BytesIO(contents))
+    w, h = img.size
+    if w > 4000 or h > 4000:
+        raise AppException(ErrorCode.BAD_REQUEST, "图片尺寸过大")
+
     try:
-        from PIL import Image
-        from io import BytesIO
-        img = Image.open(BytesIO(contents))
-
-        # M3：解码前预检像素尺寸——open 只读头部不解码，防「解压炸弹」（高分辨率小体积图全量解码 OOM）
-        w, h = img.size
-        if w > 4000 or h > 4000:
-            raise AppException(ErrorCode.BAD_REQUEST, "图片尺寸过大")
-
         # 统一转为 RGBA（保留透明通道，不合成白底）
         if img.mode == "P":
             img = img.convert("RGBA")

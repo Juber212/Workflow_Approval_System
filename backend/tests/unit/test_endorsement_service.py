@@ -65,14 +65,10 @@ class TestEndorse:
         mock_db.execute.side_effect = [
             MockResult(scalar_one=e),           # 0: SELECT endorsement FOR UPDATE
             MagicMock(),                         # 1: clear_related
-            MagicMock(),                         # 2: flush/update
+            MockResult(scalar_one=inst),        # 2: SELECT FlowInstance（ABBA 修复：先锁实例再锁节点）
             MockResult(scalar_one=node),        # 3: _get_node
-            MagicMock(),                         # 4: UPDATE node → finished
-            MagicMock(),                         # 5: UPDATE task → completed
-            MagicMock(),                         # 6: add operation log
-            MagicMock(),                         # 7: flush
-            MockResult(scalar_one=inst),        # 8: SELECT FlowInstance
-            MockResult(scalar_one=None),        # 9: SELECT FlowTemplate
+            MagicMock(),                         # 4: UPDATE task → completed
+            MockResult(scalar_one=None),        # 5: SELECT FlowTemplate（非 proposal）
         ]
 
         result = await endorse(mock_db, endorsement_id=1, current_user_id=5, opinion="同意")
@@ -98,8 +94,8 @@ class TestEndorse:
             MagicMock(),                        # 1: clear_related
             MockResult(scalar_one=node),       # 2: SELECT InstanceNode（旧版分支查轮次）
             MockResult(scalars_all=[pdf]),     # 3: SELECT File（当前轮次 PDF）
-            MockResult(scalar_one=node),       # 4: _get_node
-            MockResult(scalar_one=inst),       # 5: SELECT FlowInstance
+            MockResult(scalar_one=inst),       # 4: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),       # 5: _get_node
             MagicMock(),                        # 6: UPDATE task → completed
             MockResult(scalar_one=None),       # 7: SELECT FlowTemplate（非 proposal）
         ]
@@ -130,8 +126,8 @@ class TestEndorse:
         mock_db.execute.side_effect = [
             MockResult(scalar_one=e),          # 0: SELECT endorsement FOR UPDATE
             MagicMock(),                        # 1: clear_related
-            MockResult(scalar_one=node),       # 2: _get_node
-            MockResult(scalar_one=inst),       # 3: SELECT FlowInstance
+            MockResult(scalar_one=inst),       # 2: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),       # 3: _get_node
             MagicMock(),                        # 4: UPDATE task → completed
             MockResult(scalar_one=None),       # 5: SELECT FlowTemplate（非 proposal）
         ]

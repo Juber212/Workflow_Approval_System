@@ -325,12 +325,8 @@ async def endorse(
     await db.flush()
 
     # 6. 查询节点和实例信息
-    # M24：批准推进前对节点行加锁，与紧急换人（change.py 锁 node）串行，防 TOCTOU
-    node = await _get_node(db, e.node_id, lock=True)
-    if node is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
-
-    # M23：完成分支对实例行加锁并校验未终止——防止 terminate 与批准并发时把已终止实例改写为已完成
+    # ABBA 死锁修复：先锁实例再锁节点——与 change_personnel「实例→节点」顺序一致，
+    # 避免批准（持节点锁等实例锁）与换人（持实例锁等节点锁）并发时 InnoDB 回滚死锁请求
     inst = (await db.execute(
         select(FlowInstance).where(FlowInstance.id == e.instance_id).with_for_update()
     )).scalar_one_or_none()
@@ -338,6 +334,11 @@ async def endorse(
         raise AppException(ErrorCode.NOT_FOUND, "关联项目不存在")
     if (inst.status or "").lower() == "terminated":
         raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
+
+    # M24：批准推进前对节点行加锁，与紧急换人（change.py 锁 node）串行，防 TOCTOU
+    node = await _get_node(db, e.node_id, lock=True)
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
 
     # 7. 收集签名 ID（由 API 层在 commit 后统一写入 PDF）
     _pending_signature_ids = sig_ids if (node.require_endorser_signature and sig_ids) else []

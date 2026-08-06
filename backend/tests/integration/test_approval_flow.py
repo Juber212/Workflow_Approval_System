@@ -98,16 +98,19 @@ class TestCheckFlowIntegration:
         node = make_node(id=5, require_checker_signature=False,
                          checkers=[{"user_id": 3}], approvers=[{"user_id": 4}])
         task = make_task(id=10, node_id=5)
+        inst = make_instance(id=1, difficulty="1")
 
-        # pass_check 中的 execute 调用链
+        # pass_check 中的 execute 调用链（ABBA 修复后：无锁读 → 锁实例 → 锁节点 → 锁 check）
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
             MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
-            MockResult(scalar_one=check),       # 2: SELECT check FOR UPDATE
-            MagicMock(),                         # 2: lock other pending
-            MockResult(scalars_all=[]),          # 3: all pending → 空
-            MockResult(scalar_one=node),         # 4: SELECT node
-            MockResult(scalar_one=task),         # 5: SELECT task
+            MockResult(scalar_one=check),       # 2: SELECT check（无锁）
+            MockResult(scalar_one=inst),         # 3: lock FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),         # 4: lock InstanceNode
+            MockResult(scalar_one=check),        # 5: lock check FOR UPDATE
+            MagicMock(),                         # 6: lock other pending
+            MockResult(scalars_all=[]),          # 7: all pending → 空
+            MockResult(scalar_one=task),         # 8: SELECT task
         ]
 
         # 生成一个有效 JWT token
@@ -129,11 +132,16 @@ class TestCheckFlowIntegration:
         user = _setup_user_query(db, user_id=999)  # 不是校验人
 
         check = make_check(id=1, checker_id=3, status=CheckStatus.PENDING)
+        inst = make_instance(id=1, difficulty="1")
+        node = make_node(id=5)
 
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
             MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
-            MockResult(scalar_one=check),       # 1: SELECT check
+            MockResult(scalar_one=check),       # 2: SELECT check（无锁）
+            MockResult(scalar_one=inst),         # 3: lock FlowInstance
+            MockResult(scalar_one=node),         # 4: lock InstanceNode
+            MockResult(scalar_one=check),        # 5: lock check FOR UPDATE → checker_id 不匹配 403
         ]
 
         from app.core.security import create_access_token
@@ -205,13 +213,13 @@ class TestApprovalFlowIntegration:
         db.execute.side_effect = [
             MockResult(scalar_one=user),        # 0: get_current_active_user → User
             MockResult(scalars_all=['user']),   # 1: 角色查询（P0-9）
-            MockResult(scalar_one=approval),    # 1: approval FOR UPDATE
-            MagicMock(),                         # 2: lock other pending
-            MockResult(scalar_one=node),         # 3: SELECT node（审批策略判断）
-            MockResult(scalars_all=[]),          # 4: remaining → 空
-            MagicMock(),                         # 5: UPDATE task
-            MockResult(scalar_one=inst),         # 6: get FlowInstance
-            MockResult(scalar_one=None),         # 7: get FlowTemplate
+            MockResult(scalar_one=approval),    # 2: approval FOR UPDATE
+            MagicMock(),                         # 3: lock other pending
+            MockResult(scalar_one=inst),         # 4: SELECT FlowInstance（ABBA 修复：先锁实例）
+            MockResult(scalar_one=node),         # 5: SELECT node（审批策略判断）
+            MockResult(scalars_all=[]),          # 6: remaining → 空
+            MagicMock(),                         # 7: UPDATE task
+            MockResult(scalar_one=None),         # 8: get FlowTemplate
         ]
 
         from app.core.security import create_access_token

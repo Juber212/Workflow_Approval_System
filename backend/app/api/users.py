@@ -114,6 +114,9 @@ async def put_user_reset_password(
     # P1-5：记录密码版本号，吊销被重置用户所有旧 token，必须用新密码重新登录
     from app.core.token_blacklist import set_password_version
     await set_password_version(user_id)
+    # M2 补充：踢掉该用户已建立的 WS 连接（密码版本校验只在握手时检查，旧连接改密后仍收实时推送）
+    from app.services.ws_manager import manager
+    await manager.disconnect_user(user_id)
     return ApiResponse.ok(message="密码已重置为默认初始密码")
 
 

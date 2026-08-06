@@ -226,12 +226,35 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
     并发安全：先锁定目标行再校验，消除 TOCTOU 窗口。
     """
-    # 先锁定目标校验行（SELECT ... FOR UPDATE —— 校验和锁原子化）
+    # ABBA 死锁修复：先无锁读校验记录（拿 node_id/instance_id），再按「实例 → 节点 → 校验记录」顺序加锁。
+    # 原「校验记录 → 节点」顺序与 change_personnel「节点 → 更新校验记录」相反，
+    # 换人（持节点锁等校验记录锁）与校验通过（持校验记录锁等节点锁）并发时 InnoDB 会回滚死锁请求。
     c = (await db.execute(
-        select(CheckRecord).where(CheckRecord.id == check_id).with_for_update()
+        select(CheckRecord).where(CheckRecord.id == check_id)
     )).scalar_one_or_none()
     if c is None:
         raise AppException(ErrorCode.NOT_FOUND, "校验记录不存在")
+
+    # 锁实例：校验推进可能与终止并发，行锁 + 校验未终止（对齐 approve/endorse 的 M23 防护）
+    inst = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == c.instance_id).with_for_update()
+    )).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
+    if (inst.status or "").lower() == "terminated":
+        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
+
+    # 锁节点：与紧急换人（change.py 锁 node）串行，防 TOCTOU（M24）
+    node = (await db.execute(
+        select(InstanceNode).where(InstanceNode.id == c.node_id).with_for_update()
+    )).scalar_one_or_none()
+    if node is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+
+    # 锁校验记录并重新校验状态（防双击：同一节点的并发校验已由 Node 锁串行化）
+    c = (await db.execute(
+        select(CheckRecord).where(CheckRecord.id == check_id).with_for_update()
+    )).scalar_one_or_none()
     if c.checker_id != current_user_id:
         raise AppException(ErrorCode.FORBIDDEN, "仅校验人可操作")
     if c.status != CheckStatus.PENDING:
@@ -289,13 +312,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
     has_pending = all_pending.scalars().all()
 
     if not has_pending:
-        # 全部校验通过 → 批量写入所有校验人签名到 PDF
-        # M24：推进前对节点行加锁，与紧急换人（change.py 锁 node）串行，防 TOCTOU
-        node = (await db.execute(
-            select(InstanceNode).where(InstanceNode.id == c.node_id).with_for_update()
-        )).scalar_one_or_none()
-        if node is None:
-            raise AppException(ErrorCode.NOT_FOUND, "关联节点不存在")
+        # 全部校验通过 → 批量写入所有校验人签名到 PDF（node 已在上方锁定，直接复用）
         if node.require_checker_signature:
             # 查询该节点本轮次所有校验人的 pending 签名
             all_checker_sigs_result = await db.execute(
@@ -319,13 +336,7 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
 
         # === 无审批人时的处理（防止节点死锁） ===
         if not approvers:
-            # 查询实例判断难度等级
-            inst = (await db.execute(
-                select(FlowInstance).where(FlowInstance.id == c.instance_id)
-            )).scalar_one_or_none()
-            if inst is None:
-                raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
-
+            # 难度判断（inst 已在上方锁定，直接复用）
             if inst.difficulty == "4" and node.endorser_id:
                 # 难度4 + 有批准人 → 跳过审批，直接进入批准环节
                 endorsement = Endorsement(

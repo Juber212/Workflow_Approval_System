@@ -479,6 +479,17 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
     db.add(log)
     await db.flush()
 
+    # ABBA 死锁修复：先锁实例再锁节点——原「节点→实例」顺序与 change_personnel「实例→节点」相反，
+    # 换人（持实例锁等节点锁）与审批（持节点锁等实例锁）并发时 InnoDB 检测死锁回滚其中一个请求（偶发 500）。
+    # 原完成分支的实例锁（M23）统一前置，全局锁序固定为「实例 → 节点」，与紧急换人一致。
+    inst = (await db.execute(
+        select(FlowInstance).where(FlowInstance.id == a.instance_id).with_for_update()
+    )).scalar_one_or_none()
+    if inst is None:
+        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
+    if (inst.status or "").lower() == "terminated":
+        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
+
     # 查询节点（审批策略判断需要）
     # P1-19：FOR UPDATE 锁 node 行 —— 与 change_personnel（紧急换人）操作同一 node 时串行化，
     # 消除「换人读旧状态 vs 审批推进节点」的 TOCTOU 竞态窗口。
@@ -567,15 +578,7 @@ async def approve(db: AsyncSession, approval_id: int, current_user_id: int, opin
 
     from app.models import FlowTemplate
 
-    # 查询实例，判断是否为方案（方案工作节点审批通过后直接完成，跳过结束节点）
-    # M23：完成分支对实例行加锁并校验未终止——防止 terminate 与审批并发时把已终止实例改写为已完成
-    inst = (await db.execute(
-        select(FlowInstance).where(FlowInstance.id == a.instance_id).with_for_update()
-    )).scalar_one_or_none()
-    if inst is None:
-        raise AppException(ErrorCode.NOT_FOUND, "关联流程实例不存在")
-    if (inst.status or "").lower() == "terminated":
-        raise AppException(ErrorCode.INSTANCE_ALREADY_TERMINATED, "流程已终止，不可继续操作")
+    # 查询实例判断是否为方案（inst 已在上方锁定，此处复用；方案工作节点审批通过后直接完成，跳过结束节点）
     is_proposal = False
     if not node.is_end:
         tpl = (await db.execute(select(FlowTemplate).where(FlowTemplate.id == inst.template_id))).scalar_one_or_none()

@@ -159,6 +159,9 @@ export function useNotificationSocket() {
   }
 
   function connect() {
+    // 建连前重置手动关闭标志：disconnect 置位后 onclose 被置空、复位分支永不执行，
+    // 残留 true 会让重建的新连接在断开时误判「手动关闭」而不重连（登出→登录+网络抖动即触发）
+    wsState.manualClose = false
     // P1-30：所有组件已卸载则不再建连（防孤儿连接：卸载后的重连 timer 触发到此直接退出）
     if (wsState.disposed) return
     const token = getToken()

@@ -115,8 +115,10 @@ async function fetchInstances(query?: InstanceQuery) {
       keyword: query?.keyword,
       sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
       priority: query?.priority,
-      date_from: query?.date_from,
-      date_to: query?.date_to,
+      // M19 回归修复：无参调用（onMounted / status 变化）兜底补上 initDateRange 日期，
+      // 避免「本月归档」跳转时与子组件带日期请求并发覆盖成全部已完成（数据与筛选不一致）
+      date_from: query?.date_from ?? initDateRange.value?.[0],
+      date_to: query?.date_to ?? initDateRange.value?.[1],
       initiator_id: query?.initiator_id ?? undefined,
     })
     instances.value = data.items
