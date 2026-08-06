@@ -158,6 +158,8 @@ storage/archive/{实例名称}/
 
 - ✅ 部署就绪修复（2026-08-06）：上线前核对部署链路，实测发现全新库建表阻断（alembic 迁移链 cdc82f5bf321 起是「修正注释」的增量迁移、不建主表，全新空库 upgrade head 报 1146 表不存在）→ 新增 `app/core/deploy_db.py`（create_all 建当前结构 + operation_logs 分区 p2026-p2028+p_future 兜底 + alembic stamp head，`python -m app.core.deploy_db` 一条命令建库，不动历史迁移，已有库升级仍走 upgrade head）；PDF 转换依赖独立 ARQ worker 进程 → 04_Deployment.md 补 `python -m arq app.worker.WorkerSettings` + systemd 双 unit；Redis 硬依赖配置补全（.env.example/文档）；部署口径单进程落文档（--workers 4 → 单进程）；LibreOffice Semaphore 2→4；seed 替换手动 INSERT roles；/api/v1/health 加 DB/Redis 探活（异常 503，供监控）。324 测试全过。**低危排队**：GET_LOCK 早于 commit 释放（撞唯一索引 500）、validate_user_ids_exist 不查 is_active、_pdf_locks 字典不清理、pass_check 无审批人分支终态校验
 
+- ✅ 低危项修复（2026-08-06）：①GET_LOCK 早于 commit 释放撞唯一索引——`ensure_proposal_template` 改**锁内 commit**（GET_LOCK 绑定连接、commit 不释放锁；释放前完成事务，后到请求复用模板不重复创建）②`validate_user_ids_exist` 加 is_active 过滤（禁用用户视为不可用，4 处调用方文案改「不存在或已停用」，防任务派给无法登录用户卡死）③`_pdf_locks` 改 `weakref.WeakValueDictionary` 防内存增长（持局部强引用防「创建即回收」KeyError）④reject 驳回下游文件查询改批量 IN（终审/中间 2 处 N+1）⑤pass_check 无审批人终态校验、幽灵通知**评估后保持记录**（并发已被节点行锁覆盖 / 改动面大）。新增 2 个 MySQL 集成测试（is_active 过滤 + GET_LOCK 并发只建 1 模板）。326 测试全过。**低危排队**：pass_check 无审批人分支终态校验、幽灵通知（WS 先于提交）、storage.py 死代码删除、签名路径 CWD 依赖、pdf_signature_offset 无效配置、前端上传 30s 超时/下载助手抽取
+
 **状态：可部署上线**
 
 ## 测试体系
@@ -166,8 +168,8 @@ storage/archive/{实例名称}/
 |------|:--:|------|------|
 | 单元测试 | 225 | `tests/unit/` | 内存运行，毫秒级 |
 | 集成测试 | 66 | `tests/integration/` | TestClient + mock_db（含真实 SQLite 单表测试） |
-| MySQL 真实测试 | 27 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
-| **合计** | **324** | | 当前全量通过（P1-47 后测试库凭据走环境变量） |
+| MySQL 真实测试 | 29 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
+| **合计** | **326** | | 当前全量通过（P1-47 后测试库凭据走环境变量） |
 
 运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
 

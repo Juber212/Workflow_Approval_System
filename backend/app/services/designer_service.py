@@ -69,7 +69,7 @@ async def save_design_data(
             if missing:
                 node_label = item.get("name") or f"ID:{item.get('id')}"
                 missing_by_node.append(
-                    f"节点「{node_label}」配置了不存在的用户 ID：{'、'.join(map(str, sorted(missing)))}"
+                    f"节点「{node_label}」配置了不存在或已停用的用户：{'、'.join(map(str, sorted(missing)))}"
                 )
     if missing_by_node:
         raise AppException(

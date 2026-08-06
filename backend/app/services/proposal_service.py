@@ -96,6 +96,10 @@ async def ensure_proposal_template(db: AsyncSession, org_id: int, user_id: int) 
             target_node_id=tpl_nodes[2].id,
         ))
         await db.flush()
+        # 锁内提交（低危项）：GET_LOCK 绑定当前连接、事务 commit 不会释放锁；
+        # 必须在 RELEASE_LOCK 之前完成事务，否则后到请求获锁复查看不到未提交的模板
+        # → 重复创建撞 (organization_id, type) 唯一索引返回 500。
+        await db.commit()
         return tpl
     finally:
         await db.execute(text("SELECT RELEASE_LOCK(:name)"), {"name": lock_name})
@@ -123,7 +127,7 @@ async def create_proposal(
     if missing:
         raise AppException(
             ErrorCode.VALIDATION_ERROR,
-            f"以下用户 ID 不存在，请重新选择：{'、'.join(map(str, sorted(missing)))}",
+            f"以下用户不存在或已停用，请重新选择：{'、'.join(map(str, sorted(missing)))}",
         )
     if not extract_person_ids(body.approvers):
         raise AppException(ErrorCode.VALIDATION_ERROR, "请至少选择一位审批人")

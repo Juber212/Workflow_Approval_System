@@ -18,6 +18,7 @@
 import asyncio
 import logging
 import os
+import weakref
 import uuid
 import zlib
 from io import BytesIO
@@ -46,14 +47,23 @@ logger = logging.getLogger(__name__)
 # ─── M25：同一 PDF 并发签名写入串行化 ──────────────────────────────
 # 多审批人几乎同时审批同一文件时，各走各的 apply_signatures_after_commit，
 # 若并发写同一 PDF 的临时文件会互相覆盖导致丢签名。按文件路径持进程内锁串行化。
-_pdf_locks: dict[str, asyncio.Lock] = {}
+# 低危项：改用弱引用字典——协程 async with 持锁期间强引用存活、并发协程命中同一锁；
+# 全部释放后无强引用自动回收，防归档文件增长时锁对象无限累积。
+_pdf_locks: "weakref.WeakValueDictionary[str, asyncio.Lock]" = weakref.WeakValueDictionary()
 
 
 def _get_pdf_lock(pdf_path: str) -> asyncio.Lock:
-    """按 PDF 绝对路径获取进程内锁（asyncio 单事件循环，dict 读写原子，无需额外守卫）"""
-    if pdf_path not in _pdf_locks:
-        _pdf_locks[pdf_path] = asyncio.Lock()
-    return _pdf_locks[pdf_path]
+    """按 PDF 绝对路径获取进程内锁（asyncio 单事件循环，无 await 原子）
+
+    弱引用字典必须持强引用：先 get 到局部变量再赋值——若直接
+    `_pdf_locks[pdf_path] = asyncio.Lock()`，锁对象仅存弱引用、临时对象
+    引用计数归零立即回收 → 下一行按 key 取值抛 KeyError（WeakValueDictionary 陷阱）。
+    """
+    lock = _pdf_locks.get(pdf_path)
+    if lock is None:
+        lock = asyncio.Lock()
+        _pdf_locks[pdf_path] = lock
+    return lock
 
 
 # ─── 签名配置默认值 ────────────────────────────────────────────

@@ -733,11 +733,12 @@ async def reject(
         final_downstream_nodes = list(downstream_result.scalars().all())
         # P0-5：重做集合 = 目标节点 + 其下游（兄弟分支不在此集合，保持已完成计数）
         redo_ids = {target_node.id} | {d.id for d in final_downstream_nodes}
+        # 低危项：文件批量 IN 一次取回，替代逐下游节点查询（N+1）
         final_downstream_files: list = []
-        for dn in final_downstream_nodes:
-            dn_files_result = await db.execute(select(File).where(File.node_id == dn.id))
-            dn_files = dn_files_result.scalars().all()
-            final_downstream_files.extend(dn_files)
+        if final_downstream_nodes:
+            final_downstream_files = (await db.execute(
+                select(File).where(File.node_id.in_([dn.id for dn in final_downstream_nodes]))
+            )).scalars().all()
         if final_downstream_files:
             await batch_delete_files_with_physical(db, final_downstream_files)
         for dn in final_downstream_nodes:
@@ -901,10 +902,12 @@ async def reject(
             downstream_nodes = list(downstream_result.scalars().all())
             # P0-5：重做集合 = 目标节点 + 其下游（兄弟分支不在此集合，保持已完成计数）
             redo_ids = {target_node.id} | {d.id for d in downstream_nodes}
+            # 低危项：文件批量 IN 一次取回，替代逐下游节点查询（N+1）
             all_downstream_files: list = []
-            for dn in downstream_nodes:
-                dn_files = (await db.execute(select(File).where(File.node_id == dn.id))).scalars().all()
-                all_downstream_files.extend(dn_files)
+            if downstream_nodes:
+                all_downstream_files = (await db.execute(
+                    select(File).where(File.node_id.in_([dn.id for dn in downstream_nodes]))
+                )).scalars().all()
             if all_downstream_files:
                 await batch_delete_files_with_physical(db, all_downstream_files)
             for dn in downstream_nodes:

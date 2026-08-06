@@ -177,10 +177,14 @@ def extract_person_ids(raw) -> set[int]:
 
 
 async def validate_user_ids_exist(db: AsyncSession, user_ids: set[int]) -> set[int]:
-    """批量校验用户 ID 存在性，返回缺失集合（空集 = 全部存在）"""
+    """批量校验用户 ID 存在性，返回缺失集合（空集 = 全部存在）
+
+    低危项：追加 is_active 过滤——被禁用用户无法登录处理任务，
+    选其为负责人/校验/审批会导致节点卡死，视为不可用归入缺失集合。
+    """
     if not user_ids:
         return set()
     existing = set((await db.execute(
-        select(User.id).where(User.id.in_(list(user_ids)))
+        select(User.id).where(User.id.in_(list(user_ids)), User.is_active == True)
     )).scalars().all())
     return user_ids - existing

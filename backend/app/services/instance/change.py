@@ -119,7 +119,7 @@ async def change_personnel(
     if missing:
         raise AppException(
             ErrorCode.VALIDATION_ERROR,
-            f"以下用户 ID 不存在，请重新选择：{'、'.join(map(str, sorted(missing)))}",
+            f"以下用户不存在或已停用，请重新选择：{'、'.join(map(str, sorted(missing)))}",
         )
 
     now = datetime.now()
