@@ -14,6 +14,16 @@ class TestTokenBlacklistRedis:
         """重置惰性单例（mock 环境无真实连接，直接清空即可）"""
         redis_mod._token_blacklist_redis = None
 
+    @pytest.fixture(autouse=True)
+    async def _cleanup_after_test(self):
+        """每个测试结束后清空全局惰性单例，防止 mock 的 fake Redis 泄漏污染后续测试
+
+        health 探活等真实代码会读取该全局：若残留普通 object()，
+        get_token_blacklist_redis() 直接返回它、ping 报错被误判为 Redis down。
+        """
+        yield
+        await self._reset()
+
     @pytest.mark.asyncio
     async def test_connection_has_short_timeouts(self):
         """黑名单连接必须带 1 秒连接/读写超时（P1-26，Redis 不可用时中间件快速失败）"""

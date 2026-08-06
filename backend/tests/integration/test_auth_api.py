@@ -38,12 +38,36 @@ def client():
 
 
 class TestHealth:
-    """健康检查测试"""
+    """健康检查测试（探活依赖 mock 隔离，不受真实 DB/Redis 状态影响）"""
 
-    def test_health_check(self, client):
-        """健康检查 → 200"""
+    def _patch_probe_deps(self, mocker, *, db_ok: bool = True, redis_ok: bool = True):
+        """mock health 探活的 DB/Redis 依赖（health 端点内延迟 import，需 mock 模块属性）"""
+        # DB 探活：async with async_session_factory() 返回会话，execute 决定 SELECT 1 成败
+        db_mock = AsyncMock()
+        db_mock.execute = AsyncMock() if db_ok else AsyncMock(side_effect=Exception("db down"))
+        _ctx = MagicMock()
+        _ctx.__aenter__ = AsyncMock(return_value=db_mock)
+        _ctx.__aexit__ = AsyncMock(return_value=False)
+        mocker.patch("app.core.database.async_session_factory", return_value=_ctx)
+        # Redis 探活：PING 决定成败
+        fake_redis = AsyncMock()
+        fake_redis.ping = AsyncMock(return_value=True) if redis_ok else AsyncMock(side_effect=Exception("redis down"))
+        mocker.patch("app.core.redis.get_token_blacklist_redis", return_value=fake_redis)
+
+    def test_health_check(self, client, mocker):
+        """健康检查 → 200（依赖正常）"""
+        self._patch_probe_deps(mocker)
         resp = client.get("/api/v1/health")
         assert resp.status_code == 200
+        assert resp.json()["data"]["status"] == "ok"
+
+    def test_health_check_dependency_down(self, client, mocker):
+        """依赖不可用 → 503（探活反映真实状态，供监控报警）"""
+        self._patch_probe_deps(mocker, db_ok=False)
+        resp = client.get("/api/v1/health")
+        assert resp.status_code == 503
+        assert resp.json()["data"]["status"] == "degraded"
+        assert resp.json()["data"]["database"] == "down"
 
 
 class TestLogin:

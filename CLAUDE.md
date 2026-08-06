@@ -156,6 +156,8 @@ storage/archive/{实例名称}/
 - ✅ 第七轮全栈审查修复（2026-08-05）：7 代理并行扫 230+ 文件 → 0 致命 / 2 高危 / 34 中危全部修复 + 部分低危，296 测试全过 + vue-tsc 0 错 + build 过。**产品口径确认**：项目/方案列表与详情全员可见（H2 resolve_org_scope 改纯透传）。高危：发起模式不再写回共享模板（改 node_overrides 快照解耦，新增节点发起拦截）。中危重点：实例详情/WS 密码版本/换人/方案人员校验、实例行锁+节点行锁+签名进程锁补全、上传流式限大小+尺寸预检、ZIP 条目清洗、方案签名丢失、同名实例查重、dashboard 改 template_type 快照口径、发起模板结构校验、前端筛选重置页码/弹窗不丢数据/WS 全局单例/竞态序号防护/本月归档跳转筛选。**低危剩余（评估后保留，改动面大或低风险）**：reject 驳回 N+1、通知 WS 先于提交（幽灵通知）、storage.py 死代码删除、签名路径 CWD 依赖、pdf_signature_offset 无效配置、前端上传 30s 超时/下载助手抽取等
 - ✅ 轻量快扫（2026-08-06）：4 代理快扫第七轮改动域，修 6 项回归——①WS manualClose 残留（登出再登录+网络抖动后不再重连，connect 入口重置）②M3 签名图尺寸预检被 except 吞掉（预检移出 try）③M19 本月归档竞态覆盖（子组件带日期 vs 父无日期并发，fetchInstances 兜底 initDateRange）④InstanceTable 日期 watch 深页码/残留 ⑤ABBA 死锁（approve/endorse/check 统一「实例→节点→记录」锁序，与 change_personnel 一致，消除换人 vs 审批/校验死锁窗口）⑥M2 改密/重置密码后踢旧 WS 连接（disconnect_user）。**产品口径确认**：文件下载同组织成员可下载（跨所参与者保留）。**部署口径确认**：单进程部署（约 100 人同时在线），M25 进程内签名锁够用。323 测试全过 + vue-tsc 0 错 + build 过。**低危排队**：GET_LOCK 早于 commit 释放（撞唯一索引 500）、validate_user_ids_exist 不查 is_active、_pdf_locks 字典不清理、pass_check 无审批人分支终态校验
 
+- ✅ 部署就绪修复（2026-08-06）：上线前核对部署链路，实测发现全新库建表阻断（alembic 迁移链 cdc82f5bf321 起是「修正注释」的增量迁移、不建主表，全新空库 upgrade head 报 1146 表不存在）→ 新增 `app/core/deploy_db.py`（create_all 建当前结构 + operation_logs 分区 p2026-p2028+p_future 兜底 + alembic stamp head，`python -m app.core.deploy_db` 一条命令建库，不动历史迁移，已有库升级仍走 upgrade head）；PDF 转换依赖独立 ARQ worker 进程 → 04_Deployment.md 补 `python -m arq app.worker.WorkerSettings` + systemd 双 unit；Redis 硬依赖配置补全（.env.example/文档）；部署口径单进程落文档（--workers 4 → 单进程）；LibreOffice Semaphore 2→4；seed 替换手动 INSERT roles；/api/v1/health 加 DB/Redis 探活（异常 503，供监控）。324 测试全过。**低危排队**：GET_LOCK 早于 commit 释放（撞唯一索引 500）、validate_user_ids_exist 不查 is_active、_pdf_locks 字典不清理、pass_check 无审批人分支终态校验
+
 **状态：可部署上线**
 
 ## 测试体系
@@ -163,9 +165,9 @@ storage/archive/{实例名称}/
 | 类型 | 数量 | 位置 | 说明 |
 |------|:--:|------|------|
 | 单元测试 | 225 | `tests/unit/` | 内存运行，毫秒级 |
-| 集成测试 | 65 | `tests/integration/` | TestClient + mock_db（含真实 SQLite 单表测试） |
+| 集成测试 | 66 | `tests/integration/` | TestClient + mock_db（含真实 SQLite 单表测试） |
 | MySQL 真实测试 | 27 | `tests/mysql/` | 每测试独立引擎建表删表，SAVEPOINT 隔离 |
-| **合计** | **317** | | 当前全量通过（P1-47 后测试库凭据走环境变量） |
+| **合计** | **324** | | 当前全量通过（P1-47 后测试库凭据走环境变量） |
 
 运行：`pytest tests/ -v`（mock 测试）或 `pytest tests/mysql/ -v`（MySQL 测试，需要本地 MySQL `workflow_approval_test` 库）
 

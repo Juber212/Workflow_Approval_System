@@ -194,5 +194,34 @@ app.include_router(ws_router)
 
 @app.get("/api/v1/health")
 async def health_check():
-    """健康检查端点"""
-    return ApiResponse.ok({"status": "ok", "version": settings.APP_VERSION})
+    """健康检查端点 —— 含 DB/Redis 探活（任一不可用返回 503，供监控报警）"""
+    from sqlalchemy import text
+    from app.core.database import async_session_factory
+    from app.core.redis import get_token_blacklist_redis
+
+    checks: dict[str, str] = {}
+    # DB 探活：SELECT 1（连接池复用，不新建连接）
+    try:
+        async with async_session_factory() as db:
+            await db.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception:
+        checks["database"] = "down"
+    # Redis 探活：PING（黑名单连接已配置 1 秒超时，快速失败）
+    try:
+        redis = await get_token_blacklist_redis()
+        await redis.ping()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "down"
+
+    if all(v == "ok" for v in checks.values()):
+        return ApiResponse.ok({"status": "ok", "version": settings.APP_VERSION, **checks})
+    return JSONResponse(
+        status_code=503,
+        content=ApiResponse.fail(
+            ErrorCode.INTERNAL_ERROR,
+            "依赖服务不可用",
+            {"status": "degraded", **checks},
+        ).model_dump(),
+    )

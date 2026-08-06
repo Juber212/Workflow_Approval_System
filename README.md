@@ -132,7 +132,7 @@
 - Node.js 18+
 - MySQL 8.0
 - Redis 6.x+
-- LibreOffice 7.x+（可选，不装则 PDF 转换功能不可用）
+- LibreOffice 7.x+（PDF 转换核心依赖，需安装；验证：`soffice --headless --version`）
 
 ### 后端
 
@@ -141,14 +141,13 @@ cd backend
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-export DATABASE_URL="mysql+aiomysql://root:password@localhost:3306/workflow_approval"
-export SECRET_KEY="改成随机长字符串"
-export DEFAULT_ADMIN_PASSWORD="管理员初始密码"
+cp .env.example .env    # 按需修改 DB_HOST/DB_PASSWORD/SECRET_KEY/DEFAULT_ADMIN_PASSWORD 等；开发环境 ENV 保持 development
 
-mysql -u root -p -e "CREATE DATABASE workflow_approval CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-alembic upgrade head
-python -m app.core.seed
-uvicorn app.main:app --reload
+python -m app.core.deploy_db   # 建库 + 建表 + 操作日志分区 + alembic 基线（全新库专用，见 04_Deployment.md）
+python -m app.core.seed        # 预置角色/组织/配置/管理员 admin
+
+uvicorn app.main:app --reload                       # 开发热重载
+python -m arq app.worker.WorkerSettings             # 后台 PDF 转换 Worker（不启则 PDF 转换功能不可用）
 ```
 
 Swagger：`http://localhost:8000/docs`
