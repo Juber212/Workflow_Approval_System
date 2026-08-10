@@ -38,8 +38,8 @@ class TestOrgOverview:
                 (1, InstanceStatus.COMPLETED, 3),
                 (1, InstanceStatus.TERMINATED, 1),
             ]),
-            # 2: 本月已完成统计（completed_at 在本月；口径改本月后与累计 3 不同）
-            MockResult(rows_all=[(1, 2)]),
+            # 2: 完成数按粒度统计（今日0 本月2 本年3）
+            MockResult(rows_all=[(1, 0, 2, 3)]),
         ]
 
         result = await _get_org_overview(mock_db, template_type="project")
@@ -47,8 +47,11 @@ class TestOrgOverview:
         assert len(result) == 1
         assert result[0].org_id == 1
         assert result[0].running_count == 5
-        assert result[0].completed_count == 2  # 本月已完成（非累计 3）
+        assert result[0].completed_count == 2  # 本月已完成（兼容字段）
         assert result[0].total_count == 9  # 5+3+1
+        assert result[0].day_completed_count == 0
+        assert result[0].month_completed_count == 2
+        assert result[0].year_completed_count == 3
 
     @pytest.mark.asyncio
     async def test_proposal_only(self, mock_db):
@@ -62,15 +65,18 @@ class TestOrgOverview:
                 (1, InstanceStatus.RUNNING, 2),
                 (1, InstanceStatus.COMPLETED, 4),
             ]),
-            MockResult(rows_all=[(1, 4)]),  # 本月已完成 4
+            MockResult(rows_all=[(1, 1, 4, 5)]),  # 今日1 本月4 本年5
         ]
 
         result = await _get_org_overview(mock_db, template_type="proposal")
 
         assert len(result) == 1
         assert result[0].running_count == 2
-        assert result[0].completed_count == 4  # 本月已完成
+        assert result[0].completed_count == 4  # 本月已完成（兼容字段）
         assert result[0].total_count == 6
+        assert result[0].day_completed_count == 1
+        assert result[0].month_completed_count == 4
+        assert result[0].year_completed_count == 5
 
     @pytest.mark.asyncio
     async def test_no_active_orgs(self, mock_db):

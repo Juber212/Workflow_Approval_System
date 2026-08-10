@@ -34,8 +34,11 @@ class OrgOverview(BaseModel):
     org_name: str
     total_count: int = 0         # 全部项目数（所有状态）
     running_count: int = 0       # 运行中项目数
-    completed_count: int = 0     # 本月已完成项目数（非累计）
+    completed_count: int = 0     # 本月已完成项目数（兼容保留，柱状图默认粒度）
     terminated_count: int = 0    # 已终止项目数
+    day_completed_count: int = 0    # 今日已完成项目数（柱状图日粒度切换用）
+    month_completed_count: int = 0  # 本月已完成项目数
+    year_completed_count: int = 0   # 本年已完成项目数
 
 
 class MyPendingItem(BaseModel):

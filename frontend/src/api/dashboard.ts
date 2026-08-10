@@ -31,8 +31,11 @@ export interface OrgOverview {
   org_name: string
   total_count: number       // 全部项目数
   running_count: number     // 运行中
-  completed_count: number   // 已完成
+  completed_count: number   // 本月已完成（默认粒度）
   terminated_count: number  // 已终止
+  day_completed_count: number   // 今日已完成（日粒度切换）
+  month_completed_count: number // 本月已完成
+  year_completed_count: number  // 本年已完成
 }
 
 /** 我的待办列表项 —— 合并 Task/CheckRecord/Approval 三表 */

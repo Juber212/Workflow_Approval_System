@@ -388,29 +388,37 @@ async def _get_org_overview(
     for org_id, status, count in stats_rows:
         org_stats.setdefault(org_id, {})[status] = count
 
-    # 本月已完成统计（completed_at 在本月）——柱状图「已完成」改为本月口径，
-    # 避免累计完成数把各所 Y 轴拉高、运行中/终止柱不可见（产品口径 2026-08-10）
-    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    month_comp_stmt = (
+    # 完成数按粒度统计（日/月/年）——柱状图「已完成」可切换粒度查看（产品口径 2026-08-10）。
+    # 单次 SUM(CASE) 查询同时返回今日/本月/本年完成数，避免三次查询。
+    now = datetime.now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)  # 今日 0 点
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)  # 本月 1 日
+    year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)  # 本年 1 月 1 日
+    comp_stmt = (
         select(
             FlowInstance.organization_id,
-            func.count(FlowInstance.id),
+            func.sum(case((FlowInstance.completed_at >= day_start, 1), else_=0)).label("day"),
+            func.sum(case((FlowInstance.completed_at >= month_start, 1), else_=0)).label("month"),
+            func.sum(case((FlowInstance.completed_at >= year_start, 1), else_=0)).label("year"),
         )
         .where(
             *conditions,
             FlowInstance.status == "completed",
-            FlowInstance.completed_at >= month_start,
+            FlowInstance.completed_at >= year_start,  # 只需统计今年内的完成记录
         )
         .group_by(FlowInstance.organization_id)
     )
-    month_comp_rows = (await db.execute(month_comp_stmt)).all()
-    month_comp_map: dict[int, int] = {org_id: cnt for org_id, cnt in month_comp_rows}
+    comp_rows = (await db.execute(comp_stmt)).all()
+    comp_map: dict[int, tuple[int, int, int]] = {
+        org_id: (int(day or 0), int(month or 0), int(year or 0))
+        for org_id, day, month, year in comp_rows
+    }
 
     result = []
     for org in orgs:
         sc = org_stats.get(org.id, {})
         running = sc.get("running", 0)
-        completed = month_comp_map.get(org.id, 0)  # 本月已完成（非累计）
+        day_c, month_c, year_c = comp_map.get(org.id, (0, 0, 0))
         terminated = sc.get("terminated", 0)
         total = sum(sc.values())
 
@@ -419,8 +427,11 @@ async def _get_org_overview(
             org_name=org.name,
             total_count=total,
             running_count=running,
-            completed_count=completed,
+            completed_count=month_c,  # 本月已完成（兼容保留，柱状图默认粒度）
             terminated_count=terminated,
+            day_completed_count=day_c,
+            month_completed_count=month_c,
+            year_completed_count=year_c,
         ))
 
     return result

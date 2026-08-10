@@ -6,6 +6,12 @@
       <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#67C23A"></i>运行中</span>
       <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#409EFF"></i>已完成</span>
       <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#909399"></i>已终止</span>
+      <!-- 已完成粒度切换：日 / 月 / 年 -->
+      <div class="vbar-gran">
+        <span :class="{ 'is-active': granularity === 'day' }" @click="granularity = 'day'">日</span>
+        <span :class="{ 'is-active': granularity === 'month' }" @click="granularity = 'month'">月</span>
+        <span :class="{ 'is-active': granularity === 'year' }" @click="granularity = 'year'">年</span>
+      </div>
     </div>
 
     <!-- 四栏卡片网格 -->
@@ -81,17 +87,26 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import type { OrgOverview } from '@/api/dashboard'
 
 const props = defineProps<{ items: OrgOverview[] }>()
 defineEmits<{ 'org-click': [orgId: number] }>()
 
-/** 柱状图三列定义 */
-const columns = [
-  { key: 'running_count' as const, label: '运行中', color: '#67C23A' },
-  { key: 'completed_count' as const, label: '本月完成', color: '#409EFF' },
-  { key: 'terminated_count' as const, label: '已终止', color: '#909399' },
-]
+/** 柱状图数值列 key（排除 org_id/org_name 字符串字段，保证 item[key] 为 number） */
+type CountKey = Exclude<keyof OrgOverview, 'org_id' | 'org_name'>
+
+/** 已完成列的粒度切换：日 / 月 / 年（默认本月） */
+const granularity = ref<'day' | 'month' | 'year'>('month')
+const completedField = computed(() => `${granularity.value}_completed_count` as CountKey)
+const completedLabel = computed(() => granularity.value === 'day' ? '今日完成' : granularity.value === 'month' ? '本月完成' : '本年完成')
+
+/** 柱状图三列定义（已完成列按粒度切换字段） */
+const columns = computed<{ key: CountKey; label: string; color: string }[]>(() => [
+  { key: 'running_count', label: '运行中', color: '#67C23A' },
+  { key: completedField.value, label: completedLabel.value, color: '#409EFF' },
+  { key: 'terminated_count', label: '已终止', color: '#909399' },
+])
 
 /** 向上取整到好读数（如 6→10, 12→20, 23→30, 45→50） */
 function niceMax(val: number): number {
@@ -108,7 +123,7 @@ function niceMax(val: number): number {
 const scaleCache = new Map<number, { max: number; ticks: number[] }>()
 
 function getScale(item: OrgOverview) {
-  const rawMax = Math.max(item.running_count, item.completed_count, item.terminated_count, 1)
+  const rawMax = Math.max(item.running_count, item[completedField.value], item.terminated_count, 1)
   // 用 rawMax 做 key 复用计算结果
   let s = scaleCache.get(rawMax)
   if (!s) {
@@ -133,9 +148,19 @@ function barPct(val: number, max: number): string {
 <style lang="scss" scoped>
 .vbar-wrap {
   .vbar-legend {
-    display: flex; gap: 20px; margin-bottom: 14px; font-size: 12px; color: var(--el-text-color-secondary);
+    display: flex; align-items: center; gap: 20px; margin-bottom: 14px; font-size: 12px; color: var(--el-text-color-secondary);
     .vbar-legend-dot {
       display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
+    }
+    // 已完成粒度切换按钮（右对齐）
+    .vbar-gran {
+      margin-left: auto; display: flex; gap: 4px;
+      span {
+        font-size: 12px; padding: 2px 10px; border: 1px solid var(--el-border-color);
+        border-radius: 4px; cursor: pointer; color: var(--el-text-color-secondary);
+        user-select: none;
+        &.is-active { background: #409EFF; color: #fff; border-color: #409EFF; }
+      }
     }
   }
 }
