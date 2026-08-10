@@ -61,7 +61,7 @@
                     }"
                     :title="`${col.label}：${item[col.key]}`"
                   >
-                    <!-- 数字内嵌在柱子顶部，柱短时自动溢出 -->
+                    <!-- 数字锚定柱顶上方外侧：柱矮时上浮显示，杜绝向下溢出落到横轴下方 -->
                     <span v-if="item[col.key] > 0" class="vbar-col__num">{{ item[col.key] }}</span>
                   </div>
                 </div>
@@ -226,19 +226,22 @@ function barPct(val: number, max: number): string {
   }
 
   &__bar {
+    position: relative; // 数字 absolute 锚定柱顶
     width: 100%;
     border-radius: 4px 4px 0 0;
     transition: height .5s ease;
-    // 数字内嵌：flex 居中，溢出可见
-    display: flex; align-items: flex-start; justify-content: center;
     overflow: visible;
   }
 
   &__num {
-    font-size: 12px; font-weight: 700; color: #fff;
+    // 锚定柱顶上方外侧：柱矮时数字上浮、不向下溢出，杜绝落到横轴下方
+    position: absolute;
+    bottom: calc(100% + 4px); // 数字底部 = 柱顶上方 4px
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px; font-weight: 700;
+    color: var(--el-text-color-primary); // 数字在柱顶上方、卡片白色背景上，用深色字保证可读（原白字/阴影为柱内彩底设计）
     line-height: 1; white-space: nowrap;
-    padding-top: 4px; // 柱顶留白
-    text-shadow: 0 1px 2px rgba(0,0,0,.25);
     font-variant-numeric: tabular-nums;
   }
 }
