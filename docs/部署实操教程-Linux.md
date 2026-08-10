@@ -29,6 +29,19 @@
 
 ## 阶段 1：安装基础环境
 
+> **先检查再装**：服务器若已装过（公司内网服务器常预装 MySQL/Nginx），版本满足就不重复装。逐项检查：
+
+| 软件 | 检查命令 | 满足版本 | 说明 |
+|------|---------|:--:|------|
+| Python | `python3 --version` | 3.10+ | — |
+| Node | `node --version` | 18+ | 仅前端构建用，可不在服务器 |
+| MySQL | `mysql --version` | 8.0 | 版本低于 8 需升级 |
+| Redis | `redis-cli ping` | 6.x+ | 返回 PONG 即正常 |
+| LibreOffice | `soffice --headless --version` | 7.x+ | 无输出则未装 |
+| Nginx | `nginx -v` | 1.20+ | — |
+
+版本满足 → 跳过对应小节；没装 → 才 apt install；版本偏低 → 升级（若升级可能影响服务器上别的在用软件，先问 IT）。
+
 ### 1.1 更新系统
 
 ```bash
