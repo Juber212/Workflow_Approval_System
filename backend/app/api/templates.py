@@ -315,12 +315,20 @@ async def list_document_templates(
         for d in linked_rows
     ]
 
-    # ── 可关联的单个模板（本组织、未作为单个关联、且不在已关联分类内）──
-    # 修复：通过分类包关联的模板会重复出现在「可关联」列表（额外显示）——
-    # 分类关联不写 document_id，仅排除 linked_doc_ids 会漏掉它们；一并排除已关联分类内的模板
+    # ── 可关联的单个模板（本组织、未作为单个关联、且不属于任何分类包）──
+    # 修复：包内模板只随分类包展示（linked/available_categories 的包里），不作为独立的可关联单个——
+    # 分类关联不写 document_id，仅排除 linked_doc_ids 会漏掉；且「取消包关联」后包内模板
+    # 不应单独冒出来（用户语义：包内模板只能随包整体关联）
     linked_doc_ids = {d.id for d in linked_rows}
-    linked_cat_doc_ids = {row[1] for row in cat_doc_rows} if linked_cat_id_set else set()
-    exclude_doc_ids = linked_doc_ids | linked_cat_doc_ids
+    all_cat_doc_ids: set[int] = set()
+    if all_cat_ids:
+        all_cat_doc_rows = (await db.execute(
+            select(TemplateCategoryDocument.document_id).where(
+                TemplateCategoryDocument.category_id.in_(all_cat_ids)
+            )
+        )).scalars().all()
+        all_cat_doc_ids = set(all_cat_doc_rows)
+    exclude_doc_ids = linked_doc_ids | all_cat_doc_ids
     available_rows = (await db.execute(
         select(DocumentTemplate).where(
             DocumentTemplate.organization_id == org_id,
