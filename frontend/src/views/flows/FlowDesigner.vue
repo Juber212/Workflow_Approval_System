@@ -614,6 +614,16 @@ async function fetchPresets() {
   } catch (e) { /* 静默失败，预设列表为空 */ console.error('加载预设列表失败:', e) }
 }
 
+/** 规范化人员列表为 [{user_id}]（兼容模板节点历史数字数组 [id] 与 dict 数组）——
+ * 后端 NodeOverride schema 要求 dict 数组，数字数组提交会被 Pydantic 拦截 */
+function normalizePersons(list: any[]): { user_id: number }[] {
+  return list.map((p: any) =>
+    typeof p === 'number' || typeof p === 'string'
+      ? { user_id: Number(p) }
+      : { user_id: Number(p.user_id ?? p.id) },
+  )
+}
+
 /** 从 PresetItem 构建节点 properties */
 function buildPresetProperties(preset: PresetItem): Record<string, any> {
   return {
@@ -827,12 +837,13 @@ async function handleLaunch() {
         hasOverride = true
       }
       // H1：校验人/审批人调整也进 override（原先只能靠写回模板生效，会污染共享模板）
+      // 提交前统一规范化为 [{user_id}]，兼容模板节点历史数字数组 [id] 与 dict 数组
       if (n.properties?.checkers && n.properties.checkers.length > 0) {
-        override.checkers = n.properties.checkers
+        override.checkers = normalizePersons(n.properties.checkers)
         hasOverride = true
       }
       if (n.properties?.approvers && n.properties.approvers.length > 0) {
-        override.approvers = n.properties.approvers
+        override.approvers = normalizePersons(n.properties.approvers)
         hasOverride = true
       }
       if (hasOverride) nodeOverrides.push(override)
