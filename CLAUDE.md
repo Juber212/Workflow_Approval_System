@@ -178,6 +178,8 @@ storage/archive/{实例名称}/
 
 - ✅ 本月归档删日期回不到全部已完成修复（2026-08-10）：`FlowManagement.fetchInstances` 区分「InstanceTable 主动上抛 query」（含空日期=用户已清除，优先使用）与「无参调用」（onMounted/status 变化才 fallback initDateRange）；用户清空日期时**同步清除 URL 的 date_from/date_to**，避免 initDateRange（读 URL 参数）残留、后续无参调用又把日期补回。方案页无此逻辑（无日期预筛）。vue-tsc 0 错 + build 过。
 
+- ✅ 文件模板分类重复显示修复（2026-08-10）：`getDocTemplates` 可关联列表排除**已关联分类内的模板**——分类关联不写 `document_id`，仅排除单个关联会漏掉它们，导致「包内模板额外重复出现在可关联列表」（发起/设计器弹窗里同一模板显示两次）。326 测试全过。
+
 **状态：可部署上线**
 
 ## 测试体系
