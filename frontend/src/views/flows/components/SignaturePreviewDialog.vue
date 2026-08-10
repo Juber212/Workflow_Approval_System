@@ -541,6 +541,14 @@ async function selectFile(fileId: number) {
       currentSigY.value = f.slots[0].signature_y
       currentSigW.value = f.slots[0].signature_width ?? (props.defaultWidth ?? 100)
       currentSigH.value = f.slots[0].signature_height ?? (props.defaultHeight ?? 26)
+      // 同步日期状态到当前文件槽位——修复：切换文件时只同步坐标、漏同步日期，
+      // 导致日期选择器残留上一个文件的日期，预览显示联动（改一个另一个跟着变），
+      // 但实际提交写的是当前 slot（签批结果正确）
+      currentShowDate.value = f.slots[0].show_date ?? true
+      currentSignDate.value = f.slots[0].sign_date ?? new Date().toISOString().slice(0, 10)
+      currentDateX.value = f.slots[0].date_x ?? null
+      currentDateY.value = f.slots[0].date_y ?? null
+      currentDateFontSize.value = f.slots[0].date_font_size ?? 10
     }
     await renderPage(currentPage.value)
   } catch (err) {

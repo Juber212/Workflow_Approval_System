@@ -192,6 +192,8 @@ storage/archive/{实例名称}/
 
 - ✅ 签批签名未写入 PDF 修复（2026-08-10）：STORAGE_ROOT 绝对化（CWD 防御）后，历史签名图路径（带相对 `storage/` 前缀如 `storage/signatures/xx.png`）在 `apply_signatures_after_commit` 被 `os.path.join` 重复拼接 `storage` → 签名图找不到 → 跳过签名写入（`Signature.applied` 保持 0，签批显示成功但预览 PDF 无签名）。`pdf_signature.py` 剥离相对 storage 前缀再拼绝对根，签名恢复正常写入（已 applied=0 的历史记录不会自动补写，新签批正常）。326 测试全过。
 
+- ✅ 签批预览日期联动修复（2026-08-10）：`SignaturePreviewDialog.selectFile` 切换文件时只同步签名坐标、**漏同步日期状态**（`currentSignDate` 等残留上一个文件日期）→ 预览显示联动（改一个另一个跟着变），但实际提交写的是当前 slot（签批结果正确）。补同步日期，切换文件后日期选择器显示当前文件槽位日期。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系
