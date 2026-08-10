@@ -319,7 +319,9 @@ async def get_overdue_items(db: AsyncSession) -> dict:
         .join(FlowInstance, Task.instance_id == FlowInstance.id)
         .join(User, Task.assignee_id == User.id)
         .where(
-            Task.status.notin_(["completed", "terminated"]),
+            # 仅负责人待处理的任务（未提交 pending/processing）——已提交等校验/审批/批准的
+            # 任务归对应分类，避免「超期待办」重复显示校验/审批/批准环节（产品口径 2026-08-10）
+            Task.status.in_(["pending", "processing"]),
             InstanceNode.deadline.isnot(None),
             InstanceNode.deadline < near_future,
         )

@@ -174,6 +174,8 @@ storage/archive/{实例名称}/
 
 - ✅ 柱状图已完成加「日/月/年」粒度切换（2026-08-10）：后端 `_get_org_overview` 单次 SUM(CASE) 同时统计今日/本月/本年完成数（`day/month/year_completed_count`，仅扫今年内 completed 记录），前端柱状图图例右侧加「日/月/年」切换按钮，即时切换显示对应列（默认本月，标签随粒度变「今日完成/本月完成/本年完成」）。326 测试全过 + vue-tsc 0 错 + build 过。
 
+- ✅ 超期待办口径修复（2026-08-10）：`get_overdue_items` 超期待办任务的 task_base 状态条件由 `notin_(completed/terminated)` 改为 `in_(pending/processing)`——已提交等校验/审批/批准的 Task（WAITING_*）不再计入「待办」，归对应分类，避免超期待办重复显示校验/审批/批准环节。326 测试全过。
+
 **状态：可部署上线**
 
 ## 测试体系
