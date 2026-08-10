@@ -192,20 +192,12 @@ function removeDoc(doc: DocTemplateItem) {
 
 /** 移除分类 → 包内模板一并移除（整体移除），分类放回可关联 */
 function removeCategory(cat: TemplateCategorySummary) {
-  const linkedCat = linkedCategories.value.find(c => c.id === cat.id)
-  const catDocList = linkedCat?.documents || []
   linkedCategories.value = linkedCategories.value.filter(c => c.id !== cat.id)
   // 放回可关联分类（保留补拉缓存的文档明细）
   availableCategories.value = [...availableCategories.value, cat]
-  // 包内模板：若未被单独关联则放回可关联单个模板
-  const catDocIds = new Set(catDocList.map(d => d.id))
-  const stillLinkedDocs = new Set(linkedDocTemplates.value.map(d => d.id))
-  catDocIds.forEach(docId => {
-    if (!stillLinkedDocs.has(docId)) {
-      const doc = catDocList.find(d => d.id === docId)
-      if (doc) availableDocTemplates.value = [...availableDocTemplates.value, doc]
-    }
-  })
+  // 包内模板只随包走（包已放回可关联分类），不单独放回「可关联单个模板」列表——
+  // 修复：取消包关联后包内模板不应单独冒出来；若某模板此前被单独关联（linkedDocTemplates），
+  // 移除分类后仍保留其单独关联（collectSelectedIds 会算入）
   emit('change', collectSelectedIds())
 }
 
