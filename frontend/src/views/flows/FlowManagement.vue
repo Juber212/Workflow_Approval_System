@@ -108,6 +108,19 @@ async function fetchStatusCounts() {
 async function fetchInstances(query?: InstanceQuery) {
   instanceLoading.value = true
   try {
+    // M19 修复：InstanceTable 主动上抛的 query 优先（含空日期 = 用户已清除日期）——
+    // 仅无参调用（onMounted / status 变化）才兜底 initDateRange（「本月归档」跳转初始预筛）
+    const hasQuery = !!query
+    const date_from = query?.date_from ?? (hasQuery ? undefined : initDateRange.value?.[0])
+    const date_to = query?.date_to ?? (hasQuery ? undefined : initDateRange.value?.[1])
+    // 用户主动清空日期（query 存在且日期为空）→ 同步清除 URL 的 date_from/date_to，
+    // 否则 initDateRange 仍非空、后续无参调用又把日期补回（删日期后无法回到「所有已完成」）
+    if (hasQuery && !date_from && !date_to && (route.query.date_from || route.query.date_to)) {
+      const q = { ...route.query }
+      delete q.date_from
+      delete q.date_to
+      router.replace({ query: q })
+    }
     const data = await getInstances({
       page: instancePage.value,
       page_size: instancePageSize.value,
@@ -115,10 +128,8 @@ async function fetchInstances(query?: InstanceQuery) {
       keyword: query?.keyword,
       sort_by: instanceStatusFilter.value === 'running' ? 'priority' : undefined,
       priority: query?.priority,
-      // M19 回归修复：无参调用（onMounted / status 变化）兜底补上 initDateRange 日期，
-      // 避免「本月归档」跳转时与子组件带日期请求并发覆盖成全部已完成（数据与筛选不一致）
-      date_from: query?.date_from ?? initDateRange.value?.[0],
-      date_to: query?.date_to ?? initDateRange.value?.[1],
+      date_from,
+      date_to,
       initiator_id: query?.initiator_id ?? undefined,
     })
     instances.value = data.items

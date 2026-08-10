@@ -176,6 +176,8 @@ storage/archive/{实例名称}/
 
 - ✅ 超期待办口径修复（2026-08-10）：`get_overdue_items` 超期待办任务的 task_base 状态条件由 `notin_(completed/terminated)` 改为 `in_(pending/processing)`——已提交等校验/审批/批准的 Task（WAITING_*）不再计入「待办」，归对应分类，避免超期待办重复显示校验/审批/批准环节。326 测试全过。
 
+- ✅ 本月归档删日期回不到全部已完成修复（2026-08-10）：`FlowManagement.fetchInstances` 区分「InstanceTable 主动上抛 query」（含空日期=用户已清除，优先使用）与「无参调用」（onMounted/status 变化才 fallback initDateRange）；用户清空日期时**同步清除 URL 的 date_from/date_to**，避免 initDateRange（读 URL 参数）残留、后续无参调用又把日期补回。方案页无此逻辑（无日期预筛）。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系
