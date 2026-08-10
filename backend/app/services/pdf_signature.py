@@ -279,9 +279,13 @@ async def apply_signatures_to_files(
             if not user or not user.signature_image:
                 continue
             sig_path = user.signature_image
+            # 兼容：签名图可能带相对 STORAGE_ROOT 前缀（历史存储如 "storage/signatures/xx.png"）。
+            # STORAGE_ROOT 绝对化后（CWD 防御）直接 join 会重复拼接 → 先剥离相对前缀再拼绝对根。
+            storage_name = os.path.basename(settings.STORAGE_ROOT.rstrip("/\\"))  # 如 "storage"
+            rel_prefix = storage_name + os.sep
+            if sig_path.startswith(rel_prefix) or sig_path.startswith(storage_name + "/"):
+                sig_path = sig_path[len(storage_name):].lstrip("/\\")  # "storage/signatures/2.png" → "signatures/2.png"
             abs_sig = sig_path if os.path.isabs(sig_path) else os.path.join(settings.STORAGE_ROOT, sig_path)
-            if sig_path.startswith(settings.STORAGE_ROOT + os.sep) or sig_path.startswith(settings.STORAGE_ROOT + "/"):
-                abs_sig = sig_path
             if not os.path.exists(abs_sig):
                 continue
             sig_paths.append(abs_sig)

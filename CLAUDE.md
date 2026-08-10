@@ -190,6 +190,8 @@ storage/archive/{实例名称}/
 
 - ✅ 转换收尾重复调用限流修复（2026-08-10）：`TaskDetail.handleConversionComplete` 加**防重入标志**（轮询 + WebSocket 双路径触发时只收尾一次），`animateToFullThen` 清旧 `finishTimer`——防 `finalizeConversion` 重复调用 → `prepareSign` 多次请求触发后端限流（429）。vue-tsc 0 错 + build 过。
 
+- ✅ 签批签名未写入 PDF 修复（2026-08-10）：STORAGE_ROOT 绝对化（CWD 防御）后，历史签名图路径（带相对 `storage/` 前缀如 `storage/signatures/xx.png`）在 `apply_signatures_after_commit` 被 `os.path.join` 重复拼接 `storage` → 签名图找不到 → 跳过签名写入（`Signature.applied` 保持 0，签批显示成功但预览 PDF 无签名）。`pdf_signature.py` 剥离相对 storage 前缀再拼绝对根，签名恢复正常写入（已 applied=0 的历史记录不会自动补写，新签批正常）。326 测试全过。
+
 **状态：可部署上线**
 
 ## 测试体系
