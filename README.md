@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-deployable-success" alt="status">
-  <img src="https://img.shields.io/badge/tests-317%20passed-brightgreen" alt="tests">
+  <img src="https://img.shields.io/badge/tests-326%20passed-brightgreen" alt="tests">
   <img src="https://img.shields.io/badge/python-3.10+-blue" alt="python">
   <img src="https://img.shields.io/badge/vue-3.5-brightgreen" alt="vue">
 </p>
@@ -172,16 +172,16 @@ npm run build        # 生产构建
 ## 测试
 
 ```bash
-pytest tests/ -v          # Mock 测试 290 条（225 单元 + 65 集成），毫秒级
-pytest tests/mysql/ -v    # MySQL 真实测试 27 条，需要 workflow_approval_test 库
+pytest tests/ -v          # Mock 测试 291 条（225 单元 + 66 集成），毫秒级
+pytest tests/mysql/ -v    # MySQL 真实测试 29 条，需要 workflow_approval_test 库
 ```
 
 | 类型 | 数量 | 说明 |
 |------|:--:|------|
 | 单元测试 | 225 | 内存运行，毫秒级 |
-| 集成测试 | 65 | TestClient + mock_db |
-| MySQL 真实 | 27 | SAVEPOINT 隔离，独立建表删表 |
-| **合计** | **317** | **无已知未修复问题** |
+| 集成测试 | 66 | TestClient + mock_db |
+| MySQL 真实 | 29 | SAVEPOINT 隔离，独立建表删表 |
+| **合计** | **326** | **无已知未修复问题** |
 
 ---
 
@@ -194,7 +194,7 @@ pytest tests/mysql/ -v    # MySQL 真实测试 27 条，需要 workflow_approval
 | [技术蓝图](00_Project_Blueprint.md) | 系统架构、状态机、流程引擎设计 |
 | [产品需求文档](01_PRD.md) | 功能模块与交互流程 |
 | [数据库设计](02_Database_Design.md) | 24 张表完整 DDL + ER 图 + 分区策略 |
-| [API 设计](03_API_Design.md) | 99 个 HTTP 端点 + 1 个 WebSocket |
+| [API 设计](03_API_Design.md) | 92 个 HTTP 端点 + 1 个 WebSocket |
 | [部署运维](04_Deployment.md) | Nginx、HTTPS、备份 |
 | [变更日志](CHANGELOG.md) | 版本变更记录 |
 | [审计修复日志](AUDIT_FIX_LOG.md) | 全量代码审计 + 修复记录 |
@@ -208,7 +208,7 @@ pytest tests/mysql/ -v    # MySQL 真实测试 27 条，需要 workflow_approval
 ```
 ├── backend/                  # FastAPI 后端
 │   ├── app/
-│   │   ├── api/              # 18 个路由文件，99 端点
+│   │   ├── api/              # 18 个路由文件，92 端点
 │   │   ├── models/           # 24 个模型，24 张表
 │   │   ├── schemas/          # Pydantic 请求/响应 Schema
 │   │   ├── services/         # 业务逻辑层

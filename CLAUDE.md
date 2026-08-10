@@ -162,6 +162,8 @@ storage/archive/{实例名称}/
 
 - ✅ 剩余低危项修复（2026-08-06）：①删除死代码 `app/core/storage.py`（确认 app+tests 零引用，路径解析已由 `utils/file_utils.py resolve_file_path` 统一承担）②STORAGE_ROOT CWD 依赖防御——config.py 加 field_validator 把相对路径解析为基于 backend 目录的绝对路径（消除「从错误 CWD 启动」存储漂移）③前端上传 30s 超时放宽（uploadTaskFile 单独 120s，覆盖 ≤50MB 大文件）④前端下载逻辑抽取 `api/download.ts downloadBlobResponse`（task/template 4 处重复 blob 下载统一，非 2xx 时解析后端错误消息）。**调查确认**：pdf_signature_offset 为无效配置（`_SIG_KEYS` 读取但签名坐标计算只用 x/y，offset 从未参与；清理需删 settings/_SIG_KEYS/seed/configs 白名单/.env 共 7 处入口，待定）。326 测试全过 + vue-tsc 0 错 + build 过。**低危排队**：pass_check 无审批人分支终态校验、幽灵通知（WS 先于提交）、pdf_signature_offset 无效配置（待定是否清理）
 
+- ✅ 文档全量对齐（2026-08-10）：3 代理并行扫描 6 份使用/设计文档 vs 代码现状，修正——README/Developer_Documentation（测试 317/190→326、端点 99→92、建库命令→deploy_db、补 Redis/LibreOffice 必需 + ARQ worker、删无效 DATABASE_URL）；00_Blueprint/01_PRD/02_Database_Design/03_API_Design（表数 22/21→24、端点 90/72→92、Semaphore 2→4、通知 8→9、roles 改 seed 创建、分区改 deploy_db 创建、迁移历史修正「初始迁移不建主表」、更新日期统一 2026-08-10）。历史记录文档（CHANGELOG/AUDIT_FIX_LOG/Learning_Journal/docs/audit）作为历史快照保留不改。326 测试全绿。
+
 **状态：可部署上线**
 
 ## 测试体系

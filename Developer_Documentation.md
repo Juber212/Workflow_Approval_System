@@ -11,7 +11,8 @@
 | Python | 3.10+ | 后端 |
 | Node.js | 18+ | 前端 |
 | MySQL | 8.0 | 数据库（InnoDB，utf8mb4） |
-| LibreOffice | 任意 | PDF 转换（无头模式），非必须（开发可跳过） |
+| Redis | 6.x+ | 任务队列（DB0）/ PubSub 桥接（DB1）/ Token 黑名单（DB2） |
+| LibreOffice | 7.x+ | PDF 转换（无头模式），必装（worker 转换依赖） |
 
 ---
 
@@ -21,7 +22,7 @@
 Workflow_Approval_System/
 ├── backend/                    # FastAPI 后端
 │   ├── app/
-│   │   ├── api/                # 18 个路由文件，99 个 HTTP 端点 + 1 WebSocket
+│   │   ├── api/                # 18 个路由文件，92 个 HTTP 端点 + 1 WebSocket
 │   │   ├── models/             # 24 个 SQLAlchemy 模型（24 张表）
 │   │   ├── schemas/            # Pydantic 请求/响应 Schema
 │   │   ├── services/           # 业务逻辑层
@@ -34,7 +35,7 @@ Workflow_Approval_System/
 │   │   │   ├── seed_test_data.py    # 测试种子数据（22实例全边界覆盖，幂等可重复）
 │   │   │   └── ...
 │   ├── alembic/                # 数据库迁移（versions/ 下 20+ 个迁移文件）
-│   ├── tests/                  # 190 条测试（unit / integration / mysql）
+│   ├── tests/                  # 326 条测试（225 单元 / 66 集成 / 29 MySQL）
 │   ├── storage/archive/        # 文件存储根目录
 │   └── requirements.txt
 ├── frontend/                   # Vue 3 前端
@@ -81,20 +82,17 @@ venv\Scripts\activate      # Windows
 pip install -r requirements.txt
 
 # 3. 环境变量
-export DATABASE_URL="mysql+aiomysql://root:password@localhost:3306/workflow_approval"
-export SECRET_KEY="your-production-secret-key"
-export DEFAULT_ADMIN_PASSWORD="admin-initial-password"
+cp .env.example .env    # 按需修改 DB_HOST/DB_PASSWORD/SECRET_KEY/DEFAULT_ADMIN_PASSWORD 等；开发环境 ENV 保持 development
 
-# 4. 创建数据库（MySQL）
-mysql -u root -p -e "CREATE DATABASE workflow_approval CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -u root -p -e "CREATE DATABASE workflow_approval_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+# 4. 建库 + 建表 + 操作日志分区 + alembic 基线（一条命令）
+python -m app.core.deploy_db
 
-# 5. 运行迁移 + 种子数据
-alembic upgrade head
+# 5. 预置数据（角色/组织/配置/管理员 admin）
 python -m app.core.seed
 
-# 6. 启动（开发模式，默认 8000 端口）
+# 6. 启动（开发模式，默认 8000 端口）+ 后台 PDF 转换 Worker
 uvicorn app.main:app --reload
+python -m arq app.worker.WorkerSettings   # 不启则 PDF 转换功能不可用
 ```
 
 Swagger 文档：`http://localhost:8000/docs`
@@ -128,7 +126,7 @@ npm run build
 ```bash
 # ── 测试 ──
 cd backend
-pytest tests/ -v                 # Mock 测试（190 条，13s）
+pytest tests/ -v                 # Mock 测试（291 条：225 单元 + 66 集成，毫秒级）
 pytest tests/mysql/ -v           # MySQL 真实数据库测试（需要 workflow_approval_test 库）
 
 # ── 测试数据（边界场景覆盖） ──
