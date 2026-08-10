@@ -1,7 +1,10 @@
 """应用配置管理 —— 基于 Pydantic Settings 从环境变量加载"""
 
+import os
 import urllib.parse
+from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 # 已知默认 SECRET_KEY（P1-49：非开发环境禁止使用）
@@ -48,6 +51,20 @@ class Settings(BaseSettings):
 
     # 文件存储
     STORAGE_ROOT: str = "storage"  # 相对项目根目录
+
+    @field_validator("STORAGE_ROOT")
+    @classmethod
+    def _make_storage_root_absolute(cls, v: str) -> str:
+        """低危项：相对 STORAGE_ROOT 解析为基于 backend 目录的绝对路径，消除「从错误 CWD 启动」的存储路径漂移
+
+        systemd 已固定 WorkingDirectory，但防御性处理更稳：无论启动目录在哪，
+        签名/归档文件都指向 backend/storage，不会因 CWD 变化写错位置。
+        """
+        if not v or os.path.isabs(v):
+            return v
+        backend_dir = Path(__file__).resolve().parent.parent.parent  # app/core/config.py → backend/
+        return str((backend_dir / v).resolve())
+
     LIBREOFFICE_PATH: str = "soffice"  # LibreOffice 命令行路径
 
     # 存储子目录（支持中文命名，按实例类型分目录）

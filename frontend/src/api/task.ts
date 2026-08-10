@@ -3,6 +3,7 @@ import request, { getToken, apiBase } from './request'
 import type { PaginatedResponse } from './index'
 import type { SignatureSlot } from './signature'
 import type { DocTemplateItem } from './template'
+import { downloadBlobResponse } from './download'
 
 // ==================== 类型 ====================
 
@@ -192,6 +193,7 @@ export async function uploadTaskFile(taskId: number, file: File, folderName?: st
   const params = folderName ? `?folder_name=${encodeURIComponent(folderName)}` : ''
   const res = await request.post(`/tasks/${taskId}/files${params}`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,  // 低危项：上传大文件（≤50MB）放宽到 2 分钟，防全局 30s 超时中断
   })
   return res.data
 }
@@ -227,28 +229,13 @@ export async function previewFile(fileId: number): Promise<void> {
   }
 }
 
-/** 下载文件 —— 获取文件 blob 后触发浏览器保存对话框 */
+/** 下载文件 —— 获取文件 blob 后触发浏览器保存对话框（低危项：复用下载助手） */
 export async function downloadFile(fileId: number): Promise<void> {
   const token = getToken()
   const resp = await fetch(fileDownloadUrl(fileId), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
-  if (!resp.ok) {
-    throw new Error('下载失败')
-  }
-  const blob = await resp.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  // 从响应头解析文件名（优先取 filename*=UTF-8'' 编码名，兜底取 filename=）
-  const disposition = resp.headers.get('Content-Disposition') || ''
-  const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
-  const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
-  const raw = starMatch?.[1] || plainMatch?.[1] || `file-${fileId}`
-  // 文件名含非法 % 序列时 decodeURIComponent 抛 URIError → 兜底用原始名
-  try { a.download = decodeURIComponent(raw) } catch { a.download = raw }
-  a.click()
-  URL.revokeObjectURL(blobUrl)
+  await downloadBlobResponse(resp, `file-${fileId}`)
 }
 
 // ==================== 文件模板（任务处理页用） ====================
@@ -274,22 +261,12 @@ export async function getTaskDocTemplates(taskId: number): Promise<TaskDocTempla
   return res.data
 }
 
-/** 下载模板包 ZIP（填充占位符后打包） */
+/** 下载模板包 ZIP（填充占位符后打包）—— 低危项：复用下载助手 */
 export async function downloadTaskTemplateZip(taskId: number, categoryId: number): Promise<void> {
   const token = getToken()
   const resp = await fetch(
     `${apiBase()}/tasks/${taskId}/document-templates/download-zip?category_id=${categoryId}`,
     { headers: token ? { Authorization: `Bearer ${token}` } : {} },
   )
-  if (!resp.ok) throw new Error('下载失败')
-  const blob = await resp.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  const disposition = resp.headers.get('Content-Disposition') || ''
-  const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
-  const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
-  a.download = decodeURIComponent(starMatch?.[1] || plainMatch?.[1] || 'templates.zip')
-  a.click()
-  URL.revokeObjectURL(blobUrl)
+  await downloadBlobResponse(resp, 'templates.zip')
 }

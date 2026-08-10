@@ -1,6 +1,7 @@
 /** 项目模板 API —— 简化版：无版本、无状态 */
 import request, { getToken, apiBase } from './request'
 import type { PaginatedResponse } from './index'
+import { downloadBlobResponse } from './download'
 
 // ==================== 类型 ====================
 
@@ -207,29 +208,13 @@ export async function unlinkDocTemplate(
   await request.delete(`/templates/${templateId}/documents/${linkType}/${linkId}/link`)
 }
 
-/** 下载文件模板（自动替换占位符）—— 通过 fetch + blob 触发浏览器下载 */
+/** 下载文件模板（自动替换占位符）—— 低危项：复用下载助手 */
 export async function downloadDocTemplate(taskId: number, docId: number): Promise<void> {
   const token = getToken()
   const resp = await fetch(`${apiBase()}/tasks/${taskId}/document-templates/${docId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
-  if (!resp.ok) {
-    const errData = await resp.json().catch(() => ({}))
-    throw new Error((errData as any).message || '下载失败')
-  }
-  const blob = await resp.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  // 从响应头解析文件名
-  const disposition = resp.headers.get('Content-Disposition') || ''
-  const starMatch = disposition.match(/filename\*=UTF-8''([^;\s]+)/)
-  const plainMatch = disposition.match(/filename="?([^";\s]+)"?/)
-  const raw = starMatch?.[1] || plainMatch?.[1] || `template-${docId}`
-  // 文件名含非法 % 序列时 decodeURIComponent 抛 URIError → 兜底用原始名
-  try { a.download = decodeURIComponent(raw) } catch { a.download = raw }
-  a.click()
-  URL.revokeObjectURL(blobUrl)
+  await downloadBlobResponse(resp, `template-${docId}`)
 }
 
 /** 批量下载文件模板 ZIP（填充占位符后打包） */
@@ -247,17 +232,7 @@ export async function downloadTemplatesZip(
   const resp = await fetch(`${apiBase()}/templates/${templateId}/download-zip?${params}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
-  if (!resp.ok) {
-    const errData = await resp.json().catch(() => ({}))
-    throw new Error((errData as any).message || '下载失败')
-  }
-  const blob = await resp.blob()
-  const blobUrl = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = blobUrl
-  a.download = 'templates.zip'
-  a.click()
-  URL.revokeObjectURL(blobUrl)
+  await downloadBlobResponse(resp, 'templates.zip')
 }
 
 // ─── 管理员文件模板管理 ──────────────────────────────────────

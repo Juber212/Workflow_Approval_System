@@ -160,6 +160,8 @@ storage/archive/{实例名称}/
 
 - ✅ 低危项修复（2026-08-06）：①GET_LOCK 早于 commit 释放撞唯一索引——`ensure_proposal_template` 改**锁内 commit**（GET_LOCK 绑定连接、commit 不释放锁；释放前完成事务，后到请求复用模板不重复创建）②`validate_user_ids_exist` 加 is_active 过滤（禁用用户视为不可用，4 处调用方文案改「不存在或已停用」，防任务派给无法登录用户卡死）③`_pdf_locks` 改 `weakref.WeakValueDictionary` 防内存增长（持局部强引用防「创建即回收」KeyError）④reject 驳回下游文件查询改批量 IN（终审/中间 2 处 N+1）⑤pass_check 无审批人终态校验、幽灵通知**评估后保持记录**（并发已被节点行锁覆盖 / 改动面大）。新增 2 个 MySQL 集成测试（is_active 过滤 + GET_LOCK 并发只建 1 模板）。326 测试全过。**低危排队**：pass_check 无审批人分支终态校验、幽灵通知（WS 先于提交）、storage.py 死代码删除、签名路径 CWD 依赖、pdf_signature_offset 无效配置、前端上传 30s 超时/下载助手抽取
 
+- ✅ 剩余低危项修复（2026-08-06）：①删除死代码 `app/core/storage.py`（确认 app+tests 零引用，路径解析已由 `utils/file_utils.py resolve_file_path` 统一承担）②STORAGE_ROOT CWD 依赖防御——config.py 加 field_validator 把相对路径解析为基于 backend 目录的绝对路径（消除「从错误 CWD 启动」存储漂移）③前端上传 30s 超时放宽（uploadTaskFile 单独 120s，覆盖 ≤50MB 大文件）④前端下载逻辑抽取 `api/download.ts downloadBlobResponse`（task/template 4 处重复 blob 下载统一，非 2xx 时解析后端错误消息）。**调查确认**：pdf_signature_offset 为无效配置（`_SIG_KEYS` 读取但签名坐标计算只用 x/y，offset 从未参与；清理需删 settings/_SIG_KEYS/seed/configs 白名单/.env 共 7 处入口，待定）。326 测试全过 + vue-tsc 0 错 + build 过。**低危排队**：pass_check 无审批人分支终态校验、幽灵通知（WS 先于提交）、pdf_signature_offset 无效配置（待定是否清理）
+
 **状态：可部署上线**
 
 ## 测试体系
