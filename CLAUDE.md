@@ -184,6 +184,8 @@ storage/archive/{实例名称}/
 
 - ✅ 文件模板弹窗包内模板不单独显示（2026-08-10，补修前端）：`LaunchDocTemplateDialog.removeCategory` 移除分类后**不再把包内模板放回「可关联单个」列表**（此前本地放回导致「取消包关联后包内模板单独冒出来」，与后端 getDocTemplates 排除所有分类包内模板一致）。模板设计器与发起项目弹窗共用该组件，两处一并生效。vue-tsc 0 错 + build 过。
 
+- ✅ 发起项目 node_overrides 校验失败修复（2026-08-10）：`buildPresetProperties` 应用预设时 checkers/approvers 由**数字数组 `[user_id]` 改为 dict 数组 `[{user_id}]`**——与模板节点存储/后端 NodeOverride schema 一致，此前映射成数字数组导致发起提交被 Pydantic 拦截（`Input should be a valid dictionary`）。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系

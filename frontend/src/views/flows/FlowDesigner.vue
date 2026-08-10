@@ -621,9 +621,11 @@ function buildPresetProperties(preset: PresetItem): Record<string, any> {
     is_start: false, is_end: false,
     assignee_id: preset.assignee_id ?? null,
     assignee_name: preset.assignee_name || null,
-    checkers: preset.checkers?.map(c => c.user_id) || null,
+    // checkers/approvers 保留 dict 数组格式 [{user_id}]（与模板节点/后端 schema 一致），
+    // 此前映射成数字数组 [user_id] 会在发起提交时被后端 NodeOverride 校验拦截（Pydantic 期望 dict）
+    checkers: preset.checkers?.map(c => ({ user_id: c.user_id })) || null,
     checkers_names: preset.checkers_names || null,
-    approvers: preset.approvers?.map(a => a.user_id) || null,
+    approvers: preset.approvers?.map(a => ({ user_id: a.user_id })) || null,
     approvers_names: preset.approvers_names || null,
     time_limit_days: preset.time_limit_days ?? null,
     require_file: preset.require_file ?? true,
