@@ -1,11 +1,11 @@
 <template>
-  <!-- 各所项目负载竖柱图 —— 运行中为主轴（当前负载），完成/终止为辅助数字 -->
-  <!-- 改版动机：原三状态共轴，运行久后已完成累计值撑满 Y 轴、运行中/终止矮到不可见；改为只对比「当前运行中」 -->
+  <!-- 各所概览竖柱图 —— 四栏网格，每卡片 = 一个组织的竖向柱状图（独立 Y 轴 + 刻度） -->
   <div class="vbar-wrap">
     <!-- 图例 -->
     <div class="vbar-legend">
       <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#67C23A"></i>运行中</span>
-      <span class="vbar-legend-note">柱高 = 各所当前运行中项目数（当前负载）</span>
+      <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#409EFF"></i>已完成</span>
+      <span class="vbar-legend-item"><i class="vbar-legend-dot" style="background:#909399"></i>已终止</span>
     </div>
 
     <!-- 四栏卡片网格 -->
@@ -23,11 +23,15 @@
           <span class="vbar-card__total">共 {{ item.total_count }} 个</span>
         </div>
 
-        <!-- 图表区：Y轴 + 运行中柱 + 网格线 -->
+        <!-- 图表区：Y轴 + 柱子 + 网格线 -->
         <div class="vbar-card__chart">
-          <!-- Y 轴刻度（按运行中最大值） -->
+          <!-- Y 轴刻度 -->
           <div class="vbar-y">
-            <span v-for="tick in cardTicks(item)" :key="tick" class="vbar-y__tick">{{ tick }}</span>
+            <span
+              v-for="tick in cardTicks(item)"
+              :key="tick"
+              class="vbar-y__tick"
+            >{{ tick }}</span>
           </div>
           <!-- 柱子区域 -->
           <div class="vbar-bars">
@@ -40,26 +44,35 @@
                 :class="{ 'is-base': i === cardTicks(item).length - 1 }"
               />
             </div>
-            <!-- 运行中柱（单柱居中） -->
-            <div class="vbar-col">
-              <div class="vbar-col__bar-wrap">
-                <div
-                  class="vbar-col__bar"
-                  :style="{ height: barPct(item.running_count, cardMax(item)) }"
-                  :title="`运行中：${item.running_count}`"
-                >
-                  <!-- 数字锚定柱顶上方外侧：柱矮时上浮显示，杜绝向下溢出落到横轴下方 -->
-                  <span v-if="item.running_count > 0" class="vbar-col__num">{{ item.running_count }}</span>
+            <!-- 柱子 -->
+            <div class="vbar-cols">
+              <div
+                v-for="col in columns"
+                :key="col.key"
+                class="vbar-col"
+              >
+                <!-- 柱子（底部生长，数字在柱顶内侧） -->
+                <div class="vbar-col__bar-wrap">
+                  <div
+                    class="vbar-col__bar"
+                    :style="{
+                      height: barPct(item[col.key], cardMax(item)),
+                      background: col.color,
+                    }"
+                    :title="`${col.label}：${item[col.key]}`"
+                  >
+                    <!-- 数字锚定柱顶上方外侧：柱矮时上浮显示，杜绝向下溢出落到横轴下方 -->
+                    <span v-if="item[col.key] > 0" class="vbar-col__num">{{ item[col.key] }}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 底部：完成/终止辅助数字（不占柱高，避免累计值拉高 Y 轴） -->
-        <div class="vbar-sub">
-          <span>完成 {{ item.completed_count }}</span>
-          <span>终止 {{ item.terminated_count }}</span>
+        <!-- 底部标签（图表外，与柱子列对齐） -->
+        <div class="vbar-labels">
+          <span v-for="col in columns" :key="col.key" class="vbar-label">{{ col.label }}</span>
         </div>
       </div>
     </div>
@@ -73,6 +86,13 @@ import type { OrgOverview } from '@/api/dashboard'
 const props = defineProps<{ items: OrgOverview[] }>()
 defineEmits<{ 'org-click': [orgId: number] }>()
 
+/** 柱状图三列定义 */
+const columns = [
+  { key: 'running_count' as const, label: '运行中', color: '#67C23A' },
+  { key: 'completed_count' as const, label: '已完成', color: '#409EFF' },
+  { key: 'terminated_count' as const, label: '已终止', color: '#909399' },
+]
+
 /** 向上取整到好读数（如 6→10, 12→20, 23→30, 45→50） */
 function niceMax(val: number): number {
   if (val <= 0) return 2
@@ -84,11 +104,12 @@ function niceMax(val: number): number {
   return 10 * mag
 }
 
-/** 计算单个卡片的 Y 轴信息（按运行中最大值，缓存避免重复计算） */
+/** 计算单个卡片的 Y 轴信息（缓存避免重复计算） */
 const scaleCache = new Map<number, { max: number; ticks: number[] }>()
 
 function getScale(item: OrgOverview) {
-  const rawMax = Math.max(item.running_count, 1)
+  const rawMax = Math.max(item.running_count, item.completed_count, item.terminated_count, 1)
+  // 用 rawMax 做 key 复用计算结果
   let s = scaleCache.get(rawMax)
   if (!s) {
     const max = niceMax(rawMax)
@@ -102,7 +123,7 @@ function getScale(item: OrgOverview) {
 function cardMax(item: OrgOverview) { return getScale(item).max }
 function cardTicks(item: OrgOverview) { return getScale(item).ticks }
 
-/** 柱子高度百分比（基于该卡片运行中 Y 轴上限） */
+/** 柱子高度百分比（基于该卡片独立 Y 轴上限） */
 function barPct(val: number, max: number): string {
   if (val <= 0 || max <= 0) return '0'
   return ((val / max) * 100).toFixed(1) + '%'
@@ -112,11 +133,10 @@ function barPct(val: number, max: number): string {
 <style lang="scss" scoped>
 .vbar-wrap {
   .vbar-legend {
-    display: flex; align-items: center; gap: 20px; margin-bottom: 14px; font-size: 12px; color: var(--el-text-color-secondary);
+    display: flex; gap: 20px; margin-bottom: 14px; font-size: 12px; color: var(--el-text-color-secondary);
     .vbar-legend-dot {
       display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px;
     }
-    &-note { color: var(--el-text-color-placeholder); font-size: 12px; }
   }
 }
 
@@ -154,7 +174,7 @@ function barPct(val: number, max: number): string {
     white-space: nowrap; flex-shrink: 0;
   }
 
-  // 图表区：Y轴 + 柱子
+  // 图表区：Y轴 + 柱子（纯图表，不含底部标签）
   &__chart {
     display: flex; gap: 4px; height: 126px;
   }
@@ -171,12 +191,12 @@ function barPct(val: number, max: number): string {
   }
 }
 
-/* ─── 柱子区域 ─── */
+/* ─── 柱子区域（含网格线 + 柱子） ─── */
 .vbar-bars {
   flex: 1; position: relative; min-width: 0;
 }
 
-/* ─── 横向网格线 ─── */
+/* ─── 横向网格线（绝对定位，填满柱子区） ─── */
 .vbar-grid-lines {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; justify-content: space-between;
@@ -188,15 +208,20 @@ function barPct(val: number, max: number): string {
   }
 }
 
-/* ─── 单柱列：运行中柱 + 顶部数字 ─── */
-.vbar-col {
+/* ─── 柱子列容器（覆盖在网格线上，stretch 填满高度） ─── */
+.vbar-cols {
   position: relative;
-  height: 100%;
-  display: flex; justify-content: center;
+  display: flex; justify-content: space-around; align-items: stretch;
+  height: 100%; gap: 6px;
+}
+
+/* ─── 单列：柱子 + 顶部数字（flex column，bar-wrap 自动撑满） ─── */
+.vbar-col {
+  flex: 1; min-width: 0;
 
   &__bar-wrap {
-    height: 100%;
-    width: 100%; max-width: 60px;
+    height: 100%; // 填满 vbar-cols
+    width: 100%; max-width: 44px; margin: 0 auto;
     display: flex; align-items: flex-end; // 柱子从底部向上生长
   }
 
@@ -204,7 +229,6 @@ function barPct(val: number, max: number): string {
     position: relative; // 数字 absolute 锚定柱顶
     width: 100%;
     border-radius: 4px 4px 0 0;
-    background: #67C23A; // 运行中绿色
     transition: height .5s ease;
     overflow: visible;
   }
@@ -216,19 +240,21 @@ function barPct(val: number, max: number): string {
     left: 50%;
     transform: translateX(-50%);
     font-size: 12px; font-weight: 700;
-    color: var(--el-text-color-primary); // 数字在柱顶上方、卡片白色背景上，用深色字保证可读
+    color: var(--el-text-color-primary); // 数字在柱顶上方、卡片白色背景上，用深色字保证可读（原白字/阴影为柱内彩底设计）
     line-height: 1; white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
 }
 
-/* ─── 底部辅助数字（完成/终止，左缩进对齐柱子区） ─── */
-.vbar-sub {
+/* ─── 底部标签（图表外，左缩进对齐柱子区） ─── */
+.vbar-labels {
   display: flex; justify-content: space-around;
   padding-left: 32px; // 28px Y轴 + 4px gap
-  margin-top: 4px; gap: 6px;
+  margin-top: 2px; gap: 6px;
+}
+.vbar-label {
+  flex: 1; text-align: center;
   font-size: 12px; color: var(--el-text-color-secondary);
-  span { flex: 1; text-align: center; white-space: nowrap; }
 }
 
 .bar-empty {
