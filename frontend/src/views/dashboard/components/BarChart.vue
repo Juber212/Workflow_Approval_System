@@ -89,7 +89,7 @@ defineEmits<{ 'org-click': [orgId: number] }>()
 /** 柱状图三列定义 */
 const columns = [
   { key: 'running_count' as const, label: '运行中', color: '#67C23A' },
-  { key: 'completed_count' as const, label: '已完成', color: '#409EFF' },
+  { key: 'completed_count' as const, label: '本月完成', color: '#409EFF' },
   { key: 'terminated_count' as const, label: '已终止', color: '#909399' },
 ]
 

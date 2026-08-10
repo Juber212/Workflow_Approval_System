@@ -34,7 +34,7 @@ class OrgOverview(BaseModel):
     org_name: str
     total_count: int = 0         # 全部项目数（所有状态）
     running_count: int = 0       # 运行中项目数
-    completed_count: int = 0     # 已完成项目数
+    completed_count: int = 0     # 本月已完成项目数（非累计）
     terminated_count: int = 0    # 已终止项目数
 
 

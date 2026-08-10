@@ -38,6 +38,8 @@ class TestOrgOverview:
                 (1, InstanceStatus.COMPLETED, 3),
                 (1, InstanceStatus.TERMINATED, 1),
             ]),
+            # 2: 本月已完成统计（completed_at 在本月；口径改本月后与累计 3 不同）
+            MockResult(rows_all=[(1, 2)]),
         ]
 
         result = await _get_org_overview(mock_db, template_type="project")
@@ -45,7 +47,7 @@ class TestOrgOverview:
         assert len(result) == 1
         assert result[0].org_id == 1
         assert result[0].running_count == 5
-        assert result[0].completed_count == 3
+        assert result[0].completed_count == 2  # 本月已完成（非累计 3）
         assert result[0].total_count == 9  # 5+3+1
 
     @pytest.mark.asyncio
@@ -60,13 +62,14 @@ class TestOrgOverview:
                 (1, InstanceStatus.RUNNING, 2),
                 (1, InstanceStatus.COMPLETED, 4),
             ]),
+            MockResult(rows_all=[(1, 4)]),  # 本月已完成 4
         ]
 
         result = await _get_org_overview(mock_db, template_type="proposal")
 
         assert len(result) == 1
         assert result[0].running_count == 2
-        assert result[0].completed_count == 4
+        assert result[0].completed_count == 4  # 本月已完成
         assert result[0].total_count == 6
 
     @pytest.mark.asyncio

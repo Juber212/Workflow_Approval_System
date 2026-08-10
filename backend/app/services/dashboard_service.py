@@ -388,11 +388,29 @@ async def _get_org_overview(
     for org_id, status, count in stats_rows:
         org_stats.setdefault(org_id, {})[status] = count
 
+    # 本月已完成统计（completed_at 在本月）——柱状图「已完成」改为本月口径，
+    # 避免累计完成数把各所 Y 轴拉高、运行中/终止柱不可见（产品口径 2026-08-10）
+    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_comp_stmt = (
+        select(
+            FlowInstance.organization_id,
+            func.count(FlowInstance.id),
+        )
+        .where(
+            *conditions,
+            FlowInstance.status == "completed",
+            FlowInstance.completed_at >= month_start,
+        )
+        .group_by(FlowInstance.organization_id)
+    )
+    month_comp_rows = (await db.execute(month_comp_stmt)).all()
+    month_comp_map: dict[int, int] = {org_id: cnt for org_id, cnt in month_comp_rows}
+
     result = []
     for org in orgs:
         sc = org_stats.get(org.id, {})
         running = sc.get("running", 0)
-        completed = sc.get("completed", 0)
+        completed = month_comp_map.get(org.id, 0)  # 本月已完成（非累计）
         terminated = sc.get("terminated", 0)
         total = sum(sc.values())
 
