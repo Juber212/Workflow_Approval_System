@@ -60,7 +60,7 @@ const padR = 20   // 右：数值留白
 const padT = 26   // 上：发起量数值
 const padB = 30   // 下：X 轴标签
 
-/** 向上取整到好读数（复用 BarChart niceMax 思路：4→4, 6→8, 12→15, 45→50） */
+/** 向上取整到好读数（复用 BarChart niceMax 思路：4→4, 6→10, 12→20, 23→30, 45→50） */
 function niceMax(val: number): number {
   if (val <= 0) return 4
   if (val <= 4) return Math.max(val, 4)

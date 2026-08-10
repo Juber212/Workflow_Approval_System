@@ -85,8 +85,8 @@ async def _batch_get_node_stats(db: AsyncSession, instance_ids: list[int]) -> di
 async def _batch_get_active_node_info(db: AsyncSession, instance_ids: list[int]) -> dict[int, dict]:
     """批量查询实例当前活跃节点的处理人信息（替代逐条 N+1）
 
-    与旧版 _batch_get_current_assignees 不同：
-    - 不只查 running 节点，也查 waiting_check/waiting_approval/waiting_endorsement/pending/processing
+    与旧版单节点逐条查询不同：
+    - 不只查 running 节点，也查 waiting_check/waiting_approval/waiting_endorsement（ACTIVE_NODE_STATUSES）
     - 返回节点状态 + 各类处理人信息，供调用方按状态动态选择显示
     - 最终格式化为 "当前处理人" 列（注意不同节点状态显示不同角色）
 
@@ -257,8 +257,9 @@ async def _batch_get_active_deadlines(db: AsyncSession, instance_ids: list[int])
     if not instance_ids:
         return {}
 
-    active_statuses = ["arrived", "running", "pending", "processing",
-                       "waiting_check", "waiting_approval", "waiting_endorsement"]
+    # 复用统一活跃状态集合：arrived/pending/processing 非 InstanceNodeStatus 合法值
+    # （P1-16 教训），白写匹配不到，统一用 ACTIVE_NODE_STATUSES 保持一致
+    active_statuses = ACTIVE_NODE_STATUSES
 
     stmt = (
         select(InstanceNode.instance_id, InstanceNode.deadline)

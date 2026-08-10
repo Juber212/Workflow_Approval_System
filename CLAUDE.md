@@ -164,6 +164,8 @@ storage/archive/{实例名称}/
 
 - ✅ 文档全量对齐（2026-08-10）：3 代理并行扫描 6 份使用/设计文档 vs 代码现状，修正——README/Developer_Documentation（测试 317/190→326、端点 99→92、建库命令→deploy_db、补 Redis/LibreOffice 必需 + ARQ worker、删无效 DATABASE_URL）；00_Blueprint/01_PRD/02_Database_Design/03_API_Design（表数 22/21→24、端点 90/72→92、Semaphore 2→4、通知 8→9、roles 改 seed 创建、分区改 deploy_db 创建、迁移历史修正「初始迁移不建主表」、更新日期统一 2026-08-10）。历史记录文档（CHANGELOG/AUDIT_FIX_LOG/Learning_Journal/docs/audit）作为历史快照保留不改。326 测试全绿。
 
+- ✅ 注释质量快扫修复（2026-08-10）：3 代理扫 23 条确定注释问题全修——后端（pdf_converter Semaphore 2→4、`_helpers` 状态集合/已删函数引用、delete 删除顺序补 Endorsement、endorsement 签名位置改「API 层写 PDF」、supplement 重复编号、config isolation_level 机制、rate_limit 阈值 300、check 退回必填描述、error_codes 分组移 PDF_CONVERSION_FAILED）；前端（BarChart/TrendChart niceMax 示例、TaskDetail 轮询间隔 1s、签名应用范围、序列化共用注释、toast 噪音、编号残留、router 菜单补方案管理、instance 错位注释）。**顺带修**：`_batch_get_active_deadlines` 硬编码 `arrived/pending/processing` 无效状态值（非 InstanceNodeStatus 合法值，P1-16 教训残留），改复用 `ACTIVE_NODE_STATUSES`（行为不变）。326 测试全绿 + vue-tsc 0 错。
+
 **状态：可部署上线**
 
 ## 测试体系

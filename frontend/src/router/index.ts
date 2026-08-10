@@ -12,7 +12,7 @@ declare module 'vue-router' {
   }
 }
 
-/** 路由配置 —— 一级菜单：Dashboard / 项目管理 / 个人中心 / 系统管理 */
+/** 路由配置 —— 一级菜单：Dashboard / 项目管理 / 方案管理 / 个人中心 / 系统管理 */
 const routes: RouteRecordRaw[] = [
   {
     path: '/',

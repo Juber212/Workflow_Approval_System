@@ -1,6 +1,6 @@
 """PDF 转换服务 —— LibreOffice 无头模式 + Pillow 图片转 PDF
 
-使用 asyncio.Semaphore 限流 2 并发，超时 60 秒，失败重试 1 次。
+使用 asyncio.Semaphore 限流 4 并发（与 worker 端 max_jobs=4 一致），超时 60 秒，失败重试 1 次。
 转换成功后删除源文件保留 PDF。
 """
 import asyncio
@@ -13,7 +13,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 限流信号量（全局，2 并发）
+# 限流信号量（全局，4 并发）
 _semaphore = asyncio.Semaphore(4)  # 30-50 人并发场景，2→4
 
 # 最大超时秒数

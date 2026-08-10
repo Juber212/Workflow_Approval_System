@@ -12,6 +12,7 @@ class ErrorCode(IntEnum):
     NOT_FOUND = 40400
     METHOD_NOT_ALLOWED = 40500   # 预留（HTTP 405，FastAPI 自动处理）
     INTERNAL_ERROR = 50000
+    PDF_CONVERSION_FAILED = 50001  # 文件转换失败（服务端错误，区别于 415 文件格式类）
 
     # 认证 (401xx)
     UNAUTHORIZED = 40100
@@ -41,7 +42,6 @@ class ErrorCode(IntEnum):
     # 文件相关 (415xx)
     FILE_TYPE_UNSUPPORTED = 41500
     FILE_TOO_LARGE = 41501
-    PDF_CONVERSION_FAILED = 50001
 
     # 限流 (429xx)
     RATE_LIMITED = 42900

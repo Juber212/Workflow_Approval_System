@@ -660,7 +660,6 @@ function validatePresetUsers(preset: PresetItem) {
       if (!name) missing.push(`审批人(ID:${preset.approvers[i].user_id})`)
     }
   }
-  // toast 提示
   // 批准人检测
   if (preset.endorser_id && !preset.endorser_name) {
     missing.push(`批准人(ID:${preset.endorser_id})`)
@@ -758,7 +757,7 @@ async function handleSave() {
   if (!lf) return
   saving.value = true
   try {
-    // 序列化画布为节点/连线（P2-2 与 handleLaunch 共用）
+    // 序列化画布为节点/连线（P2-2 序列化工具，保存模板用）
     const { nodes, edges } = buildDesignPayload(lf)
 
     let templateId = Number(route.params.id)
@@ -797,7 +796,7 @@ async function handleLaunch() {
     // H1（第七轮审查）：发起不再写回共享模板——实例发起用 node_overrides 快照，
     // 与模板解耦（业务规则 3），避免一次发起永久改动组织级共享模板、并发发起互相覆盖。
     // 结构改动请通过编辑模式保存模板后再发起；发起只做「人员/截止日期」覆盖。
-    // 2. 收集节点覆盖配置（截止日期 + 负责人/校验人/审批人/批准人调整）
+    // 收集节点覆盖配置（截止日期 + 负责人/校验人/审批人/批准人调整）
     const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const nodeOverrides: { node_id: number; deadline?: string; assignee_id?: number; checkers?: { user_id: number }[]; approvers?: { user_id: number }[] }[] = []
     let hasNewWorkNode = false  // M17：新增工作节点不在模板中，无法随实例创建
@@ -844,7 +843,7 @@ async function handleLaunch() {
       return
     }
 
-    // 3. 发起项目
+    // 发起项目
     const result = await createInstance({
       template_id: templateId,
       name: launchForm.value.name.trim(),

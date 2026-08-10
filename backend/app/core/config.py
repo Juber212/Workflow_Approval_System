@@ -131,8 +131,8 @@ class Settings(BaseSettings):
         P1-27：DB_USER/DB_PASSWORD 经 quote_plus 编码——密码含 @ : / % 等
         特殊字符时，未编码会让 SQLAlchemy 误解析连接串（如 pa@ss 被当作用户:密码分隔）。
         """
-        # 注意：isolation_level 不能放 URL 查询参数（aiomysql 不支持），
-        # 需通过 create_async_engine 的 connect_args 传递
+        # 注意：isolation_level 无法经 URL 查询参数 / connect_args 设置（aiomysql 不支持），
+        # 实际在 database.py 通过连接事件 SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED 实现
         user = urllib.parse.quote_plus(self.DB_USER, safe="")
         password = urllib.parse.quote_plus(self.DB_PASSWORD, safe="")
         return (

@@ -689,7 +689,6 @@ function formatSlotDate(slot: SignatureSlot): string {
   } catch { return '' }
 }
 
-/** 将当前文件的槽位配置批量应用到所有已选中的其他文件 */
 /** 将当前槽位的位置/尺寸/日期设置复制到同文件所有其他页面，每页保留各自页码 */
 function applyToAllPages() {
   const f = files.value.find(x => x.file_id === activeFileId.value)

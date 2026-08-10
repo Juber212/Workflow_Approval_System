@@ -232,7 +232,7 @@ async def endorse(
     signature_y: float | None = None,
     signature_page: int | None = None,
 ) -> dict:
-    """批准通过 —— 锁定记录 → 校验权限 → 签字上PDF → 推进流程"""
+    """批准通过 —— 锁定记录 → 校验权限 → 收集签名（API 层 commit 后统一写 PDF）→ 推进流程"""
     now = datetime.now()
 
     # 1. 并发锁定目标 Endorsement 行

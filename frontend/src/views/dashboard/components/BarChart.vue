@@ -93,7 +93,7 @@ const columns = [
   { key: 'terminated_count' as const, label: '已终止', color: '#909399' },
 ]
 
-/** 向上取整到好读数（如 6→8, 12→15, 23→25, 45→50） */
+/** 向上取整到好读数（如 6→10, 12→20, 23→30, 45→50） */
 function niceMax(val: number): number {
   if (val <= 0) return 2
   if (val <= 4) return Math.max(val, 2)

@@ -296,7 +296,6 @@ export async function terminateInstance(id: number, reason: string): Promise<{
   return res.data
 }
 
-/** 修改项目优先级 */
 // ========== 我发起的项目 ==========
 export interface MyInitiatedItem {
   id: number
@@ -314,6 +313,7 @@ export async function getMyInitiated(params: { page?: number; page_size?: number
   return res.data
 }
 
+/** 修改项目/方案优先级 */
 export async function changePriority(id: number, priority: string): Promise<{
   id: number
   priority: string

@@ -171,7 +171,7 @@ async def supplement_files(
                     break
                 await f.write(chunk)
 
-        # 5d. 创建 File 记录（task_id=NULL、upload_type=supplement）
+        # 5e. 创建 File 记录（task_id=NULL、upload_type=supplement）
         # P1-9：非 PDF 补交文件标记 pending 并写入后入转换队列，转换完成可在线预览
         is_pdf = upload_file_obj.content_type == "application/pdf"
         file_record = File(

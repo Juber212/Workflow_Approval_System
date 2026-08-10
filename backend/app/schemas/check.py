@@ -76,6 +76,6 @@ class CheckDetail(BaseModel):
 
 class CheckAction(BaseModel):
     """校验操作（通过/退回）"""
-    opinion: str | None = Field(None, max_length=500, description="校验意见（通过时可选，退回时必填）")
+    opinion: str | None = Field(None, max_length=500, description="校验意见（可选；未填时以空串处理）")
     # 签批：支持多文档多签名
     signatures: list[dict] | None = Field(None, description="签名列表 [{file_id, signature_x, signature_y, signature_page}]")

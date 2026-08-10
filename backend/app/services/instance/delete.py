@@ -23,7 +23,7 @@ async def permanent_delete_instance(db: AsyncSession, instance_id: int) -> None:
     """永久删除项目 —— 级联清除所有关联数据（仅管理员可操作，仅已终止实例可删）
 
     删除顺序（避免外键约束冲突）：
-    approval → check_record → file → task → instance_edge → operation_log → instance_node → flow_instance
+    endorsement → approval → check_record → file → task → instance_edge → operation_log → instance_node → flow_instance
     """
     # 查询实例（加锁防并发删除冲突）
     result = await db.execute(

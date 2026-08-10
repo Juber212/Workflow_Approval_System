@@ -1,6 +1,6 @@
 /**
  * 设计器图数据序列化 —— 节点/连线转 DesignerNode/DesignerEdge（P2-2 抽取）
- * FlowDesigner 的 handleSave 与 handleLaunch 共用同一套序列化逻辑
+ * FlowDesigner 的 handleSave（保存模板）调用此序列化逻辑
  */
 import type { DesignerNode, DesignerEdge } from '@/api/designer'
 

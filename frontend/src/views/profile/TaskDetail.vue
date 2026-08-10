@@ -623,10 +623,9 @@ async function doSubmit() {
   } finally { submitting.value = false }
 }
 
-/** 签批预览确认回调 */
 // ==================== 异步转换等待（50+ 优化） ====================
 
-/** 启动轮询：每 2 秒检查文件转换状态（WebSocket 通知的兜底方案） */
+/** 启动轮询：每 1 秒检查文件转换状态（WebSocket 通知的兜底方案） */
 function startConversionPolling(taskId: number) {
   stopConversionPolling()
   conversionPollTimer = setInterval(async () => {
