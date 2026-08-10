@@ -583,7 +583,8 @@ arrived_count   ← 运行时上游完成时 +1
 ## 5. 操作日志分区
 
 ```sql
--- operation_logs 按年 RANGE 分区（由 python -m app.core.deploy_db 建库时创建，含 p_future=MAXVALUE 兜底）
+-- operation_logs 按年 RANGE 分区（由 python -m app.core.deploy_db 建库时动态创建：
+-- 当年起未来 10 年分区 + p_future=MAXVALUE 兜底；下方为示意，年份随部署时间自动计算）
 ALTER TABLE operation_logs PARTITION BY RANGE (YEAR(created_at)) (
     PARTITION p2026 VALUES LESS THAN (2027),
     PARTITION p2027 VALUES LESS THAN (2028),
@@ -595,7 +596,7 @@ ALTER TABLE operation_logs PARTITION BY RANGE (YEAR(created_at)) (
 **注意**：
 - 复合主键 `(id, created_at)` 是 MySQL 分区的强制要求
 - `id` 使用 AUTO_INCREMENT，在 InnoDB 中 (id, created_at) 复合键下仍自增唯一
-- `p_future` 兜底保证忘加年份分区也不写入失败；建议每年初拆分 p_future（见 `04_Deployment.md` 8.6）
+- `p_future` 兜底保证 10 年后忘加年份分区也不写入失败；10 年后或 p_future 将满时再拆分（见 `04_Deployment.md` 8.6）
 
 ---
 

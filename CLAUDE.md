@@ -166,6 +166,8 @@ storage/archive/{实例名称}/
 
 - ✅ 注释质量快扫修复（2026-08-10）：3 代理扫 23 条确定注释问题全修——后端（pdf_converter Semaphore 2→4、`_helpers` 状态集合/已删函数引用、delete 删除顺序补 Endorsement、endorsement 签名位置改「API 层写 PDF」、supplement 重复编号、config isolation_level 机制、rate_limit 阈值 300、check 退回必填描述、error_codes 分组移 PDF_CONVERSION_FAILED）；前端（BarChart/TrendChart niceMax 示例、TaskDetail 轮询间隔 1s、签名应用范围、序列化共用注释、toast 噪音、编号残留、router 菜单补方案管理、instance 错位注释）。**顺带修**：`_batch_get_active_deadlines` 硬编码 `arrived/pending/processing` 无效状态值（非 InstanceNodeStatus 合法值，P1-16 教训残留），改复用 `ACTIVE_NODE_STATUSES`（行为不变）。326 测试全绿 + vue-tsc 0 错。
 
+- ✅ 内网部署就绪增强（2026-08-10）：①`deploy_db.py` 分区改为**当年起未来 10 年 + p_future 兜底**（动态生成 `_build_partition_ddl`，实测 11 分区 p2026-p2035+p_future，10 年内免维护）②新增 `docs/部署实操教程-Linux.md` 从零到上线 11 阶段（含内网专项：离线 pip wheels / 前端异地构建 dist / 打包上传替代 git clone，因公司内网访问不了 GitHub）③04/02 分区说明同步（p_future 拆分改为 10 年后）。
+
 **状态：可部署上线**
 
 ## 测试体系

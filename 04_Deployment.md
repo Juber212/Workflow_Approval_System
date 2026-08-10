@@ -349,15 +349,15 @@ backend/storage/
 
 ### 8.6 分区维护
 
-`operation_logs` 按年 RANGE 分区，由 `deploy_db.py` 在建库时创建（p2026/p2027/p2028 + `p_future=MAXVALUE` 兜底）。
+`operation_logs` 按年 RANGE 分区，由 `deploy_db.py` 在建库时创建（**当年起未来 10 年** + `p_future=MAXVALUE` 兜底），**10 年内无需人工维护**。
 
-`p_future` 兜底保证**即使忘记加年份分区，新数据也能写入**（进 p_future）。运维**建议**每年初拆分 p_future：
+`p_future` 兜底保证即使 10 年后忘了加年份分区，新数据也能写入（进 p_future）。10 年后或 `p_future` 数据将满时再拆分：
 
 ```sql
--- 每年初执行一次：把 p_future 拆出新的一年分区（示例为 2029 年）
+-- 把 p_future 拆出新的一年分区（示例为 2036 年）
 ALTER TABLE operation_logs
   REORGANIZE PARTITION p_future INTO (
-    PARTITION p2029 VALUES LESS THAN (2030),
+    PARTITION p2036 VALUES LESS THAN (2037),
     PARTITION p_future VALUES LESS THAN MAXVALUE
   );
 ```

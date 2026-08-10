@@ -18,6 +18,7 @@ import asyncio
 import os
 import subprocess
 import sys
+from datetime import datetime
 
 import aiomysql
 from sqlalchemy import text
@@ -27,15 +28,19 @@ from app.core.database import Base, engine
 import app.models  # noqa: F401  确保所有模型注册到 Base.metadata
 
 
-# operation_logs 分区 DDL（对齐开发库：p_future=MAXVALUE 兜底，即使忘加年份分区也不会写入失败）
-_PARTITION_DDL = """
-ALTER TABLE operation_logs PARTITION BY RANGE (YEAR(created_at)) (
-    PARTITION p2026 VALUES LESS THAN (2027),
-    PARTITION p2027 VALUES LESS THAN (2028),
-    PARTITION p2028 VALUES LESS THAN (2029),
-    PARTITION p_future VALUES LESS THAN MAXVALUE
-)
-"""
+def _build_partition_ddl(start_year: int, years: int = 10) -> str:
+    """生成 operation_logs 分区 DDL：当年起未来 10 年 + p_future=MAXVALUE 兜底
+
+    提前备足未来分区，10 年内无需 REORGANIZE p_future；p_future 兜底保证
+    即使 10 年后忘了加年份分区，新数据也不会写入失败。
+    """
+    parts = [f"PARTITION p{y} VALUES LESS THAN ({y + 1})" for y in range(start_year, start_year + years)]
+    parts.append("PARTITION p_future VALUES LESS THAN MAXVALUE")
+    return (
+        "ALTER TABLE operation_logs PARTITION BY RANGE (YEAR(created_at)) (\n"
+        + ",\n".join(parts)
+        + "\n)"
+    )
 
 
 async def _create_database() -> None:
@@ -85,8 +90,8 @@ async def _create_partitions() -> None:
         print("[deploy] operation_logs 已分区，跳过")
         return
     async with engine.begin() as conn:
-        await conn.execute(text(_PARTITION_DDL))
-    print("[deploy] operation_logs 已按年分区（p2026-p2028 + p_future 兜底）")
+        await conn.execute(text(_build_partition_ddl(datetime.now().year)))
+    print(f"[deploy] operation_logs 已按年分区（{datetime.now().year} 起未来 10 年 + p_future 兜底）")
 
 
 def _stamp_head() -> None:
