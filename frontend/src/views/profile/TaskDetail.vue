@@ -672,6 +672,7 @@ function listenConversionDone() {
 /** 收尾动画：进度条以可见速度（每 80ms +5%）平滑走到 100% 后执行完成逻辑。
  * 保证转换过快时进度条也有完整「走满」的过程感，不会没走完就消失 */
 function animateToFullThen(finalize: () => void) {
+  if (finishTimer) { clearInterval(finishTimer); finishTimer = null }  // 防旧 timer 泄漏（重复触发时）
   finishTimer = setInterval(() => {
     let allFull = true
     Object.keys(fileProgress).forEach((key) => {
@@ -691,11 +692,20 @@ function animateToFullThen(finalize: () => void) {
   }, 80)
 }
 
+/** 转换收尾防重入标志：轮询 + WebSocket 双路径都可能触发 handleConversionComplete，
+ * 若都执行会导致 animateToFullThen 的 finishTimer 被覆盖泄漏、finalizeConversion 重复调用
+ * → prepareSign 多次请求触发后端限流（429 Too Many Requests） */
+let _finalizing = false
+
 /** 转换完成后：进度条补满 → 检查结果 → 打开签批弹框或显示错误
  * 轮询路径传入 FilesStatusResponse（has_failed），WebSocket 路径传入 conversion_all_done 消息体（failed），两者字段不同需归一化 */
 async function handleConversionComplete(status: FilesStatusResponse | { total: number; ready: number; failed: number; status?: string }) {
+  if (_finalizing) return  // 防重入：只执行一次收尾
+  _finalizing = true
   // 先让进度条平滑补满（约 0.3s），再执行真正收尾，避免进度条没走完就消失
-  animateToFullThen(() => finalizeConversion(status))
+  animateToFullThen(() => {
+    finalizeConversion(status).finally(() => { _finalizing = false })
+  })
 }
 
 /** 转换真正收尾：停止等待态、检查失败、重新取 PDF 列表并打开签批弹窗 */

@@ -188,6 +188,8 @@ storage/archive/{实例名称}/
 
 - ✅ 发起 node_overrides 校验修复（补全，2026-08-10）：**数据库模板节点 checkers/approvers 为历史数字数组 `[id]`**，前端发起提交统一经 `normalizePersons` 规范化为 `[{user_id}]`（handleLaunch 提交层，覆盖模板加载与预设应用两条路径）；此前只修预设应用路径未覆盖模板加载节点。vue-tsc 0 错 + build 过。
 
+- ✅ 转换收尾重复调用限流修复（2026-08-10）：`TaskDetail.handleConversionComplete` 加**防重入标志**（轮询 + WebSocket 双路径触发时只收尾一次），`animateToFullThen` 清旧 `finishTimer`——防 `finalizeConversion` 重复调用 → `prepareSign` 多次请求触发后端限流（429）。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系
