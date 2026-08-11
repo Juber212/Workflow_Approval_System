@@ -19,7 +19,6 @@
           <el-descriptions-item label="模板名称">{{ detail.name }}</el-descriptions-item>
           <el-descriptions-item label="所属组织">{{ detail.organization_name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="节点数">{{ detail.node_count }}</el-descriptions-item>
-          <el-descriptions-item label="运行中项目">{{ detail.instance_count }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ detail.created_by_name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="创建时间">{{ formatTime(detail.created_at) }}</el-descriptions-item>
           <el-descriptions-item label="描述" :span="2">{{ detail.description || '暂无描述' }}</el-descriptions-item>

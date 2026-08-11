@@ -26,7 +26,6 @@
       >
         <el-table-column prop="name" label="模板名称" min-width="160" />
         <el-table-column prop="node_count" label="节点数" width="80" />
-        <el-table-column prop="instance_count" label="运行项目" width="100" />
       </el-table>
 
       <!-- 业务信息表单（选择模板后出现） -->
