@@ -188,7 +188,7 @@ async function fetchDetail() {
     if (detail.value) {
       setBreadcrumb([
         { label: '首页', to: '/dashboard' },
-        { label: '项目管理', to: '/flows' },
+        { label: '开工项目', to: '/flows' },
         { label: detail.value.organization_name || '未知组织', to: `/flows/organization/${detail.value.organization_id}?tab=template` },
         { label: detail.value.name },
       ])

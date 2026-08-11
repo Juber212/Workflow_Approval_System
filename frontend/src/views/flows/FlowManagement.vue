@@ -1,10 +1,10 @@
 <template>
-  <!-- 项目管理全局视图 —— 组织卡片 + 全部项目（PRD P03） -->
+  <!-- 开工项目全局视图 —— 组织卡片 + 全部项目（PRD P03） -->
   <div class="flow-management">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="page-header__info">
-        <h1 class="page-header__title">项目管理<span class="page-header__subtitle">各组织项目运行概览，点击卡片进入对应组织</span></h1>
+        <h1 class="page-header__title">开工项目<span class="page-header__subtitle">各组织项目运行概览，点击卡片进入对应组织</span></h1>
       </div>
     </div>
 
@@ -36,7 +36,7 @@
 
 <script setup lang="ts">
 /**
- * 项目管理全局入口页 —— 组织卡片 + 全部项目（PRD P03）
+ * 开工项目全局入口页 —— 组织卡片 + 全部项目（PRD P03）
  * 点击组织卡片 → 跳转 /flows/organization/:id
  */
 import { ref, computed, onMounted, watch } from 'vue'
@@ -69,7 +69,7 @@ const statusCounts = ref<Record<string, number>>({})
 
 // ========== 初始化 ==========
 onMounted(async () => {
-  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '项目管理' }])
+  setBreadcrumb([{ label: '首页', to: '/dashboard' }, { label: '开工项目' }])
   await Promise.all([fetchOrgs(), fetchInstances(), fetchStatusCounts()])
 })
 

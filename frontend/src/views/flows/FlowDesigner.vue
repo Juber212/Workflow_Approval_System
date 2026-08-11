@@ -596,7 +596,7 @@ function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState
 function undo() { canvasRef.value?.getLf()?.undo(); updateUndoRedoState() }
 function redo() { canvasRef.value?.getLf()?.redo(); updateUndoRedoState() }
 
-/** 返回 —— 编辑模式回到上一页，发起模式直接回项目管理 */
+/** 返回 —— 编辑模式回到上一页，发起模式直接回开工项目 */
 function handleBack() {
   if (isLaunchMode.value) router.push({ name: 'Flows' })
   else router.back()

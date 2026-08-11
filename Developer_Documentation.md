@@ -51,7 +51,7 @@ Workflow_Approval_System/
 │   │   └── views/              # 页面组件
 │   │       ├── admin/          # 系统管理（用户/组织/角色/配置/文件模板）
 │   │       ├── dashboard/      # 首页仪表盘
-│   │       ├── flows/          # 项目管理 + 设计器 + 详情
+│   │       ├── flows/          # 开工项目 + 设计器 + 详情
 │   │       ├── profile/        # 个人中心（任务/校验/审批/批准）
 │   │       └── proposals/      # 方案管理
 │   └── package.json

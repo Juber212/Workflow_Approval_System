@@ -129,7 +129,7 @@ interface MenuItem { path: string; label: string; icon: Component }
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { path: '/dashboard', label: '首页', icon: MENU_ICONS['/dashboard'] },
-    { path: '/flows', label: '项目管理', icon: MENU_ICONS['/flows'] },
+    { path: '/flows', label: '开工项目', icon: MENU_ICONS['/flows'] },
     { path: '/proposals', label: '方案管理', icon: MENU_ICONS['/proposals'] },
   ]
   if (isAdmin.value) {

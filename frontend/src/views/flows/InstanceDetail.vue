@@ -249,7 +249,7 @@ async function fetchDetail() {
       } else {
         setBreadcrumb([
           { label: '首页', to: '/dashboard' },
-          { label: '项目管理', to: '/flows' },
+          { label: '开工项目', to: '/flows' },
           { label: detail.value.organization_name, to: `/flows/organization/${detail.value.organization_id}` },
           { label: detail.value.name },
         ])

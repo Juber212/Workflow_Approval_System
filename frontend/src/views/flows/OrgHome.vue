@@ -339,10 +339,10 @@ async function fetchOrgInfo() {
   } catch {
     orgName.value = '加载失败'
   }
-  // 面包屑：首页 > 项目管理 > 当前所
+  // 面包屑：首页 > 开工项目 > 当前所
   setBreadcrumb([
     { label: '首页', to: '/dashboard' },
-    { label: '项目管理', to: '/flows' },
+    { label: '开工项目', to: '/flows' },
     { label: orgName.value },
   ])
 }
