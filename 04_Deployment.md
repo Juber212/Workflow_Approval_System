@@ -1,4 +1,4 @@
-# 企业流程审批系统 — 部署与运维
+# 智展研究院设计开发管理系统 — 部署与运维
 
 > **版本**：3.0 | **更新**：2026-08-06
 > 3.0 变更：全新库建表改为 `deploy_db.py`（阻断修复）；补 Redis 依赖与默认密码；后端改为**单进程 API + 独立 ARQ worker** 双进程；新增 systemd 托管；操作日志分区由部署脚本创建。
@@ -41,7 +41,7 @@ Browser → Nginx (:80) → /          → /var/www/workflow/ (Vue 3 静态文�
 
 ```ini
 # 应用
-APP_NAME=企业流程审批系统
+APP_NAME=智展研究院设计开发管理系统
 APP_VERSION=1.0.0
 DEBUG=false
 # 运行环境：生产必须设为 prod（触发生产守卫：DEBUG=true 拒启动 +

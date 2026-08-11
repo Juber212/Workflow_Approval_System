@@ -1,4 +1,4 @@
-"""企业项目审批系统 —— FastAPI 应用入口"""
+"""智展研究院设计开发管理系统 —— FastAPI 应用入口"""
 
 from contextlib import asynccontextmanager
 

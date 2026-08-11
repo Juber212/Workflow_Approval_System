@@ -1,7 +1,7 @@
 [project]
 name = "workflow-approval-system"
 version = "1.0.0"
-description = "企业流程审批系统后端"
+description = "智展研究院设计开发管理系统后端"
 requires-python = ">=3.10"
 
 [tool.black]

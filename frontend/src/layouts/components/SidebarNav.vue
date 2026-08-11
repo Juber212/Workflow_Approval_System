@@ -20,7 +20,7 @@
           <img src="/favicon.svg?v=7" alt="logo" class="sidebar-brand__logo" />
         </router-link>
         <div class="sidebar-brand__text">
-          <router-link to="/dashboard" class="sidebar-brand__title">项目审批系统</router-link>
+          <router-link to="/dashboard" class="sidebar-brand__title">智展研究院设计开发管理系统</router-link>
           <span class="sidebar-brand__sub">Workflow Approval</span>
         </div>
         <button class="sidebar-toggle" @click="handleCollapse" title="折叠侧边栏">
@@ -237,8 +237,8 @@ async function handleLogout() {
   &__logo { display: block; width: 32px; height: 32px; }
   &__text { display: flex; flex-direction: column; min-width: 0; }
   &__title {
-    font-size: 15px; font-weight: 600; color: var(--el-text-color-primary);
-    text-decoration: none; white-space: nowrap;
+    font-size: 12px; font-weight: 600; color: var(--el-text-color-primary);
+    text-decoration: none; line-height: 1.4;  // 长系统名允许换行完整显示（不再 nowrap 溢出）
     &:hover { color: var(--color-primary); }
   }
   &__sub {
