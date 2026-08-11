@@ -57,7 +57,7 @@
     <div class="designer-body" v-loading="loading">
       <div v-show="viewMode === 'canvas'" style="display:flex;flex:1;overflow:hidden;min-height:0">
         <NodePanel :lf="canvasRef?.getLf() ?? null" :presets="presets" @add="handleAddNode" @edit-preset="handleEditPreset" @delete-preset="handleDeletePreset" />
-        <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" />
+        <FlowCanvas ref="canvasRef" @node-select="handleNodeSelect" @structure-change="reflowNodeTimes" />
         <PropertyPanel :lf="canvasRef?.getLf() ?? null" :node-data="selectedNodeData" :launch-mode="isLaunchMode" @save-as-preset="handleSaveAsPreset" />
       </div>
       <NodeListView v-show="viewMode === 'list'" :nodes="getCanvasNodes()" @select-node="handleListNodeSelect" />
@@ -590,6 +590,61 @@ function handleAddNode(preset?: PresetItem) {
     canvasRef.value?.addWorkNode(undefined, undefined, props)
   }
   updateUndoRedoState()
+  // 时间重排由 FlowCanvas 的 structure-change 统一触发（节点/连线增删），此处不重复调用
+}
+
+/** 画布节点拓扑排序（模板节点 + 新增节点统一，按连线结构） */
+function topoSortNodes(lf: any): any[] {
+  const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
+  const nodeMap = new Map<string, any>()
+  graphData.nodes.forEach((n: any) => nodeMap.set(n.id, n))
+  const indeg = new Map<string, number>()
+  graphData.nodes.forEach((n: any) => indeg.set(n.id, 0))
+  const adj = new Map<string, string[]>()
+  graphData.edges.forEach((e: any) => {
+    if (nodeMap.has(e.sourceNodeId) && nodeMap.has(e.targetNodeId)) {
+      if (!adj.has(e.sourceNodeId)) adj.set(e.sourceNodeId, [])
+      adj.get(e.sourceNodeId)!.push(e.targetNodeId)
+      indeg.set(e.targetNodeId, (indeg.get(e.targetNodeId) || 0) + 1)
+    }
+  })
+  const queue = graphData.nodes.filter((n: any) => (indeg.get(n.id) || 0) === 0).map((n: any) => n.id)
+  const order: string[] = []
+  while (queue.length) {
+    const id = queue.shift()!
+    order.push(id)
+    for (const t of adj.get(id) || []) {
+      indeg.set(t, (indeg.get(t) || 0) - 1)
+      if (indeg.get(t) === 0) queue.push(t)
+    }
+  }
+  graphData.nodes.forEach((n: any) => { if (!order.includes(n.id)) order.push(n.id) })  // 兜底
+  return order.map((id: string) => nodeMap.get(id))
+}
+
+/** 发起模式：按连线拓扑序重排画布工作节点 deadline（新节点插入后时间自动顺延） */
+async function reflowNodeTimes() {
+  const lf = canvasRef.value?.getLf()
+  if (!lf || !isLaunchMode.value) return
+  const ordered = topoSortNodes(lf).filter((n: any) => !n.properties?.is_start && !n.properties?.is_end)
+  if (ordered.length === 0) return
+  const today = new Date().toISOString().slice(0, 10)
+  try {
+    const results = await calculateDeadlines(
+      today,
+      ordered.map((n: any) => ({ node_id: n.id, time_limit_days: n.properties?.time_limit_days || 1 })),
+    )
+    for (const r of results) {
+      if (r.begin && r.deadline) {
+        const node = lf.getNodeDataById(String(r.node_id))
+        if (node) {
+          lf.setProperties(String(r.node_id), { ...(node.properties || {}), plan_begin: r.begin, deadline: r.deadline })
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('发起模式时间重排失败:', err)
+  }
 }
 
 function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }
@@ -811,49 +866,77 @@ async function handleLaunch() {
     // 收集节点覆盖配置（截止日期 + 负责人/校验人/审批人/批准人调整）
     const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
     const nodeOverrides: { node_id: number; deadline?: string; assignee_id?: number; checkers?: { user_id: number }[]; approvers?: { user_id: number }[] }[] = []
-    let hasNewWorkNode = false  // M17：新增工作节点不在模板中，无法随实例创建
+    // 发起时新增节点（无 db_id，完整配置，只进实例快照不改模板）与新增连线（涉及新增节点）
+    const newNodes: any[] = []
+    const newEdges: { source: number | string; target: number | string }[] = []
+    const nodeMap = new Map<string, any>()
+    graphData.nodes.forEach((n: any) => nodeMap.set(n.id, n))
+
     for (const n of graphData.nodes) {
       const dbId = n.properties?.db_id
-      // M17：新增节点（无 db_id）——非开始/结束的工作节点标记，发起时拦截提示
-      if (dbId == null) {
-        if (!n.properties?.is_start && !n.properties?.is_end) hasNewWorkNode = true
-        continue
+      if (dbId != null) {
+        // ── 模板节点：合并人员/时间覆盖（node_overrides） ──
+        if (n.properties?.is_start || n.properties?.is_end) continue
+        const override: any = { node_id: Number(dbId) }
+        let hasOverride = false
+        if (n.properties?.deadline) {
+          override.deadline = n.properties.deadline
+          hasOverride = true
+        }
+        if (n.properties?.assignee_id != null) {
+          override.assignee_id = n.properties.assignee_id
+          hasOverride = true
+        }
+        if (n.properties?.endorser_id != null) {
+          (override as any).endorser_id = n.properties.endorser_id
+          hasOverride = true
+        }
+        if (n.properties?.checkers && n.properties.checkers.length > 0) {
+          override.checkers = normalizePersons(n.properties.checkers)
+          hasOverride = true
+        }
+        if (n.properties?.approvers && n.properties.approvers.length > 0) {
+          override.approvers = normalizePersons(n.properties.approvers)
+          hasOverride = true
+        }
+        if (hasOverride) nodeOverrides.push(override)
+      } else if (!n.properties?.is_start && !n.properties?.is_end) {
+        // ── 发起新增工作节点：完整配置（与模板节点一致，只进实例快照） ──
+        const p = n.properties || {}
+        newNodes.push({
+          temp_id: n.id,
+          name: p.name || '',
+          assignee_id: p.assignee_id ?? null,
+          time_limit_days: p.time_limit_days ?? null,
+          require_file: p.require_file ?? true,
+          file_folders: p.file_folders || null,
+          checkers: p.checkers ? normalizePersons(p.checkers) : null,
+          approvers: p.approvers ? normalizePersons(p.approvers) : null,
+          approval_strategy: p.approval_strategy || 'all_approve',
+          require_assignee_signature: p.require_assignee_signature ?? true,
+          require_checker_signature: p.require_checker_signature ?? true,
+          require_approver_signature: p.require_approver_signature ?? true,
+          require_endorser_signature: p.require_endorser_signature ?? true,
+          endorser_id: p.endorser_id ?? null,
+          signature_x: p.signature_x ?? null,
+          signature_y: p.signature_y ?? null,
+          signature_page: p.signature_page ?? null,
+        })
       }
-      if (n.properties?.is_start || n.properties?.is_end) continue
-      const override: any = { node_id: Number(dbId) }
-      let hasOverride = false
-      // 截止日期覆盖（从节点 deadline 属性取截止日）
-      if (n.properties?.deadline) {
-        override.deadline = n.properties.deadline
-        hasOverride = true
-      }
-      // 人员变更覆盖（负责人 / 批准人）
-      if (n.properties?.assignee_id != null) {
-        override.assignee_id = n.properties.assignee_id
-        hasOverride = true
-      }
-      if (n.properties?.endorser_id != null) {
-        (override as any).endorser_id = n.properties.endorser_id
-        hasOverride = true
-      }
-      // H1：校验人/审批人调整也进 override（原先只能靠写回模板生效，会污染共享模板）
-      // 提交前统一规范化为 [{user_id}]，兼容模板节点历史数字数组 [id] 与 dict 数组
-      if (n.properties?.checkers && n.properties.checkers.length > 0) {
-        override.checkers = normalizePersons(n.properties.checkers)
-        hasOverride = true
-      }
-      if (n.properties?.approvers && n.properties.approvers.length > 0) {
-        override.approvers = normalizePersons(n.properties.approvers)
-        hasOverride = true
-      }
-      if (hasOverride) nodeOverrides.push(override)
     }
-    // M17：发起模式下新增的工作节点不会进入实例（实例从模板复制）——拦截并提示，
-    // 避免「设计器里看到的节点发起后消失」的静默丢失
-    if (hasNewWorkNode) {
-      ElMessage.warning('发起模式下新增的工作节点不会进入实例，请先在「编辑」模式保存模板后再发起')
-      launching.value = false
-      return
+    // ── 新增连线：边至少一端是新增节点 → 提交 new_edges（模板节点用 db_id，新增节点用画布 id） ──
+    for (const e of graphData.edges) {
+      const srcNode = nodeMap.get(e.sourceNodeId)
+      const tgtNode = nodeMap.get(e.targetNodeId)
+      if (!srcNode || !tgtNode) continue
+      const srcNew = srcNode.properties?.db_id == null
+      const tgtNew = tgtNode.properties?.db_id == null
+      if (srcNew || tgtNew) {
+        newEdges.push({
+          source: srcNode.properties?.db_id ?? srcNode.id,
+          target: tgtNode.properties?.db_id ?? tgtNode.id,
+        })
+      }
     }
 
     // 发起项目
@@ -868,6 +951,8 @@ async function handleLaunch() {
       sales_manager: bizInfo.value.sales_manager || undefined,
       proposal_id: proposalIdFromQuery.value || undefined,
       node_overrides: nodeOverrides.length > 0 ? nodeOverrides : undefined,
+      new_nodes: newNodes.length > 0 ? newNodes : undefined,
+      new_edges: newEdges.length > 0 ? newEdges : undefined,
       doc_template_ids: launchDocSelected.value.length > 0 ? launchDocSelected.value : undefined,
     })
     ElMessage.success('流程发起成功')

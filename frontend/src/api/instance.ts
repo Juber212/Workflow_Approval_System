@@ -21,6 +21,33 @@ export interface NodeOverride {
 }
 
 /** 发起项目请求 */
+/** 发起时新增节点定义（完整配置，与模板节点一致，只进实例快照） */
+export interface NewNodeDef {
+  temp_id: string
+  name: string
+  assignee_id?: number | null
+  time_limit_days?: number | null
+  require_file?: boolean
+  file_folders?: any[] | null
+  checkers?: { user_id: number }[] | null
+  approvers?: { user_id: number }[] | null
+  approval_strategy?: string
+  require_assignee_signature?: boolean
+  require_checker_signature?: boolean
+  require_approver_signature?: boolean
+  require_endorser_signature?: boolean
+  endorser_id?: number | null
+  signature_x?: number | null
+  signature_y?: number | null
+  signature_page?: number | null
+}
+
+/** 发起时新增连线（source/target 引用模板节点 ID 或新增节点 temp_id） */
+export interface NewEdgeDef {
+  source: number | string
+  target: number | string
+}
+
 export interface CreateInstanceData {
   template_id: number
   name: string
@@ -31,6 +58,8 @@ export interface CreateInstanceData {
   product_model?: string | null
   sales_manager?: string | null
   node_overrides?: NodeOverride[]
+  new_nodes?: NewNodeDef[]   // 发起时新增节点（可选）
+  new_edges?: NewEdgeDef[]   // 发起时新增连线（可选）
   proposal_id?: number | null  // 关联的已完成方案 ID（可选）
   doc_template_ids?: number[]  // 实例级文件模板 ID 列表（可选）
 }

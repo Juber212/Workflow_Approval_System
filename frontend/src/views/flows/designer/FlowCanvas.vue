@@ -23,6 +23,7 @@ LogicFlow.use(Control)
 /** 事件定义 */
 const emit = defineEmits<{
   'node-select': [data: any | null]
+  'structure-change': []  // 节点/连线增删 → 通知父组件（发起模式按结构重排时间）
 }>()
 
 /** 画布配置 */
@@ -114,6 +115,12 @@ onMounted(() => {
     canvasRef.value?.focus()
     emit('node-select', null)
   })
+
+  // 节点/连线增删 → 通知父组件（发起模式按结构重排时间）
+  logicFlow.on('node:add', () => emit('structure-change'))
+  logicFlow.on('edge:add', () => emit('structure-change'))
+  logicFlow.on('node:delete', () => emit('structure-change'))
+  logicFlow.on('edge:delete', () => emit('structure-change'))
 
   lf.value = logicFlow
 

@@ -1,6 +1,7 @@
 """创建实例服务"""
 
 import os
+from collections import deque, defaultdict
 from datetime import datetime, date as date_type
 
 from ._helpers import _get_type_label
@@ -31,6 +32,50 @@ from app.engine.flow_engine import (
 from app.utils.workday import add_workdays, next_workday
 from app.services.validation_service import extract_person_ids, validate_user_ids_exist, validate_template_for_publish
 
+
+def _topological_order(
+    tpl_nodes: list[TemplateNode],
+    tpl_edges: list[TemplateEdge],
+    new_nodes: list,
+    new_edges: list,
+) -> list:
+    """按连线拓扑排序实例节点（模板节点 + 发起新增节点），确定执行顺序
+
+    - 模板节点 key = 模板节点 id（int）
+    - 新增节点 key = temp_id（str，前端临时标识）
+    - 边 = 模板连线 + 用户新增连线
+    - Kahn 算法（入度拓扑排序）；环/孤立节点兜底追加末尾
+    无新增节点时返回模板节点原始顺序（零回归）。
+    """
+    keys: list = [tn.id for tn in tpl_nodes] + [nd.temp_id for nd in new_nodes]
+    if not new_nodes:
+        return keys
+
+    edges: list[tuple] = [(te.source_node_id, te.target_node_id) for te in tpl_edges]
+    edges += [(e.source, e.target) for e in new_edges]
+
+    adj: dict = defaultdict(list)
+    indeg: dict = {k: 0 for k in keys}
+    for s, t in edges:
+        if s in indeg and t in indeg:
+            adj[s].append(t)
+            indeg[t] += 1
+
+    queue = deque([k for k in keys if indeg[k] == 0])
+    order: list = []
+    while queue:
+        k = queue.popleft()
+        order.append(k)
+        for t in adj[k]:
+            indeg[t] -= 1
+            if indeg[t] == 0:
+                queue.append(t)
+
+    # 环 / 孤立节点兜底：未排序的追加到末尾
+    for k in keys:
+        if k not in order:
+            order.append(k)
+    return order
 
 
 async def create_instance(
@@ -87,10 +132,10 @@ async def create_instance(
             )
 
     # ========== 3.5 人员 ID 存在性校验（P1-22） ==========
-    # node_overrides 里的负责人/审批人/校验人/批准人必须真实存在，
+    # node_overrides / new_nodes 里的负责人/审批人/校验人/批准人必须真实存在，
     # 否则实例节点留下悬空引用，任务会分派给不存在的用户
+    person_ids: set[int] = set()
     if request.node_overrides:
-        person_ids: set[int] = set()
         for override in request.node_overrides:
             if override.assignee_id:
                 person_ids.add(override.assignee_id)
@@ -98,6 +143,15 @@ async def create_instance(
                 person_ids.add(override.endorser_id)
             person_ids |= extract_person_ids(override.approvers)
             person_ids |= extract_person_ids(override.checkers)
+    if request.new_nodes:
+        for nd in request.new_nodes:
+            if nd.assignee_id:
+                person_ids.add(nd.assignee_id)
+            if nd.endorser_id:
+                person_ids.add(nd.endorser_id)
+            person_ids |= extract_person_ids(nd.approvers)
+            person_ids |= extract_person_ids(nd.checkers)
+    if person_ids:
         missing = await validate_user_ids_exist(db, person_ids)
         if missing:
             raise AppException(
@@ -154,82 +208,116 @@ async def create_instance(
     db.add(instance)
     await db.flush()
 
-    # ========== 5. 复制节点（合并 node_overrides） ==========
-    node_id_map: dict[int, int] = {}  # template_node_id → instance_node_id
+    # ========== 5. 复制节点（合并 node_overrides + 发起新增节点，按连线拓扑序） ==========
+    node_id_map: dict = {}  # 模板节点 id / 新节点 temp_id → instance_node id
     instance_nodes: list[InstanceNode] = []
+    new_nodes = request.new_nodes or []
+    new_edges = request.new_edges or []
+    new_node_map = {nd.temp_id: nd for nd in new_nodes}
 
-    for tn in tpl_nodes:
-        node_override: dict = override_map.get(tn.id, {})
+    # 按连线拓扑排序（无新增节点时返回模板原始顺序，零回归）
+    ordered_keys = _topological_order(tpl_nodes, tpl_edges, new_nodes, new_edges)
 
-        # 配置合并：发起覆盖 > 模板默认值
-        # 注意：不能用 `or`，因为 0/[]/False 是合法值，会被 or 吞掉
-        assignee_id = node_override.get("assignee_id") or tn.assignee_id  # assignee_id 无 falsy 合法值，安全
-        time_limit_days = node_override["time_limit_days"] if "time_limit_days" in node_override else tn.time_limit_days
-        approvers = node_override["approvers"] if "approvers" in node_override else tn.approvers
-        checkers = node_override["checkers"] if "checkers" in node_override else tn.checkers
-        # 签批字段：发起覆盖 > 模板默认值
-        require_assignee_signature = node_override.get("require_assignee_signature")
-        if require_assignee_signature is None:
-            require_assignee_signature = tn.require_assignee_signature
-        require_checker_signature = node_override.get("require_checker_signature")
-        if require_checker_signature is None:
-            require_checker_signature = tn.require_checker_signature
-        require_approver_signature = node_override.get("require_approver_signature")
-        if require_approver_signature is None:
-            require_approver_signature = tn.require_approver_signature
-        # 批准人：发起覆盖 > 模板默认值（仅难度4时生效）
-        endorser_id = node_override["endorser_id"] if "endorser_id" in node_override else (tn.endorser_id if hasattr(tn, 'endorser_id') else None)
-        require_endorser_signature = node_override.get("require_endorser_signature")
-        if require_endorser_signature is None:
-            require_endorser_signature = tn.require_endorser_signature if hasattr(tn, 'require_endorser_signature') else True
-        signature_x = node_override.get("signature_x")
-        if signature_x is None:
-            signature_x = tn.signature_x
-        signature_y = node_override.get("signature_y")
-        if signature_y is None:
-            signature_y = tn.signature_y
-        signature_page = node_override.get("signature_page")
-        if signature_page is None:
-            signature_page = tn.signature_page
+    for sort_idx, key in enumerate(ordered_keys):
+        if isinstance(key, int):
+            # ── 模板节点：合并发起覆盖（node_overrides） ──
+            tn = next(t for t in tpl_nodes if t.id == key)
+            node_override: dict = override_map.get(tn.id, {})
 
-        # 结束节点：审批人默认设为发起人（发起人终审）
-        if tn.is_end and not approvers:
-            approvers = [{"user_id": current_user.id}]
+            # 配置合并：发起覆盖 > 模板默认值
+            # 注意：不能用 `or`，因为 0/[]/False 是合法值，会被 or 吞掉
+            assignee_id = node_override.get("assignee_id") or tn.assignee_id
+            time_limit_days = node_override["time_limit_days"] if "time_limit_days" in node_override else tn.time_limit_days
+            approvers = node_override["approvers"] if "approvers" in node_override else tn.approvers
+            checkers = node_override["checkers"] if "checkers" in node_override else tn.checkers
+            require_assignee_signature = node_override.get("require_assignee_signature")
+            if require_assignee_signature is None:
+                require_assignee_signature = tn.require_assignee_signature
+            require_checker_signature = node_override.get("require_checker_signature")
+            if require_checker_signature is None:
+                require_checker_signature = tn.require_checker_signature
+            require_approver_signature = node_override.get("require_approver_signature")
+            if require_approver_signature is None:
+                require_approver_signature = tn.require_approver_signature
+            endorser_id = node_override["endorser_id"] if "endorser_id" in node_override else (tn.endorser_id if hasattr(tn, 'endorser_id') else None)
+            require_endorser_signature = node_override.get("require_endorser_signature")
+            if require_endorser_signature is None:
+                require_endorser_signature = tn.require_endorser_signature if hasattr(tn, 'require_endorser_signature') else True
+            signature_x = node_override.get("signature_x")
+            if signature_x is None:
+                signature_x = tn.signature_x
+            signature_y = node_override.get("signature_y")
+            if signature_y is None:
+                signature_y = tn.signature_y
+            signature_page = node_override.get("signature_page")
+            if signature_page is None:
+                signature_page = tn.signature_page
 
-        deadline = None
-        if node_override.get("deadline"):
-            try:
-                deadline = datetime.fromisoformat(node_override["deadline"])
-            except (ValueError, TypeError):
-                raise AppException(ErrorCode.VALIDATION_ERROR, f"节点「{tn.name}」的截止日期格式不正确")
+            # 结束节点：审批人默认设为发起人（发起人终审）
+            if tn.is_end and not approvers:
+                approvers = [{"user_id": current_user.id}]
 
-        inode = InstanceNode(
-            instance_id=instance.id,
-            name=tn.name,
-            is_start=tn.is_start,
-            is_end=tn.is_end,
-            assignee_id=assignee_id,
-            time_limit_days=time_limit_days,
-            deadline=deadline,
-            require_file=tn.require_file,
-            file_folders=tn.file_folders,  # 文件夹配置快照
-            require_assignee_signature=require_assignee_signature,
-            require_checker_signature=require_checker_signature,
-            require_approver_signature=require_approver_signature,
-            endorser_id=endorser_id,
-            require_endorser_signature=require_endorser_signature,
-            signature_x=signature_x,
-            signature_y=signature_y,
-            signature_page=signature_page,
-            approvers=approvers,
-            checkers=checkers,
-            approval_strategy=tn.approval_strategy,
-            status="waiting",
-            sort_order=tn.sort_order,
-        )
+            deadline = None
+            if node_override.get("deadline"):
+                try:
+                    deadline = datetime.fromisoformat(node_override["deadline"])
+                except (ValueError, TypeError):
+                    raise AppException(ErrorCode.VALIDATION_ERROR, f"节点「{tn.name}」的截止日期格式不正确")
+
+            inode = InstanceNode(
+                instance_id=instance.id,
+                name=tn.name,
+                is_start=tn.is_start,
+                is_end=tn.is_end,
+                assignee_id=assignee_id,
+                time_limit_days=time_limit_days,
+                deadline=deadline,
+                require_file=tn.require_file,
+                file_folders=tn.file_folders,  # 文件夹配置快照
+                require_assignee_signature=require_assignee_signature,
+                require_checker_signature=require_checker_signature,
+                require_approver_signature=require_approver_signature,
+                endorser_id=endorser_id,
+                require_endorser_signature=require_endorser_signature,
+                signature_x=signature_x,
+                signature_y=signature_y,
+                signature_page=signature_page,
+                approvers=approvers,
+                checkers=checkers,
+                approval_strategy=tn.approval_strategy,
+                status="waiting",
+                sort_order=sort_idx,  # 拓扑序序号（新增节点插入后重排）
+            )
+        else:
+            # ── 发起新增节点（NewNodeDef 完整配置，不进模板） ──
+            nd = new_node_map[key]
+            inode = InstanceNode(
+                instance_id=instance.id,
+                name=nd.name,
+                is_start=False,
+                is_end=False,
+                assignee_id=nd.assignee_id,
+                time_limit_days=nd.time_limit_days,
+                deadline=None,
+                require_file=nd.require_file,
+                file_folders=nd.file_folders,
+                require_assignee_signature=nd.require_assignee_signature,
+                require_checker_signature=nd.require_checker_signature,
+                require_approver_signature=nd.require_approver_signature,
+                endorser_id=nd.endorser_id,
+                require_endorser_signature=nd.require_endorser_signature,
+                signature_x=nd.signature_x,
+                signature_y=nd.signature_y,
+                signature_page=nd.signature_page,
+                approvers=nd.approvers,
+                checkers=nd.checkers,
+                approval_strategy=nd.approval_strategy,
+                status="waiting",
+                sort_order=sort_idx,
+            )
         db.add(inode)
         await db.flush()
-        node_id_map[tn.id] = inode.id
+        node_id_map[key] = inode.id
         instance_nodes.append(inode)
 
     # ========== 5.5 难度4 强制批准人校验（P1-10）==========
@@ -243,10 +331,12 @@ async def create_instance(
                 f"难度4流程的所有工作节点必须配置批准人，以下节点未配置：{'、'.join(missing)}",
             )
 
-    # ========== 6. 复制连线 ==========
-    for te in tpl_edges:
-        src = node_id_map.get(te.source_node_id)
-        tgt = node_id_map.get(te.target_node_id)
+    # ========== 6. 复制连线（模板边 + 发起新增连线） ==========
+    all_edges = [(te.source_node_id, te.target_node_id) for te in tpl_edges]
+    all_edges += [(e.source, e.target) for e in new_edges]
+    for src_key, tgt_key in all_edges:
+        src = node_id_map.get(src_key)
+        tgt = node_id_map.get(tgt_key)
         if src and tgt:
             db.add(InstanceEdge(instance_id=instance.id, source_node_id=src, target_node_id=tgt))
 
@@ -254,9 +344,9 @@ async def create_instance(
 
     # ========== 6.1 创建文件提交文件夹目录（实例根目录 + 子文件夹一次性建好） ==========
     folder_names: set[str] = set()
-    for tn in tpl_nodes:
-        if tn.file_folders and isinstance(tn.file_folders, list):
-            for folder in tn.file_folders:
+    for inode in instance_nodes:  # 含发起新增节点
+        if inode.file_folders and isinstance(inode.file_folders, list):
+            for folder in inode.file_folders:
                 name = (folder.get("name") or "").strip()
                 if name:
                     folder_names.add(name)
@@ -276,19 +366,11 @@ async def create_instance(
     # 已通过 node_override 手动指定 deadline 的节点跳过此计算。
     initiation_date = date_type.today()
 
-    # 构建节点 ID → 实例节点映射，按模板 sort_order 遍历（V1 线性流程）
-    tpl_node_order = sorted(tpl_nodes, key=lambda n: n.sort_order)
+    # 按拓扑序遍历（含新增节点），链式推算工作节点截止日期
     prev_deadline: date_type | None = None
-    for tn in tpl_node_order:
-        in_id = node_id_map.get(tn.id)
-        if not in_id:
-            continue
-        inode = next((n for n in instance_nodes if n.id == in_id), None)
-        if not inode:
-            continue
-
+    for inode in instance_nodes:
         # 只处理工作节点（跳过开始/结束）；已有手动 deadline 则跳过
-        if tn.is_start or tn.is_end or inode.deadline:
+        if inode.is_start or inode.is_end or inode.deadline:
             continue
 
         wd = inode.time_limit_days or 0

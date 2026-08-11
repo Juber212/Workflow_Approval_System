@@ -23,6 +23,37 @@ class NodeOverride(BaseModel):
     signature_page: int | None = Field(None, description="签名页码覆盖（-1=最后一页）")
 
 
+class NewNodeDef(BaseModel):
+    """发起时新增节点定义（不在模板中，完整配置，与模板节点字段一致）
+
+    只影响本次实例快照、不写回共享模板（模板解耦）。
+    temp_id 为前端临时标识，供 new_edges 连线引用。
+    """
+    temp_id: str = Field(..., description="前端临时标识（连线引用用）")
+    name: str = Field(..., min_length=1, max_length=30, description="节点名称")
+    assignee_id: int | None = Field(None, description="负责人")
+    time_limit_days: int | None = Field(None, description="完成时限（天）")
+    require_file: bool = True
+    file_folders: list | None = Field(None, description="文件提交文件夹配置")
+    checkers: list[dict] | None = Field(None, description="校验人列表 [{user_id}]")
+    approvers: list[dict] | None = Field(None, description="审批人列表 [{user_id}]")
+    approval_strategy: str = "all_approve"
+    require_assignee_signature: bool = True
+    require_checker_signature: bool = True
+    require_approver_signature: bool = True
+    require_endorser_signature: bool = True
+    endorser_id: int | None = Field(None, description="批准人（仅难度4级时生效）")
+    signature_x: float | None = Field(None)
+    signature_y: float | None = Field(None)
+    signature_page: int | None = Field(None)
+
+
+class NewEdgeDef(BaseModel):
+    """发起时用户连线（新增节点相关）—— source/target 引用模板节点 ID（int）或新增节点 temp_id（str）"""
+    source: int | str = Field(..., description="源节点：模板节点 ID 或新增节点 temp_id")
+    target: int | str = Field(..., description="目标节点：模板节点 ID 或新增节点 temp_id")
+
+
 class CreateInstanceRequest(BaseModel):
     """发起项目请求"""
     template_id: int = Field(..., description="模板 ID")
@@ -34,6 +65,8 @@ class CreateInstanceRequest(BaseModel):
     product_model: str | None = Field(None, max_length=100, description="产品型号")
     sales_manager: str | None = Field(None, max_length=50, description="销售经理")
     node_overrides: list[NodeOverride] | None = Field(None, description="节点覆盖配置（可选）")
+    new_nodes: list[NewNodeDef] | None = Field(None, description="发起时新增节点（完整配置，可选）")
+    new_edges: list[NewEdgeDef] | None = Field(None, description="发起时用户连线（涉及新增节点，可选）")
     proposal_id: int | None = Field(None, description="关联的方案 ID（可选）")
     doc_template_ids: list[int] | None = Field(None, description="文件模板 ID 列表（可选，为空则继承模板关联）")
 

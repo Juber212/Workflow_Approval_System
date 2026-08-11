@@ -320,3 +320,41 @@ class TestDuplicateInstanceName:
             select(FlowInstance).where(FlowInstance.name == "同名项目")
         )).scalars().all()
         assert len(insts) == 1
+
+    async def test_create_instance_with_new_node(self, mysql_session, mocker):
+        """发起时新增节点 + 连线 → 实例按拓扑序包含新节点，连线正确"""
+        _setup_service_mocks(mocker)
+        db = mysql_session
+        await _seed_basic_data(db)
+        await _seed_template(db)
+
+        from app.schemas.instance import CreateInstanceRequest, NewNodeDef, NewEdgeDef
+        from app.services.instance.create import create_instance
+        request = CreateInstanceRequest(
+            template_id=1,
+            name="带新增节点项目",
+            priority="normal",
+            difficulty="1",
+            new_nodes=[NewNodeDef(temp_id="new1", name="新增中间", assignee_id=2, time_limit_days=3)],
+            new_edges=[NewEdgeDef(source=101, target="new1"), NewEdgeDef(source="new1", target=103)],
+        )
+        resp = await create_instance(db, request=request, current_user=_cu(1, "initiator"))
+
+        # 实例节点按拓扑序包含新增节点（新增插在「设计」后、「终审」前）
+        nodes = (await db.execute(
+            select(InstanceNode).where(InstanceNode.instance_id == resp.id).order_by(InstanceNode.sort_order)
+        )).scalars().all()
+        names = [n.name for n in nodes]
+        assert "新增中间" in names
+        assert names.index("新增中间") > names.index("设计")
+        assert names.index("新增中间") < names.index("终审")
+
+        # 连线：新增节点前后都有边（设计→新增、新增→终审）
+        new_node = next(n for n in nodes if n.name == "新增中间")
+        edges = (await db.execute(
+            select(InstanceEdge).where(InstanceEdge.instance_id == resp.id)
+        )).scalars().all()
+        in_ids = {e.source_node_id for e in edges if e.target_node_id == new_node.id}
+        out_ids = {e.target_node_id for e in edges if e.source_node_id == new_node.id}
+        assert len(in_ids) >= 1
+        assert len(out_ids) >= 1
