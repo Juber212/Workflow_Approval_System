@@ -622,29 +622,30 @@ function topoSortNodes(lf: any): any[] {
   return order.map((id: string) => nodeMap.get(id))
 }
 
-/** 发起模式：按连线拓扑序重排画布工作节点 deadline（新节点插入后时间自动顺延） */
-async function reflowNodeTimes() {
+/** 发起模式：按连线拓扑序重排画布工作节点 deadline（新节点插入后时间自动顺延，自然日）
+ * 前端直接自然日顺排（首节点今天，后续衔接上一节点截止次日），不调后端接口——
+ * 画布新增节点 id 为字符串，传 calculateDeadlines 会被 node_id 整数校验拦截（422）。 */
+function reflowNodeTimes() {
   const lf = canvasRef.value?.getLf()
   if (!lf || !isLaunchMode.value) return
   const ordered = topoSortNodes(lf).filter((n: any) => !n.properties?.is_start && !n.properties?.is_end)
   if (ordered.length === 0) return
-  const today = new Date().toISOString().slice(0, 10)
-  try {
-    const results = await calculateDeadlines(
-      today,
-      ordered.map((n: any) => ({ node_id: n.id, time_limit_days: n.properties?.time_limit_days || 1 })),
-    )
-    for (const r of results) {
-      if (r.begin && r.deadline) {
-        const node = lf.getNodeDataById(String(r.node_id))
-        if (node) {
-          lf.setProperties(String(r.node_id), { ...(node.properties || {}), plan_begin: r.begin, deadline: r.deadline })
-        }
-      }
+  let cursor = new Date(new Date().toDateString())  // 今天 0 点
+  for (const n of ordered) {
+    const days = Math.max(n.properties?.time_limit_days || 1, 1)
+    const begin = new Date(cursor)
+    const end = new Date(cursor.getTime() + (days - 1) * 86400000)  // 截止 = 开始 + N 天 - 1
+    const node = lf.getNodeDataById(n.id)
+    if (node) {
+      lf.setProperties(n.id, { ...(node.properties || {}), plan_begin: fmtDate(begin), deadline: fmtDate(end) })
     }
-  } catch (err) {
-    console.warn('发起模式时间重排失败:', err)
+    cursor = new Date(end.getTime() + 86400000)  // 下一节点从截止次日开始
   }
+}
+
+/** 格式化 Date → 'YYYY-MM-DD' */
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }

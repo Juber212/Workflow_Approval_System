@@ -202,6 +202,8 @@ storage/archive/{实例名称}/
 
 - ✅ 发起模式插入节点（动态调整流程结构，2026-08-11）：发起时可**新增节点（完整配置，与模板一致）+ 用户连线**，发起时按**连线拓扑序**创建实例节点（模板节点 + 新增节点合并，只进实例快照不改共享模板）——后端 `CreateInstanceRequest` 加 `new_nodes`/`new_edges`、`create_instance` 拓扑排序合并 + 难度4/人员校验适配；前端移除 M17 拦截、发起模式新增节点属性面板完整可配、插入/连线后按结构重排画布时间（`structure-change` 事件）。327 测试全过（+1 新增节点集成测试）+ vue-tsc 0 错 + build 过。
 
+- ✅ 日期口径改自然日（2026-08-11，产品确认）：deadline 计算由**工作日（chinesecalendar）改为自然日**——后端 `/utils/calculate-deadlines` 与 `create_instance` 均直接 +N 天顺排（无工作日概念）；前端画布时间重排改**前端自然日计算**（新增节点画布 id 为字符串、传后端接口会 node_id 整数校验 422）。327 测试全过（4 个 deadline 测试适配自然日）+ vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系

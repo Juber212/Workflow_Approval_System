@@ -38,12 +38,11 @@ class TestCalculateDeadlines:
         )
         res = await calculate_deadlines(body, FakeUser())
         deadlines = {d["node_id"]: d for d in res.data["deadlines"]}
-        # 节点1：7/6(周一) +2 工作日 → 7/8(周三)
+        # 自然日：节点1 7/6 起覆盖 2 天 → 7/7；节点2 衔接 7/8 起覆盖 2 天 → 7/9
         assert deadlines[1]["begin"] == "2026-07-06"
-        assert deadlines[1]["deadline"] == "2026-07-08"
-        # 节点2：7/8 的下一工作日 7/9(周四) 起 +2 → 7/13(下周一)
-        assert deadlines[2]["begin"] == "2026-07-09"
-        assert deadlines[2]["deadline"] == "2026-07-13"
+        assert deadlines[1]["deadline"] == "2026-07-07"
+        assert deadlines[2]["begin"] == "2026-07-08"
+        assert deadlines[2]["deadline"] == "2026-07-09"
 
     @pytest.mark.asyncio
     async def test_anchor_locks_deadline(self):
@@ -60,9 +59,9 @@ class TestCalculateDeadlines:
         # 锚点节点：直接采用给定截止日，begin 不返回
         assert deadlines[1]["begin"] is None
         assert deadlines[1]["deadline"] == "2026-07-10"
-        # 下游：7/10(周五) 的下一工作日 7/13(周一) 起 +2 → 7/15(周三)
-        assert deadlines[2]["begin"] == "2026-07-13"
-        assert deadlines[2]["deadline"] == "2026-07-15"
+        # 下游：自然日从锚点截止次日 7/11 起覆盖 2 天 → 7/12
+        assert deadlines[2]["begin"] == "2026-07-11"
+        assert deadlines[2]["deadline"] == "2026-07-12"
 
     @pytest.mark.asyncio
     async def test_anchor_mid_chain(self):
@@ -77,10 +76,11 @@ class TestCalculateDeadlines:
         )
         res = await calculate_deadlines(body, FakeUser())
         deadlines = {d["node_id"]: d for d in res.data["deadlines"]}
-        assert deadlines[1]["deadline"] == "2026-07-07"
+        # 自然日：节点1 7/6 覆盖1天 → 7/6；节点3 从锚点次日 7/9 起覆盖 2 天 → 7/10
+        assert deadlines[1]["deadline"] == "2026-07-06"
         assert deadlines[2]["deadline"] == "2026-07-08"
         assert deadlines[3]["begin"] == "2026-07-09"
-        assert deadlines[3]["deadline"] == "2026-07-13"
+        assert deadlines[3]["deadline"] == "2026-07-10"
 
     @pytest.mark.asyncio
     async def test_anchor_bad_format(self):
@@ -105,7 +105,8 @@ class TestCalculateDeadlines:
         )
         res = await calculate_deadlines(body, FakeUser())
         deadlines = {d["node_id"]: d for d in res.data["deadlines"]}
-        assert deadlines[1]["deadline"] == "2026-07-08"
+        # 自然日：节点1 7/6 覆盖2天 → 7/7；节点3 从节点1 截止次日 7/8 起覆盖 1 天 → 7/8
+        assert deadlines[1]["deadline"] == "2026-07-07"
         assert deadlines[2]["begin"] is None and deadlines[2]["deadline"] is None
-        assert deadlines[3]["begin"] == "2026-07-09"
-        assert deadlines[3]["deadline"] == "2026-07-10"
+        assert deadlines[3]["begin"] == "2026-07-08"
+        assert deadlines[3]["deadline"] == "2026-07-08"

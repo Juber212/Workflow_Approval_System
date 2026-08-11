@@ -2,7 +2,7 @@
 
 import os
 from collections import deque, defaultdict
-from datetime import datetime, date as date_type
+from datetime import datetime, timedelta, date as date_type
 
 from ._helpers import _get_type_label
 
@@ -29,7 +29,6 @@ from app.engine.flow_engine import (
     activate_start_node,
     propagate_from_node,
 )
-from app.utils.workday import add_workdays, next_workday
 from app.services.validation_service import extract_person_ids, validate_user_ids_exist, validate_template_for_publish
 
 
@@ -361,8 +360,7 @@ async def create_instance(
     # 从发起日期起，按模板节点顺序链式推算每个工作节点的截止日期（P1-39 统一口径）：
     #   - 首个工作节点 开始 = 发起日，截止 = 开始 + time_limit_days 工作日
     #   - 后续节点 开始 = 上一节点截止日的下一个工作日，截止 = 开始 + time_limit_days 工作日
-    # 用 add_workdays / next_workday 跳过法定节假日和周末，
-    # 与 /api/v1/utils/calculate-deadlines 接口语义完全一致。
+    # 自然日顺排（无工作日概念），与 /api/v1/utils/calculate-deadlines 接口语义完全一致。
     # 已通过 node_override 手动指定 deadline 的节点跳过此计算。
     initiation_date = date_type.today()
 
@@ -377,10 +375,10 @@ async def create_instance(
         if wd <= 0:
             continue
 
-        # 链式衔接：本节点开始日 = 上一节点截止日的下一个工作日（首个工作节点从发起日起算）
-        begin_date = initiation_date if prev_deadline is None else next_workday(prev_deadline)
+        # 链式衔接：本节点开始日 = 上一节点截止日的次日（自然日，首个工作节点从发起日起算）
+        begin_date = initiation_date if prev_deadline is None else prev_deadline + timedelta(days=1)
         inode.deadline = datetime.combine(
-            add_workdays(begin_date, wd),
+            begin_date + timedelta(days=wd - 1),  # 截止 = 开始 + N 天 - 1（覆盖 N 天，自然日）
             datetime.min.time(),
         )
         prev_deadline = inode.deadline.date()

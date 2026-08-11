@@ -1,13 +1,12 @@
 """工具类 API —— 工作日计算等通用能力"""
 
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 
 from fastapi import APIRouter, Depends
 from app.api.deps import get_current_active_user
 from pydantic import BaseModel, Field
 
 from app.schemas.common import ApiResponse
-from app.utils.workday import add_workdays, next_workday
 
 router = APIRouter(prefix="/api/v1", tags=["工具"])
 
@@ -93,11 +92,11 @@ async def calculate_deadlines(
             # 第一个有效节点：从发起日期开始
             begin_date = start
         else:
-            # 后续节点：从前节点截止的下一个工作日开始
-            begin_date = next_workday(prev_deadline)
+            # 后续节点：从前节点截止的次日开始（自然日，无工作日概念）
+            begin_date = prev_deadline + timedelta(days=1)
 
-        # 计算截止日期：begin + N 工作日
-        deadline_date = add_workdays(begin_date, wd)
+        # 计算截止日期：begin + N 天 - 1（覆盖 N 天，自然日）
+        deadline_date = begin_date + timedelta(days=wd - 1)
 
         results.append(DeadlineCalcResult(
             node_id=node.node_id,
