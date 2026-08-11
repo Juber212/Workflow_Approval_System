@@ -284,24 +284,6 @@ export async function getInstanceDetail(id: number): Promise<InstanceDetailRespo
   return res.data
 }
 
-/** 排产计划项（甘特图数据源） */
-export interface ScheduleItem {
-  node_id: number
-  node_name: string
-  assignee_id: number
-  assignee_name: string
-  plan_start: string   // ISO 日期
-  plan_end: string
-  duration: number
-  sort_order: number
-}
-
-/** 查询项目排产计划（发起时自动生成） */
-export async function getInstanceSchedule(id: number): Promise<ScheduleItem[]> {
-  const res = await request.get(`/instances/${id}/schedule`)
-  return res.data
-}
-
 /** 终止项目 */
 export async function terminateInstance(id: number, reason: string): Promise<{
   id: number

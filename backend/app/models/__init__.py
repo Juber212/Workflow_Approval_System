@@ -25,7 +25,6 @@ from app.models.signature import Signature
 from app.models.endorsement import Endorsement
 from app.models.document_template import DocumentTemplate, TemplateCategory, TemplateCategoryDocument, TemplateDocumentLink
 from app.models.notification import Notification
-from app.models.schedule import ScheduleItem
 
 __all__ = [
     "InstanceStatus", "Priority", "Difficulty",
@@ -35,5 +34,5 @@ __all__ = [
     "FlowInstance", "InstanceNode", "InstanceEdge",
     "Task", "CheckRecord", "Approval", "Endorsement", "File", "OperationLog", "NodePreset",
     "Signature", "DocumentTemplate", "TemplateCategory", "TemplateCategoryDocument", "TemplateDocumentLink",
-    "Notification", "ScheduleItem",
+    "Notification",
 ]

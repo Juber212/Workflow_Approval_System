@@ -15,18 +15,6 @@
         @node-click="handleNodeClick"
       />
 
-      <!-- ===== 排产计划（甘特图，发起时自动生成） ===== -->
-      <div class="card">
-        <div class="card__header" style="cursor:pointer" @click="scheduleCollapsed = !scheduleCollapsed">
-          <h3 class="card__title">排产计划</h3>
-          <div class="card__extra">{{ scheduleItems.length }} 道工序</div>
-        </div>
-        <div v-show="!scheduleCollapsed" class="card__body">
-          <GanttChart v-if="scheduleItems.length > 0" :items="scheduleItems" />
-          <div v-else style="padding:20px 0;text-align:center;color:var(--el-text-color-secondary);font-size:13px">暂无排产计划</div>
-        </div>
-      </div>
-
       <!-- ===== 方案：卡片平铺布局 ===== -->
       <template v-if="isProposal">
         <div class="card">
@@ -162,14 +150,13 @@
 /** 实例详情页 —— 项目/方案共用，根据 template_type 切换面包屑和文案 */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getInstanceDetail, getInstanceSchedule, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief, type ScheduleItem } from '@/api/instance'
+import { getInstanceDetail, type InstanceDetailResponse, type DetailNodeInfo, type NodeFileBrief } from '@/api/instance'
 import { previewFile, downloadFile } from '@/api/task'
 import { useUserStore } from '@/stores/user'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, formatFileSize } from '@/utils/format'
 import { Document, Folder, EditPen } from '@element-plus/icons-vue'
 import InstanceInfo from './components/InstanceInfo.vue'
-import GanttChart from './components/GanttChart.vue'
 import NodeCard from './components/NodeCard.vue'
 import OperationTimeline from './components/OperationTimeline.vue'
 import TerminateDialog from './components/TerminateDialog.vue'
@@ -184,9 +171,6 @@ const { setBreadcrumb } = useBreadcrumb()
 // ========== 状态 ==========
 const loading = ref(false)
 const detail = ref<InstanceDetailResponse | null>(null)
-/** 排产计划（甘特图数据源） */
-const scheduleItems = ref<ScheduleItem[]>([])
-const scheduleCollapsed = ref(false)
 /** 全局展开控制：null=默认，true=全部展开，false=全部折叠 */
 const expandAll = ref<boolean | null>(null)
 /** 按钮文字 */
@@ -225,15 +209,6 @@ const displayNodes = computed(() => {
   return detail.value.nodes
 })
 
-/** 拉取排产计划（发起时自动生成，甘特图展示；失败静默置空） */
-async function fetchSchedule(id: number) {
-  try {
-    scheduleItems.value = await getInstanceSchedule(id)
-  } catch {
-    scheduleItems.value = []
-  }
-}
-
 // ========== 生命周期 ==========
 onMounted(() => {
   fetchDetail()
@@ -258,8 +233,6 @@ async function fetchDetail() {
   loading.value = true
   try {
     detail.value = await getInstanceDetail(id)
-    // 拉取排产计划（发起时自动生成，甘特图展示）
-    fetchSchedule(id)
     // 方案详情默认全部展开
     if (isProposal.value) {
       expandAll.value = true
