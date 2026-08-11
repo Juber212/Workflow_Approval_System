@@ -207,6 +207,18 @@ async def get_instance(
     return ApiResponse.ok(result)
 
 
+@router.get("/instances/{instance_id}/schedule")
+async def get_instance_schedule_api(
+    instance_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询项目排产计划（发起时自动生成，甘特图数据源）"""
+    from app.services.schedule_service import get_instance_schedule
+    result = await get_instance_schedule(db, instance_id)
+    return ApiResponse.ok(result)
+
+
 @router.post("/instances/{instance_id}/terminate")
 async def terminate_flow_instance(
     instance_id: int,

@@ -330,6 +330,11 @@ async def create_instance(
     ))
     await db.flush()
 
+    # ========== 10. 自动排产（发起时按流程节点生成排产计划，自然日顺排 + 资源分配） ==========
+    from app.services.schedule_service import schedule_instance
+    await schedule_instance(db, instance.id)
+    await db.flush()
+
     return InstanceResponse(
         id=instance.id,
         name=instance.name,
