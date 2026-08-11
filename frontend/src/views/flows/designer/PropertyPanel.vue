@@ -151,10 +151,10 @@
         </el-form-item>
 
         <!-- 完成时限 -->
-        <!-- 编辑模式：数字输入框（工作日天数） -->
+        <!-- 编辑模式：数字输入框（天数） -->
         <el-form-item
           v-if="!launchMode"
-          label="完成时限（工作日）"
+          label="完成时限（天）"
           prop="time_limit_days"
           :rules="[{ required: true, message: '请设置完成时限' }]"
         >
@@ -190,7 +190,7 @@
             @change="handleDeadlineChange"
           />
           <div class="field-hint">
-            预估 {{ form.time_limit_days ?? '?' }} 个工作日（不含起始日，调整截止日后下游已按法定节假日自动顺延）
+            预估 {{ form.time_limit_days ?? '?' }} 天（不含起始日，调整截止日后下游已按自然日自动顺延）
           </div>
         </el-form-item>
 
@@ -482,30 +482,18 @@ const folderNameConflict = computed<string | null>(() => {
   return null
 })
 
-// ========== 工作日计算（跳过周末，节假日以后端为准） ==========
+// ========== 时限计算（自然日，无天概念） ==========
 
-/** 判断是否周末 */
-function isWeekend(date: Date): boolean {
-  const d = date.getDay()
-  return d === 0 || d === 6
+/** 截止日期选择器禁用规则：自然日不限制日期（不再禁止周末） */
+function disabledDeadlineDate(_date: Date): boolean {
+  return false
 }
 
-/** 截止日期选择器禁用规则：禁止选择周末作为截止日（P1-39 补充，截止日对齐工作日语义；法定节假日由后端预填/级联自动跳过） */
-function disabledDeadlineDate(date: Date): boolean {
-  return isWeekend(date)
-}
-
-/** 从 start 的下一日到 end（含 end）的工作日数 —— 不含起始日，与后端 add_workdays(start, N) 口径一致（P1-39 消除 off-by-one） */
+/** 从 start 的下一日到 end（含 end）的天数 —— 自然日，与后端计算口径一致 */
 function countWorkdaysExcludingStart(startStr: string, endStr: string): number {
-  let count = 0
   const cur = new Date(startStr)
   const end = new Date(endStr)
-  cur.setDate(cur.getDate() + 1)  // 从起始日的下一天开始数
-  while (cur <= end) {
-    if (!isWeekend(cur)) count++
-    cur.setDate(cur.getDate() + 1)
-  }
-  return count
+  return Math.max(1, Math.round((end.getTime() - cur.getTime()) / 86400000))
 }
 
 // ========== 发起模式：截止日期变更 → 锚定当前节点 + 级联下游（P1-39 统一走后端 calculate-deadlines，节假日正确） ==========
@@ -522,7 +510,7 @@ async function handleDeadlineChange(newDeadline: string | undefined) {
     return
   }
 
-  // 反向计算当前节点占用的工作日数（不含起始日，与后端 add_workdays 对齐）
+  // 反向计算当前节点占用的天数（不含起始日，与后端 add_workdays 对齐）
   form.time_limit_days = Math.max(1, countWorkdaysExcludingStart(begin, newDeadline))
 
   // 同步当前节点到 LogicFlow（含新 deadline 和 time_limit_days）

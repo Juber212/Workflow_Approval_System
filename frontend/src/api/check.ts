@@ -38,7 +38,7 @@ export interface CheckDetail {
   checker_name: string
   status: string
   opinion: string | null
-  time_limit_days: number | null  // 完成时限（工作日）
+  time_limit_days: number | null  // 完成时限（天）
   deadline: string | null         // 截止时间
   round: number                   // 当前轮次
   total_nodes: number

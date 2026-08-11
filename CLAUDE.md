@@ -204,6 +204,8 @@ storage/archive/{实例名称}/
 
 - ✅ 日期口径改自然日（2026-08-11，产品确认）：deadline 计算由**工作日（chinesecalendar）改为自然日**——后端 `/utils/calculate-deadlines` 与 `create_instance` 均直接 +N 天顺排（无工作日概念）；前端画布时间重排改**前端自然日计算**（新增节点画布 id 为字符串、传后端接口会 node_id 整数校验 422）。327 测试全过（4 个 deadline 测试适配自然日）+ vue-tsc 0 错 + build 过。
 
+- ✅ 前端工作日文案与时限计算统一改自然日（2026-08-11）：全前端「X 工作日」显示/标签改「X 天」（11 文件）；PropertyPanel 时限计算改自然日（截止日期选择器不再禁周末、反向算天数 = 日期差）。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系

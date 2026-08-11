@@ -38,7 +38,7 @@ export interface ApprovalDetail {
   status: string
   opinion: string | null
   is_end_node: boolean
-  time_limit_days: number | null  // 完成时限（工作日）
+  time_limit_days: number | null  // 完成时限（天）
   deadline: string | null         // 截止时间
   round: number                   // 当前轮次
   total_nodes: number

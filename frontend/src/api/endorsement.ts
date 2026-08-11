@@ -34,7 +34,7 @@ export interface EndorsementDetail {
   node_name: string
   node_status: string
   node_description: string | null     // 节点说明
-  time_limit_days: number | null      // 完成时限（工作日）
+  time_limit_days: number | null      // 完成时限（天）
   deadline: string | null             // 截止时间
   task_id: number | null
   endorser_id: number

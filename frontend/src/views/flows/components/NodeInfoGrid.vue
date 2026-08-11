@@ -23,7 +23,7 @@
           <!-- 终审节点不展示完成时限与截止时间（终审只确认文件齐全） -->
           <div v-if="!isEndNode" class="info-grid__item">
             <div class="k">完成时限</div>
-            <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '工作日' : '未设置' }}</div>
+            <div class="v">{{ detail.time_limit_days ? detail.time_limit_days + '天' : '未设置' }}</div>
           </div>
           <div v-if="!isEndNode" class="info-grid__item">
             <div class="k">截止时间</div>
