@@ -9,7 +9,7 @@ rem  【部署后修改】把下面的 SYS_URL 改为实际访问地址，例如：
 rem     set SYS_URL=http://192.168.1.50
 rem  当前默认指向本地开发环境（前后端在本机运行时可用）。
 rem ============================================================
-set SYS_URL=http://localhost:8090
+set SYS_URL=http://localhost:5173
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0create-shortcut.ps1" -Url "%SYS_URL%"
 
