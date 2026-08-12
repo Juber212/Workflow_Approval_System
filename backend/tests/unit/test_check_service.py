@@ -120,6 +120,34 @@ class TestPassCheck:
             await pass_check(mock_db, check_id=1, current_user_id=3, opinion=None)
         assert exc.value.code == ErrorCode.FORBIDDEN
 
+    @pytest.mark.asyncio
+    async def test_diff4_no_approver_no_endorser_rejected(self, mock_db):
+        """难度4 节点无审批人且无批准人 → 终态校验拦截（批准环节不可跳过）
+
+        场景：实例难度在运行中被提升为 4，但节点未配置批准人（历史实例/异常数据），
+        原逻辑会静默跳过批准直接完成节点，使「难度4 需批准人签阅」形同虚设。
+        """
+        check = make_check(id=1, task_id=10, node_id=5, checker_id=3, status=CheckStatus.PENDING)
+        node = make_node(id=5, round=1, approvers=[], require_checker_signature=False)  # 无审批人
+        task = make_task(id=10, node_id=5)
+        inst = make_instance(id=1, difficulty="4")  # 难度4，节点无批准人
+
+        mock_db.execute = AsyncMock()
+        mock_db.execute.side_effect = [
+            MockResult(scalar_one=check),   # 0: get check（无锁，拿 node_id/instance_id）
+            MockResult(scalar_one=inst),     # 1: lock FlowInstance
+            MockResult(scalar_one=node),     # 2: lock InstanceNode
+            MockResult(scalar_one=check),    # 3: lock check FOR UPDATE（重新校验状态）
+            MagicMock(),                     # 4: lock other pending checks
+            MockResult(scalars_all=[]),      # 5: check all pending → 无 pending，全部通过
+            MockResult(scalar_one=task),     # 6: get task
+        ]
+
+        with pytest.raises(AppException) as exc:
+            await pass_check(mock_db, check_id=1, current_user_id=3, opinion="通过")
+        assert exc.value.code == ErrorCode.VALIDATION_ERROR
+        assert "批准人" in str(exc.value)
+
 
 # ============================================================
 # return_check —— 校验退回

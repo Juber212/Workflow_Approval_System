@@ -361,6 +361,14 @@ async def pass_check(db: AsyncSession, check_id: int, current_user_id: int, opin
                 await clear_related(db, user_id=current_user_id, types=["check_assigned"], instance_id=c.instance_id)
                 return {"all_passed": True, "message": "全部校验通过（无审批人），已进入批准阶段", "_pending_sig_ids": _pending_signature_ids}
 
+            # 终态校验：难度4 节点的批准环节不可跳过——节点无批准人属异常配置
+            # （历史实例 / 发起后升级难度 / 数据异常），静默完成会让「难度4 需批准人签阅」形同虚设
+            if inst.difficulty == "4":
+                raise AppException(
+                    ErrorCode.VALIDATION_ERROR,
+                    f"难度4流程节点「{node.name}」未配置批准人，无法跳过批准环节，请联系发起人处理",
+                )
+
             # 无审批人且不需要批准 → 跳过审批，直接完成节点
             task.status = TaskStatus.COMPLETED
             task.completed_at = now
