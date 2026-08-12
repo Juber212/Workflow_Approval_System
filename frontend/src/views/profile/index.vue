@@ -208,20 +208,34 @@
           <el-input v-model="initiatedKeyword" placeholder="搜索项目名称" clearable style="width:220px" @change="handleInitiatedSearch" />
         </div>
         <el-table border :data="initiatedList" stripe v-loading="initiatedLoading" @row-click="(row: any) => router.push({ name: 'InstanceDetail', params: { id: row.id } })" style="cursor:pointer">
-          <el-table-column prop="name" label="项目" min-width="140" />
-          <el-table-column label="优先级" min-width="64">
-            <template #default="{ row }"><span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
+          <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
+          <el-table-column label="方案" min-width="100" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.proposal_name || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="进度" min-width="90">
+            <template #default="{ row }">
+              {{ row.total_nodes > 0 ? Math.round((row.current_node_index / row.total_nodes) * 100) : 0 }}%（{{ row.current_node_index }}/{{ row.total_nodes }}）
+            </template>
           </el-table-column>
           <el-table-column prop="current_handlers" label="当前处理人" min-width="90" show-overflow-tooltip>
             <template #default="{ row }">
               <span>{{ row.current_handlers || '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column label="状态" min-width="64">
+            <template #default="{ row }"><span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span></template>
+          </el-table-column>
+          <el-table-column label="优先级" min-width="64">
+            <template #default="{ row }"><span class="pri-badge" :class="'pri--' + row.priority">{{ priLabel(row.priority) }}</span></template>
+          </el-table-column>
+          <el-table-column label="难度" min-width="64">
+            <template #default="{ row }"><span class="diff-badge diff-badge--list" :class="'diff--' + (row.difficulty || '1')">{{ row.difficulty || '1' }}级</span></template>
+          </el-table-column>
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
           </el-table-column>
-          <el-table-column label="状态" min-width="64">
-            <template #default="{ row }"><span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span></template>
+          <el-table-column label="截止时间" min-width="140">
+            <template #default="{ row }">{{ row.flow_deadline ? formatTime(row.flow_deadline) : '-' }}</template>
           </el-table-column>
           <el-table-column label="操作" min-width="60">
             <template #default="{ row }">
@@ -329,9 +343,18 @@
           <el-input v-model="propInitiatedKeyword" placeholder="搜索方案名称" clearable style="width:220px" @change="handlePropInitiatedSearch" />
         </div>
         <el-table border :data="propInitiatedList" stripe v-loading="propInitiatedLoading" @row-click="(row: any) => router.push({ name: 'ProposalDetail', params: { id: row.id } })" style="cursor:pointer">
-          <el-table-column prop="name" label="方案名称" min-width="140" />
+          <el-table-column prop="name" label="方案名称" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="initiator_name" label="发起人" min-width="72" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.initiator_name || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="description" label="说明" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.description || '-' }}</template>
+          </el-table-column>
           <el-table-column label="发起时间" min-width="140">
             <template #default="{ row }">{{ formatTime(row.initiated_at || row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column label="截止时间" min-width="140">
+            <template #default="{ row }">{{ row.flow_deadline ? formatTime(row.flow_deadline) : '-' }}</template>
           </el-table-column>
           <el-table-column label="状态" min-width="64">
             <template #default="{ row }"><span class="status-tag" :class="instStatusClass(row.status)">{{ instStatusLabel(row.status) }}</span></template>
@@ -359,7 +382,8 @@ import { getTasks, type TaskListItem } from '@/api/task'
 import { getChecks, type CheckListItem } from '@/api/check'
 import { getApprovals, type ApprovalListItem } from '@/api/approval'
 import { getEndorsements, type EndorsementListItem } from '@/api/endorsement'
-import { getMyInitiated, type MyInitiatedItem } from '@/api/instance'
+import { getInstances, type InstanceListItem } from '@/api/instance'
+import { getProposals, type ProposalListItem } from '@/api/proposal'
 import { fetchSummaryCounts, type SummaryCounts } from '@/api/notification'
 import { useBreadcrumb } from '@/composables/useBreadcrumb'
 import { formatTime, deadlineRowClass } from '@/utils/format'
@@ -486,7 +510,7 @@ async function fetchEndorsements() {
 }
 
 // ========== 项目：我发起的 ==========
-const initiatedList = ref<MyInitiatedItem[]>([])
+const initiatedList = ref<InstanceListItem[]>([])
 const initiatedLoading = ref(false)
 const initiatedTotal = ref(0)
 const initiatedPage = ref(1)
@@ -496,7 +520,8 @@ const initiatedKeyword = ref('')
 async function fetchInitiated() {
   initiatedLoading.value = true
   try {
-    const data = await getMyInitiated({ page: initiatedPage.value, page_size: initiatedPageSize.value, type: 'project', keyword: initiatedKeyword.value || undefined })
+    // 复用项目列表接口（initiator_id 过滤 = 我发起的），字段与开工项目完全一致
+    const data = await getInstances({ initiator_id: userStore.userInfo?.id, page: initiatedPage.value, page_size: initiatedPageSize.value, keyword: initiatedKeyword.value || undefined })
     initiatedList.value = data.items
     initiatedTotal.value = data.total
   } finally { initiatedLoading.value = false }
@@ -557,7 +582,7 @@ async function fetchPropEndorsements() {
 }
 
 // ========== 方案：我发起的 ==========
-const propInitiatedList = ref<MyInitiatedItem[]>([])
+const propInitiatedList = ref<ProposalListItem[]>([])
 const propInitiatedLoading = ref(false)
 const propInitiatedTotal = ref(0)
 const propInitiatedPage = ref(1)
@@ -567,7 +592,8 @@ const propInitiatedKeyword = ref('')
 async function fetchPropInitiated() {
   propInitiatedLoading.value = true
   try {
-    const data = await getMyInitiated({ page: propInitiatedPage.value, page_size: propInitiatedPageSize.value, type: 'proposal', keyword: propInitiatedKeyword.value || undefined })
+    // 复用方案列表接口（initiator_id 过滤 = 我发起的），字段与方案管理完全一致
+    const data = await getProposals({ initiator_id: userStore.userInfo?.id, page: propInitiatedPage.value, page_size: propInitiatedPageSize.value, keyword: propInitiatedKeyword.value || undefined })
     propInitiatedList.value = data.items
     propInitiatedTotal.value = data.total
   } finally { propInitiatedLoading.value = false }

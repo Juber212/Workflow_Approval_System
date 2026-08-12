@@ -325,22 +325,6 @@ export async function terminateInstance(id: number, reason: string): Promise<{
   return res.data
 }
 
-// ========== 我发起的项目 ==========
-export interface MyInitiatedItem {
-  id: number
-  name: string
-  status: string
-  priority: string
-  current_handlers: string  // 当前处理人（根据节点状态动态显示）
-  initiated_at: string | null
-  completed_at: string | null
-  created_at: string | null
-}
-
-export async function getMyInitiated(params: { page?: number; page_size?: number; type?: string; keyword?: string }): Promise<{ items: MyInitiatedItem[]; total: number }> {
-  const res = await request.get('/instances/my-initiated', { params })
-  return res.data
-}
 
 /** 修改项目/方案优先级 */
 export async function changePriority(id: number, priority: string): Promise<{

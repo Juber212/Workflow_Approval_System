@@ -216,6 +216,8 @@ storage/archive/{实例名称}/
 
 - ✅ 桌面快捷方式分发 + 系统 Logo 图标（2026-08-12）：docs/桌面快捷方式分发指南.md + docs/创建系统快捷方式.bat + docs/create-shortcut.ps1 + docs/logo.ico——部署后给员工电脑批量创建系统桌面快捷方式（bat 一键脚本 + 内网共享分发 + 域 GPO 可选）。**图标用系统现用 Logo**（favicon.svg → Edge headless 渲染 PNG → Pillow 去白底/居中缩放 → 多尺寸透明 ICO）。**方案踩坑两连**：①.url（InternetShortcut）对 http 地址强制显示默认浏览器图标（IconFile 被忽略）→ 改 .lnk；②.lnk 的 TargetPath 用 rundll32 url.dll,FileProtocolHandler 在 Win11 双击打不开 → 最终方案 **.lnk + TargetPath 直接填 URL**（shell 原生用默认浏览器打开，已实测触发浏览器进程）+ IconLocation=logo.ico（图标可靠）。分发需 3 文件同目录：bat（GBK/CRLF）+ ps1（UTF-8 BOM）+ logo.ico。访问地址用占位 `http://192.168.1.50` 待部署后替换。排产功能用户确认不做（方案文档已删）。
 
+- ✅ 个人中心发起列表字段对齐（2026-08-12）：「我发起的流程」改调 `getInstances(initiator_id)`、「我发起的方案」改调 `getProposals(initiator_id)`——复用现有列表组装逻辑，字段与开工项目/方案管理**完全一致（去所属组织）**：流程列表加 方案/进度/难度/截止时间，方案列表加 发起人/说明/截止时间；搜索保持名称搜索+分页（不改）。**后端零新增**（列表接口本已支持 initiator_id 筛选），顺带清理死代码：后端 `/instances/my-initiated` 端点 + 前端 `getMyInitiated`/`MyInitiatedItem`（前端唯一使用处已改）。298 后端测试 + 前端 vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系
