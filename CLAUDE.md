@@ -212,6 +212,8 @@ storage/archive/{实例名称}/
 
 - ✅ 前端引入 Vitest 纯逻辑单测（2026-08-12）：前端此前零自动化测试（仅 vue-tsc + build）——引入 vitest，把发起模式的易错纯逻辑从组件抽取到 `utils/flowStructure.ts`（topoSortNodes 拓扑排序 / normalizePersons 人员规范化 / calcChainDeadlines 自然日链式期限 / countDaysExcludingStart 天数差），FlowDesigner/PropertyPanel 改用纯函数；新增 3 个测试文件（flowStructure/format/labels）共 31 用例全过，`npm test` 一条命令。vue-tsc 0 错 + build 过。
 
+- 📌 超大单文件拆分评估（2026-08-12）：approval_service.py 1044 行 / SignaturePreviewDialog.vue 1320 行 / FlowDesigner.vue 1034 行等超 800 行文件，结构评估结论——**上线前不拆**（功能正确 + 有测试覆盖 + 「长但清晰」，approve/reject 锁序与重做逻辑交叉共享、签名弹窗交互状态强耦合，动核心业务文件风险大于收益）。列为**上线后维护项**：优先级 SignaturePreviewDialog 抽签名交互 composable > approval_service 拆 approve/reject > FlowDesigner 继续抽编排逻辑。FlowDesigner 已随需求自然瘦身（buildDesignPayload/flowStructure 已抽）。
+
 **状态：可部署上线**
 
 ## 测试体系
