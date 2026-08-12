@@ -208,6 +208,10 @@ storage/archive/{实例名称}/
 
 - ✅ 无效配置 pdf_signature_offset 清理（2026-08-12）：确认该配置被读取（_SIG_KEYS/mapping）但从未参与签名坐标计算（apply_signatures_to_files 只用 x/y/page/width/height）——7 处入口全清（settings.PDF_SIGNATURE_OFFSET / _SIG_KEYS / configs.py 数字白名单 / seed.py / 前端 ConfigManagement 元数据 / 单测断言）+ 开发库 SystemConfig 存量行删除。327 测试全过 + vue-tsc 0 错 + build 过。
 
+- ✅ pass_check 无审批人分支终态校验（2026-08-12）：**缺陷**——实例难度在运行中被提升为 4 时（发起人可随时改难度），节点无批准人，pass_check 无审批人分支会静默跳过批准直接完成节点，使「难度4 需批准人签阅」形同虚设。**修复**：难度4 且节点无批准人 → 抛 AppException 拦截（不再静默完成），提示联系发起人处理；新建单测覆盖。298 单元/集成全过。
+
+- ✅ 前端引入 Vitest 纯逻辑单测（2026-08-12）：前端此前零自动化测试（仅 vue-tsc + build）——引入 vitest，把发起模式的易错纯逻辑从组件抽取到 `utils/flowStructure.ts`（topoSortNodes 拓扑排序 / normalizePersons 人员规范化 / calcChainDeadlines 自然日链式期限 / countDaysExcludingStart 天数差），FlowDesigner/PropertyPanel 改用纯函数；新增 3 个测试文件（flowStructure/format/labels）共 31 用例全过，`npm test` 一条命令。vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系
