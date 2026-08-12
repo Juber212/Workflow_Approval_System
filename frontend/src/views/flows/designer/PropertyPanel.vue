@@ -237,6 +237,7 @@ import UserSelector from '@/components/UserSelector.vue'
 import type { UserSearchItem } from '@/api/admin'
 import type { FileFolderConfig } from '@/api/designer'
 import { calculateDeadlines } from '@/api/instance'
+import { countDaysExcludingStart } from '@/utils/flowStructure'
 import FolderConfigEditor from './FolderConfigEditor.vue'
 
 /** Props */
@@ -489,13 +490,6 @@ function disabledDeadlineDate(_date: Date): boolean {
   return false
 }
 
-/** 从 start 的下一日到 end（含 end）的天数 —— 自然日，与后端计算口径一致 */
-function countWorkdaysExcludingStart(startStr: string, endStr: string): number {
-  const cur = new Date(startStr)
-  const end = new Date(endStr)
-  return Math.max(1, Math.round((end.getTime() - cur.getTime()) / 86400000))
-}
-
 // ========== 发起模式：截止日期变更 → 锚定当前节点 + 级联下游（P1-39 统一走后端 calculate-deadlines，节假日正确） ==========
 
 async function handleDeadlineChange(newDeadline: string | undefined) {
@@ -511,7 +505,7 @@ async function handleDeadlineChange(newDeadline: string | undefined) {
   }
 
   // 反向计算当前节点占用的天数（不含起始日，与后端 add_workdays 对齐）
-  form.time_limit_days = Math.max(1, countWorkdaysExcludingStart(begin, newDeadline))
+  form.time_limit_days = Math.max(1, countDaysExcludingStart(begin, newDeadline))
 
   // 同步当前节点到 LogicFlow（含新 deadline 和 time_limit_days）
   syncToNode()

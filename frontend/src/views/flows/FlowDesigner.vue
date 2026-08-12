@@ -213,6 +213,7 @@ import NodeListView from './designer/NodeListView.vue'
 import LaunchDocTemplateDialog from './designer/LaunchDocTemplateDialog.vue'
 import { getPresets, deletePreset, type PresetItem, type PresetFormData } from '@/api/presets'
 import { formatFileSize } from '@/utils/format'
+import { topoSortNodes, normalizePersons, calcChainDeadlines } from '@/utils/flowStructure'
 
 const route = useRoute()
 const router = useRouter()
@@ -593,59 +594,29 @@ function handleAddNode(preset?: PresetItem) {
   // 时间重排由 FlowCanvas 的 structure-change 统一触发（节点/连线增删），此处不重复调用
 }
 
-/** 画布节点拓扑排序（模板节点 + 新增节点统一，按连线结构） */
-function topoSortNodes(lf: any): any[] {
-  const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
-  const nodeMap = new Map<string, any>()
-  graphData.nodes.forEach((n: any) => nodeMap.set(n.id, n))
-  const indeg = new Map<string, number>()
-  graphData.nodes.forEach((n: any) => indeg.set(n.id, 0))
-  const adj = new Map<string, string[]>()
-  graphData.edges.forEach((e: any) => {
-    if (nodeMap.has(e.sourceNodeId) && nodeMap.has(e.targetNodeId)) {
-      if (!adj.has(e.sourceNodeId)) adj.set(e.sourceNodeId, [])
-      adj.get(e.sourceNodeId)!.push(e.targetNodeId)
-      indeg.set(e.targetNodeId, (indeg.get(e.targetNodeId) || 0) + 1)
-    }
-  })
-  const queue = graphData.nodes.filter((n: any) => (indeg.get(n.id) || 0) === 0).map((n: any) => n.id)
-  const order: string[] = []
-  while (queue.length) {
-    const id = queue.shift()!
-    order.push(id)
-    for (const t of adj.get(id) || []) {
-      indeg.set(t, (indeg.get(t) || 0) - 1)
-      if (indeg.get(t) === 0) queue.push(t)
-    }
-  }
-  graphData.nodes.forEach((n: any) => { if (!order.includes(n.id)) order.push(n.id) })  // 兜底
-  return order.map((id: string) => nodeMap.get(id))
-}
-
 /** 发起模式：按连线拓扑序重排画布工作节点 deadline（新节点插入后时间自动顺延，自然日）
  * 前端直接自然日顺排（首节点今天，后续衔接上一节点截止次日），不调后端接口——
- * 画布新增节点 id 为字符串，传 calculateDeadlines 会被 node_id 整数校验拦截（422）。 */
+ * 画布新增节点 id 为字符串，传 calculateDeadlines 会被 node_id 整数校验拦截（422）。
+ * 拓扑排序/期限算法抽至 utils/flowStructure（纯函数，可单测）。 */
 function reflowNodeTimes() {
   const lf = canvasRef.value?.getLf()
   if (!lf || !isLaunchMode.value) return
-  const ordered = topoSortNodes(lf).filter((n: any) => !n.properties?.is_start && !n.properties?.is_end)
+  const graphData = lf.getGraphData() as { nodes: any[]; edges: any[] }
+  const ordered = topoSortNodes(graphData.nodes, graphData.edges)
+    .filter((n: any) => !n.properties?.is_start && !n.properties?.is_end)
   if (ordered.length === 0) return
-  let cursor = new Date(new Date().toDateString())  // 今天 0 点
+  const results = calcChainDeadlines(
+    ordered.map((n: any) => ({ id: n.id, time_limit_days: n.properties?.time_limit_days })),
+    new Date(),
+  )
   for (const n of ordered) {
-    const days = Math.max(n.properties?.time_limit_days || 1, 1)
-    const begin = new Date(cursor)
-    const end = new Date(cursor.getTime() + (days - 1) * 86400000)  // 截止 = 开始 + N 天 - 1
+    const r = results[n.id]
+    if (!r) continue
     const node = lf.getNodeDataById(n.id)
     if (node) {
-      lf.setProperties(n.id, { ...(node.properties || {}), plan_begin: fmtDate(begin), deadline: fmtDate(end) })
+      lf.setProperties(n.id, { ...(node.properties || {}), plan_begin: r.begin, deadline: r.deadline })
     }
-    cursor = new Date(end.getTime() + 86400000)  // 下一节点从截止次日开始
   }
-}
-
-/** 格式化 Date → 'YYYY-MM-DD' */
-function fmtDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function handleDelete() { canvasRef.value?.deleteSelected(); updateUndoRedoState() }
@@ -668,16 +639,6 @@ async function fetchPresets() {
     const res = await getPresets()
     presets.value = res.items || []
   } catch (e) { /* 静默失败，预设列表为空 */ console.error('加载预设列表失败:', e) }
-}
-
-/** 规范化人员列表为 [{user_id}]（兼容模板节点历史数字数组 [id] 与 dict 数组）——
- * 后端 NodeOverride schema 要求 dict 数组，数字数组提交会被 Pydantic 拦截 */
-function normalizePersons(list: any[]): { user_id: number }[] {
-  return list.map((p: any) =>
-    typeof p === 'number' || typeof p === 'string'
-      ? { user_id: Number(p) }
-      : { user_id: Number(p.user_id ?? p.id) },
-  )
 }
 
 /** 从 PresetItem 构建节点 properties */
