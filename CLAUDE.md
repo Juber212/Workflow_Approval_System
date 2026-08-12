@@ -214,7 +214,7 @@ storage/archive/{实例名称}/
 
 - 📌 超大单文件拆分评估（2026-08-12）：approval_service.py 1044 行 / SignaturePreviewDialog.vue 1320 行 / FlowDesigner.vue 1034 行等超 800 行文件，结构评估结论——**上线前不拆**（功能正确 + 有测试覆盖 + 「长但清晰」，动核心业务文件风险大于收益）。**2026-08-12 用户确认：不做拆分**（评估后关闭）。FlowDesigner 已随需求自然瘦身（buildDesignPayload/flowStructure 已抽）。
 
-- ✅ 桌面快捷方式分发 + 系统 Logo 图标（2026-08-12）：docs/桌面快捷方式分发指南.md + docs/创建系统快捷方式.bat + docs/logo.ico——部署后给员工电脑批量创建系统桌面快捷方式（bat 一键脚本 + 内网共享分发 + 域 GPO 可选）。**图标用系统现用 Logo**（favicon.svg → Edge headless 渲染 PNG → Pillow 去白底/裁剪/缩放 → 多尺寸透明 ICO；bat 为 GBK/CRLF 编码，IconFile 用 `%~dp0logo.ico` 同目录定位，已在桌面实测验证）。分发时 bat + logo.ico 同目录。访问地址用占位 `http://192.168.1.50` 待部署后替换。排产功能用户确认不做（方案文档已删）。
+- ✅ 桌面快捷方式分发 + 系统 Logo 图标（2026-08-12）：docs/桌面快捷方式分发指南.md + docs/创建系统快捷方式.bat + docs/create-shortcut.ps1 + docs/logo.ico——部署后给员工电脑批量创建系统桌面快捷方式（bat 一键脚本 + 内网共享分发 + 域 GPO 可选）。**图标用系统现用 Logo**（favicon.svg → Edge headless 渲染 PNG → Pillow 去白底/居中缩放 → 多尺寸透明 ICO）。**方案踩坑**：.url（InternetShortcut）快捷方式在 Windows 上对 http 地址会强制显示默认浏览器图标（IconFile 被忽略）→ 改用 **.lnk 方案**（PowerShell WScript.Shell 创建，TargetPath=rundll32 + Arguments=url.dll,FileProtocolHandler,URL 走默认浏览器，IconLocation=logo.ico，图标可靠生效），已在桌面实测验证。分发需 3 文件同目录：bat（GBK/CRLF）+ ps1（UTF-8 BOM）+ logo.ico。访问地址用占位 `http://192.168.1.50` 待部署后替换。排产功能用户确认不做（方案文档已删）。
 
 **状态：可部署上线**
 
