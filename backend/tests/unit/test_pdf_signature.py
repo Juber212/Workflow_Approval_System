@@ -37,7 +37,7 @@ class TestGetSignatureConfigs:
         assert result["pdf_signature_x"] == 500
         assert result["pdf_signature_y"] == 80
         # DB 中没有的回退到 settings 默认值
-        assert result["pdf_signature_offset"] is not None
+        assert result["pdf_signature_max_width"] == 100
 
     @pytest.mark.asyncio
     async def test_empty_db_uses_defaults(self, mock_db):

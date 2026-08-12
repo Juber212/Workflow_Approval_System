@@ -68,7 +68,7 @@ def _get_pdf_lock(pdf_path: str) -> asyncio.Lock:
 
 # ─── 签名配置默认值 ────────────────────────────────────────────
 _SIG_KEYS = [
-    "pdf_signature_x", "pdf_signature_y", "pdf_signature_offset",
+    "pdf_signature_x", "pdf_signature_y",
     "pdf_signature_page", "pdf_signature_max_width", "pdf_signature_max_height",
     # 角色维度签名默认（X/Y，不含 pages——pages 由 PDF 总页数自动决定）
     "pdf_signature_assignee_x", "pdf_signature_assignee_y",
@@ -83,7 +83,6 @@ def _get_sig_default(key: str) -> int | str:
     mapping = {
         "pdf_signature_x": settings.PDF_SIGNATURE_X,
         "pdf_signature_y": settings.PDF_SIGNATURE_Y,
-        "pdf_signature_offset": settings.PDF_SIGNATURE_OFFSET,
         "pdf_signature_page": settings.PDF_SIGNATURE_PAGE,
         "pdf_signature_max_width": settings.PDF_SIGNATURE_MAX_WIDTH,
         "pdf_signature_max_height": settings.PDF_SIGNATURE_MAX_HEIGHT,

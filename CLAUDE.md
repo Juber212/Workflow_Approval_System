@@ -206,6 +206,8 @@ storage/archive/{实例名称}/
 
 - ✅ 前端工作日文案与时限计算统一改自然日（2026-08-11）：全前端「X 工作日」显示/标签改「X 天」（11 文件）；PropertyPanel 时限计算改自然日（截止日期选择器不再禁周末、反向算天数 = 日期差）。vue-tsc 0 错 + build 过。
 
+- ✅ 无效配置 pdf_signature_offset 清理（2026-08-12）：确认该配置被读取（_SIG_KEYS/mapping）但从未参与签名坐标计算（apply_signatures_to_files 只用 x/y/page/width/height）——7 处入口全清（settings.PDF_SIGNATURE_OFFSET / _SIG_KEYS / configs.py 数字白名单 / seed.py / 前端 ConfigManagement 元数据 / 单测断言）+ 开发库 SystemConfig 存量行删除。327 测试全过 + vue-tsc 0 错 + build 过。
+
 **状态：可部署上线**
 
 ## 测试体系

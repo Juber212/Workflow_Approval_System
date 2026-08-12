@@ -71,7 +71,7 @@ async def put_configs(
 def _get_number_config_ids() -> set[int]:
     """获取所有数字型配置的 ID（从缓存中按 key 匹配）"""
     number_keys = {
-        'max_file_size_mb', 'pdf_signature_x', 'pdf_signature_y', 'pdf_signature_offset',
+        'max_file_size_mb', 'pdf_signature_x', 'pdf_signature_y',
         'pdf_signature_max_width', 'pdf_signature_max_height',
         'pdf_signature_assignee_x', 'pdf_signature_assignee_y',
         'pdf_signature_checker_x', 'pdf_signature_checker_y',

@@ -27,7 +27,6 @@ CONFIGS = [
     # ── PDF 签名通用 ──
     {"config_key": "pdf_signature_x", "config_value": "100", "description": "PDF签名默认X坐标"},
     {"config_key": "pdf_signature_y", "config_value": "50", "description": "PDF签名默认Y坐标"},
-    {"config_key": "pdf_signature_offset", "config_value": "150", "description": "多签名X偏移量（同页多人签名时的水平间距）"},
     {"config_key": "pdf_signature_max_width", "config_value": "100", "description": "签名图片最大宽度(px)"},
     {"config_key": "pdf_signature_max_height", "config_value": "26", "description": "签名图片最大高度(px)"},
     # ── 角色维度签名默认位置 ──

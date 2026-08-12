@@ -84,7 +84,6 @@ class Settings(BaseSettings):
     # PDF 签名默认参数
     PDF_SIGNATURE_X: int = 400       # 签名 X 坐标
     PDF_SIGNATURE_Y: int = 100       # 签名 Y 坐标
-    PDF_SIGNATURE_OFFSET: int = 150  # 多签名 X 偏移量
     PDF_SIGNATURE_PAGE: int = -1     # 签名页码（-1 = 最后一页）
     PDF_SIGNATURE_MAX_WIDTH: int = 100   # 签名最大宽度
     PDF_SIGNATURE_MAX_HEIGHT: int = 26   # 签名最大高度

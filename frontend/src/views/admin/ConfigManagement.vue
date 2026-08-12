@@ -83,7 +83,6 @@ const CONFIG_META: Record<string, ConfigMeta> = {
   // ── PDF 签名通用 ──
   pdf_signature_x:          { group: 'signature', label: '签名默认 X 坐标', type: 'number' },
   pdf_signature_y:          { group: 'signature', label: '签名默认 Y 坐标', type: 'number' },
-  pdf_signature_offset:     { group: 'signature', label: '多签名 X 偏移量', type: 'number' },
   pdf_signature_max_width:  { group: 'signature', label: '签名图片最大宽度(px)', type: 'number' },
   pdf_signature_max_height: { group: 'signature', label: '签名图片最大高度(px)', type: 'number' },
   // ── 角色维度签名默认位置 ──
