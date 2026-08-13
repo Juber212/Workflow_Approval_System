@@ -218,6 +218,8 @@ storage/archive/{实例名称}/
 
 - ✅ 个人中心发起列表字段对齐（2026-08-12）：「我发起的流程」改调 `getInstances(initiator_id)`、「我发起的方案」改调 `getProposals(initiator_id)`——复用现有列表组装逻辑，字段与开工项目/方案管理**完全一致（去所属组织）**：流程列表加 方案/进度/难度/截止时间，方案列表加 发起人/说明/截止时间；搜索保持名称搜索+分页（不改）。**后端零新增**（列表接口本已支持 initiator_id 筛选），顺带清理死代码：后端 `/instances/my-initiated` 端点 + 前端 `getMyInitiated`/`MyInitiatedItem`（前端唯一使用处已改）。298 后端测试 + 前端 vue-tsc 0 错 + build 过。
 
+- ✅ 文件下载禁用缓存修复（2026-08-12）：`download_file`（tasks.py）无 Cache-Control 头 → 浏览器启发式缓存签名前的 PDF → 签名写入后预览（pdfjs 同 URL 请求）拿到旧文件，出现「PDF 文件里有签名但在线预览没有」的假象（用户报告为「签名签不上且不报错」，实际后端签名成功）。**修复**：download_file 响应加 `Cache-Control: no-store`（文件会被签名/驳回/补交更新，禁止缓存）。排查确认签名图端点（auth.py）早有完整 no-store，仅 download_file 遗漏。新增集成测试断言响应头。299 测试全过。
+
 **状态：可部署上线**
 
 ## 测试体系

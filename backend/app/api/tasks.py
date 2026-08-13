@@ -285,6 +285,9 @@ async def download_file(
                 f'{disp}; filename="{ascii_fallback}"; '
                 f"filename*=UTF-8''{encoded}"
             ),
+            # 文件会被签名/驳回/补交更新，禁用浏览器缓存——否则预览（pdfjs 同 URL）
+            # 会拿到签名前的旧 PDF，出现「PDF 文件里有签名但在线预览没有」的假象
+            "Cache-Control": "no-store",
         },
     )
 
